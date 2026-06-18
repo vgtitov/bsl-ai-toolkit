@@ -13,16 +13,19 @@
 - **Тесты:** `tests/test_erp_mcp.py` — 6 шт, **6 passed** (`uv run --with mcp --with pytest pytest tests/ -q`).
 - **Доки:** README (позиционирование+адаптация), CLAUDE.md (правила, версии настраиваются), docs/example.md
   (синтетический пример dev-цикла), docs/docker.md, LICENSE (MIT), onboard.ps1/sh.
-- **Git:** локальный репо, коммиты до `3d9d9b5` (+ gitignore/HANDOFF). remote `origin` =
-  `https://github.com/vgtitov/claude-1c-toolkit.git`. **НЕ запушен** (репо на GitHub не создан; push наружу делает владелец).
+- **Git:** локальный репо, коммиты до `57a3c73`. remote `origin` =
+  `https://github.com/vgtitov/claude-1c-toolkit.git` (private). Аутентификация GitHub сохранена в Windows
+  Credential Manager (`credential.helper=manager`) — push без повторного запроса.
 - Проверено grep'ом: внутренних данных организация в toolkit НЕТ.
 
-## Что сделать владельцу (команды — в ответе ассистента / см. ниже кратко)
-1. Создать ПРИВАТНЫЙ репо `vgtitov/claude-1c-toolkit` на GitHub (веб или `gh`) и `git push -u origin main`.
-2. Запушить локализацию-пометку в GitLab: `cd ...\claude-1c-team && git push origin main` (новый PAT).
+## Кто что делает (разделение человек / ассистент)
+- **Ассистент** разрабатывает, коммитит и **сам пушит** toolkit в личный GitHub `vgtitov` (private). Это основной рабочий цикл.
+- **Человек (разово/редко):** создаёт пустой GitHub-репо (сделано); первичный вход GitHub в окне Credential Manager
+  (сделано, сохранено); ротация PAT и push для локализации организации в корп-GitLab (`claude-1c-team` — отдельный контур).
+- Локализация под организацию ведётся ОТДЕЛЬНО; фирменное — только в корп-GitLab, в toolkit не попадает.
 
 ## План дальше (личный продукт)
-1. **CI:** GitHub Actions — прогон pytest на push (workflow `.github/workflows/tests.yml`).
+1. **CI:** GitHub Actions — прогон pytest на push (workflow `.github/workflows/tests.yml`). ✅ Добавлен (ставит ripgrep + uv, гоняет `pytest tests/`). Проверить зелёный прогон после первого push.
 2. **Развитие toolkit:** довести скиллы (больше reference-кейсов), описание-триггеры скиллов, при желании публичный релиз.
 3. **Центральный MCP по HTTP:** обкатать docker-compose на реальном наборе репозиториев, добавить простую auth/обратный прокси.
 4. **Затем — локализация под организацию** (ОТДЕЛЬНЫМ аккаунтом компании): взять ядро из toolkit, наложить фирменные

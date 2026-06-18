@@ -9,6 +9,8 @@ credentials*.json
 # Локальное окружение
 .mcp.json
 src/
+mcp-server.log
+*.log
 
 __pycache__/
 *.pyc
