@@ -5,17 +5,21 @@
 
 ## Что готово (на 2026-06-19)
 - **Скиллы** `1c-dev`, `1c-analyst` (обезличенные): рабочий цикл реализации, IDE-гейт, ЧТЗ-поведение, reuse-first БСП,
-  стандарты v8-code-style, производительность/кэш, шаблон конвенций. References на месте.
+  стандарты v8-code-style, производительность/кэш, шаблон конвенций. References на месте, плюс `1c-dev/references/ai-pitfalls.md`
+  (чек-лист частых ошибок AI в 1С). Алгоритм поиска задействует `scope`. Триггеры скиллов проверены, оставлены как есть.
 - **MCP** `mcp/erp_mcp.py` — чтение кода 1С (ripgrep, auto-discovery слоёв по `ONEC_SRC_DIR`), транспорт по env
-  `MCP_TRANSPORT` (stdio локально / sse в Docker), `MCP_HOST`/`MCP_PORT`.
-- **Docker:** `Dockerfile` + `docker-compose.yml` — центральный erp-1c по HTTP (исходники монтируются read-only в /src).
-  Образ собран (`claude-1c-toolkit/erp-1c:latest`, ~253MB), smoke-тест ок (Uvicorn на :8000).
-- **Тесты:** `tests/test_erp_mcp.py` — 6 шт, **6 passed** (`uv run --with mcp --with pytest pytest tests/ -q`).
-- **Доки:** README (позиционирование+адаптация), CLAUDE.md (правила, версии настраиваются), docs/example.md
-  (синтетический пример dev-цикла), docs/docker.md, LICENSE (MIT), onboard.ps1/sh.
-- **Git:** локальный репо, коммиты до `57a3c73`. remote `origin` =
-  `https://github.com/vgtitov/claude-1c-toolkit.git` (private). Аутентификация GitHub сохранена в Windows
-  Credential Manager (`credential.helper=manager`) — push без повторного запроса.
+  `MCP_TRANSPORT` (stdio локально / sse в Docker), `MCP_HOST`/`MCP_PORT`. **Универсальный конфиг слоёв** (TOML,
+  `ONEC_LAYERS_CONFIG`, см. `config/layers.example.toml`): роли/группы слоёв, `scope` в search/find/list, ярлыки (pin),
+  режимы (`profiles`, `ONEC_PROFILE`). Без конфига — чистое auto-discovery. Доказано: generic + конфиг воспроизводит
+  кастомный multiconfig (`[типовая]/[расширение]/[конфиг:]/[расш:]`, scope baseline/extension/both) на боевом наборе.
+- **Данные локализации аналитика:** `config/contours.example.md` — карта контуров/баз (обезличенный шаблон). Локализация
+  кладёт свой файл, скилл/движок не правятся. Единый слой локализации: `layers.toml` + `contours.md` + `conventions-template` + версии в `CLAUDE.md`.
+- **Docker (центр за auth):** `erp-1c` (SSE) только во внутренней сети + сайдкар Caddy (`caddy/Caddyfile`) с bearer-токеном
+  наружу. `.env.example` (ONEC_SRC_DIR / ERP_BEARER_TOKEN / ERP_PUBLIC_PORT / ONEC_LAYERS_CONFIG / ONEC_PROFILE). Обкатано вживую.
+- **Тесты:** `tests/test_erp_mcp.py` (6) + `tests/test_layers_config.py` (5) — **11 passed**. Ручной smoke HTTP — `tests/smoke_http_client.py` (шлёт bearer, если задан).
+- **Доки:** README (позиционирование + адаптация = конфиги/данные/слой), CLAUDE.md, docs/example.md, docs/docker.md, LICENSE (MIT), onboard.ps1/sh.
+- **Git:** remote `origin` = `https://github.com/vgtitov/claude-1c-toolkit.git` (private), `main` с upstream-трекингом,
+  CI зелёный на каждом пуше. Аутентификация в Windows Credential Manager (нужен scope `workflow` у PAT).
 - Проверено grep'ом: внутренних данных организация в toolkit НЕТ.
 
 ## Кто что делает (разделение человек / ассистент)
@@ -26,10 +30,17 @@
 
 ## План дальше (личный продукт)
 1. **CI:** GitHub Actions — прогон pytest на push (workflow `.github/workflows/tests.yml`). ✅ Добавлен (ставит ripgrep + uv, гоняет `pytest tests/`). ✅ Первый push выполнен (`main` → `origin`, upstream-трекинг), CI прошёл зелёным (run на `5ca4bb6`, `completed success`). ⚠ Для push workflow-файлов токену нужен scope `workflow` (классический PAT) — учтено.
-2. **Развитие toolkit:** довести скиллы (больше reference-кейсов), описание-триггеры скиллов, при желании публичный релиз.
+2. **Развитие toolkit:** ✅ скиллы доведены (reference `ai-pitfalls`, `scope` в поиске, карта контуров вынесена в данные); триггеры проверены и оставлены. При желании — публичный релиз.
 3. **Центральный MCP по HTTP:** ✅ обкатан вживую через docker-compose на боевом наборе (`ONEC_SRC_DIR=C:\dev\tvg\rp`, 11 слоёв). Схема: `erp-1c` (SSE) только во внутренней сети + сайдкар `proxy` (Caddy) с bearer-авторизацией наружу. Проверено: 401 без/с неверным токеном, проход с верным, протокол MCP (init/list_tools/list_modules) сквозь Caddy, контейнер видит 11 слоёв из read-only `/src`. Конфиг слоёв пробрасывается (`config/layers.example.toml`). Файлы: `docker-compose.yml`, `caddy/Caddyfile`, `.env.example`, `docs/docker.md`. ⚠ Windows bind-mount медленный для тяжёлого поиска — на Linux-сервере ок.
-4. **Затем — локализация под организацию** (ОТДЕЛЬНЫМ аккаунтом компании): взять ядро из toolkit, наложить фирменные
-   специфики в downstream-репозитории (контуры, фирменные конвенции, профили). Улучшения ядра тянуть из toolkit.
+4. **СЛЕДУЮЩЕЕ — локализация под организацию** (ОТДЕЛЬНЫМ аккаунтом компании, `claude-1c-team`): фундамент готов, локализация
+   сводится к ДАННЫМ поверх generic-ядра — не к правке кода/скиллов:
+   - `config/layers.<org>.toml` — pin `[типовая]` = `<repo-базовой-конфигурации>/src/<имя>/src`, `[расширение]` =
+     `<repo-расширения>/src/<имя>/src`; classify: правило `-ext-` → extension ВЫШЕ правила
+     `^...-(cis|fr|are|all)-` → baseline; classify_default → extension; scopes baseline/extension/both; при желании
+     `profiles.<страна>` (include по контуру). Этот конфиг проверен на боевом наборе — даёт 7 baseline / 4 extension.
+   - `config/contours.<org>.md` — карта контуров организации (что с чем связано, слепые
+     зоны вроде Kafka-обменов в данных).
+   - Фирменные конвенции — в `conventions-template`. Улучшения ядра тянуть из toolkit.
 5. **Пилот** (владелец + 1–2 разработчика) → правки → раскатка на команду.
 
 ## Как продолжить в новом сеансе
