@@ -17,7 +17,7 @@ claude-1c-toolkit/
 │   ├── 1c-dev/               # разработка/ревью BSL + рабочий цикл реализации
 │   │   ├── SKILL.md
 │   │   └── references/       # dev-workflow, code-standards (v8-code-style), bsp-reuse, performance,
-│   │       └── ...             conventions-template (шаблон под свой проект), platform-ops
+│   │       └── ...             conventions-template (шаблон под свой проект), platform-ops, ai-pitfalls
 │   └── 1c-analyst/           # анализ/архитектура: ЧТЗ (поведение), /clarify, влияние
 │       ├── SKILL.md
 │       └── references/analysis-workflow.md
