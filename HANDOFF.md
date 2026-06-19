@@ -25,7 +25,7 @@
 - Локализация под организацию ведётся ОТДЕЛЬНО; фирменное — только в корп-GitLab, в toolkit не попадает.
 
 ## План дальше (личный продукт)
-1. **CI:** GitHub Actions — прогон pytest на push (workflow `.github/workflows/tests.yml`). ✅ Добавлен (ставит ripgrep + uv, гоняет `pytest tests/`). Проверить зелёный прогон после первого push.
+1. **CI:** GitHub Actions — прогон pytest на push (workflow `.github/workflows/tests.yml`). ✅ Добавлен (ставит ripgrep + uv, гоняет `pytest tests/`). ✅ Первый push выполнен (`main` → `origin`, upstream-трекинг), CI прошёл зелёным (run на `5ca4bb6`, `completed success`). ⚠ Для push workflow-файлов токену нужен scope `workflow` (классический PAT) — учтено.
 2. **Развитие toolkit:** довести скиллы (больше reference-кейсов), описание-триггеры скиллов, при желании публичный релиз.
 3. **Центральный MCP по HTTP:** обкатать docker-compose на реальном наборе репозиториев, добавить простую auth/обратный прокси.
 4. **Затем — локализация под организацию** (ОТДЕЛЬНЫМ аккаунтом компании): взять ядро из toolkit, наложить фирменные
