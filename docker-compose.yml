@@ -1,15 +1,33 @@
-# Центральный erp-1c MCP по HTTP. Подними один раз — несколько разработчиков читают код через него.
-# ONEC_SRC_DIR — каталог с клонами конфигураций/расширений 1С (на хосте). Монтируется read-only.
+# Центральный erp-1c MCP по HTTP за авторизацией.
+# erp-1c читает код 1С и отдаёт MCP по SSE ТОЛЬКО во внутреннюю сеть; наружу торчит Caddy с bearer-токеном.
+# ONEC_SRC_DIR — каталог с клонами конфигураций/расширений 1С (на хосте), монтируется read-only.
+# ERP_BEARER_TOKEN — общий секрет; клиент шлёт его в заголовке Authorization. Задаётся в .env (см. .env.example).
 services:
   erp-1c:
     build: .
     image: claude-1c-toolkit/erp-1c:latest
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"            # только внутренняя сеть compose, на хост не публикуется
     volumes:
       - "${ONEC_SRC_DIR:-./src}:/src:ro"
+      # Необязательный конфиг слоёв/scope/режимов (см. config/layers.example.toml). Нет файла — чистое auto-discovery.
+      - "${ONEC_LAYERS_CONFIG:-./config/layers.example.toml}:/app/layers.toml:ro"
     environment:
       MCP_TRANSPORT: sse
       MCP_HOST: 0.0.0.0
       MCP_PORT: "8000"
+      ONEC_LAYERS_CONFIG: /app/layers.toml
+      ONEC_PROFILE: "${ONEC_PROFILE:-}"
+    restart: unless-stopped
+
+  proxy:
+    image: caddy:2-alpine
+    depends_on:
+      - erp-1c
+    ports:
+      - "${ERP_PUBLIC_PORT:-8000}:8000"
+    volumes:
+      - "./caddy/Caddyfile:/etc/caddy/Caddyfile:ro"
+    environment:
+      ERP_BEARER_TOKEN: "${ERP_BEARER_TOKEN:?задай ERP_BEARER_TOKEN в .env — без него сервис не поднять}"
     restart: unless-stopped

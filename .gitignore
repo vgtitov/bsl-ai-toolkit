@@ -4,6 +4,7 @@
 *.key
 .env
 .env.*
+!.env.example
 credentials*.json
 
 # Локальное окружение
