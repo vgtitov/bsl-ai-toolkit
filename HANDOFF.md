@@ -32,15 +32,12 @@
 1. **CI:** GitHub Actions — прогон pytest на push (workflow `.github/workflows/tests.yml`). ✅ Добавлен (ставит ripgrep + uv, гоняет `pytest tests/`). ✅ Первый push выполнен (`main` → `origin`, upstream-трекинг), CI прошёл зелёным (run на `5ca4bb6`, `completed success`). ⚠ Для push workflow-файлов токену нужен scope `workflow` (классический PAT) — учтено.
 2. **Развитие toolkit:** ✅ скиллы доведены (reference `ai-pitfalls`, `scope` в поиске, карта контуров вынесена в данные); триггеры проверены и оставлены. При желании — публичный релиз.
 3. **Центральный MCP по HTTP:** ✅ обкатан вживую через docker-compose на боевом наборе (`ONEC_SRC_DIR=C:\dev\tvg\rp`, 11 слоёв). Схема: `erp-1c` (SSE) только во внутренней сети + сайдкар `proxy` (Caddy) с bearer-авторизацией наружу. Проверено: 401 без/с неверным токеном, проход с верным, протокол MCP (init/list_tools/list_modules) сквозь Caddy, контейнер видит 11 слоёв из read-only `/src`. Конфиг слоёв пробрасывается (`config/layers.example.toml`). Файлы: `docker-compose.yml`, `caddy/Caddyfile`, `.env.example`, `docs/docker.md`. ⚠ Windows bind-mount медленный для тяжёлого поиска — на Linux-сервере ок.
-4. **СЛЕДУЮЩЕЕ — локализация под организацию** (ОТДЕЛЬНЫМ аккаунтом компании, `claude-1c-team`): фундамент готов, локализация
+4. **СЛЕДУЮЩЕЕ — локализация под организацию** (ОТДЕЛЬНЫМ репозиторием/аккаунтом): фундамент готов, локализация
    сводится к ДАННЫМ поверх generic-ядра — не к правке кода/скиллов:
-   - `config/layers.<org>.toml` — pin `[типовая]` = `<repo-базовой-конфигурации>/src/<имя>/src`, `[расширение]` =
-     `<repo-расширения>/src/<имя>/src`; classify: правило `-ext-` → extension ВЫШЕ правила
-     `^...-(cis|fr|are|all)-` → baseline; classify_default → extension; scopes baseline/extension/both; при желании
-     `profiles.<страна>` (include по контуру). Этот конфиг проверен на боевом наборе — даёт 7 baseline / 4 extension.
-   - `config/contours.<org>.md` — карта контуров организации (что с чем связано, слепые
-     зоны вроде Kafka-обменов в данных).
-   - Фирменные конвенции — в `conventions-template`. Улучшения ядра тянуть из toolkit.
+   - свой `config/layers.<org>.toml` — pin базовой конфигурации и расширения с человекочитаемыми ярлыками; правила
+     classify (расширения — правилом ВЫШЕ базовых, т.к. первое совпадение); scope-группы; при желании `profiles.<контур>`.
+   - свой `config/contours.<org>.md` — карта контуров организации (что с чем связано, риски переноса, слепые зоны).
+   - фирменные конвенции — в `conventions-template`. Улучшения ядра тянуть из toolkit вендорингом.
 5. **Пилот** (владелец + 1–2 разработчика) → правки → раскатка на команду.
 
 ## Как продолжить в новом сеансе
