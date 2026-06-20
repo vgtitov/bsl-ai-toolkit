@@ -21,6 +21,8 @@
 - **Доки:** README (позиционирование + адаптация = конфиги/данные/слой), CLAUDE.md, docs/example.md, docs/docker.md, LICENSE (MIT), onboard.ps1/sh.
 - **Git:** remote `origin` = `https://github.com/vgtitov/claude-1c-toolkit.git` (private), `main` с upstream-трекингом,
   CI зелёный на каждом пуше. Аутентификация в Windows Credential Manager (нужен scope `workflow` у PAT).
+  ⚠ **История переписана 2026-06-21** (`git filter-repo` — обезличивание, force-push): все SHA до этой даты сменились,
+  старые ссылки на коммиты недействительны. Ориентир — текущий `main` (CI зелёный), не прежние SHA.
 - Проверено grep'ом: внутренних данных конкретной организации в toolkit НЕТ.
 
 ## Кто что делает (разделение человек / ассистент)
@@ -30,7 +32,7 @@
 - Локализация под организацию ведётся ОТДЕЛЬНО; фирменное — только в корп-GitLab, в toolkit не попадает.
 
 ## План дальше (личный продукт)
-1. **CI:** GitHub Actions — прогон pytest на push (workflow `.github/workflows/tests.yml`). ✅ Добавлен (ставит ripgrep + uv, гоняет `pytest tests/`). ✅ Первый push выполнен (`main` → `origin`, upstream-трекинг), CI прошёл зелёным (run на `5ca4bb6`, `completed success`). ⚠ Для push workflow-файлов токену нужен scope `workflow` (классический PAT) — учтено.
+1. **CI:** GitHub Actions — прогон pytest на push (workflow `.github/workflows/tests.yml`). ✅ Добавлен (ставит ripgrep + uv, гоняет `pytest tests/`). ✅ Первый push выполнен (`main` → `origin`, upstream-трекинг), CI прошёл зелёным на первом пуше (`completed success`). ⚠ Для push workflow-файлов токену нужен scope `workflow` (классический PAT) — учтено.
 2. **Развитие toolkit:** ✅ скиллы доведены (reference `ai-pitfalls`, `scope` в поиске, карта контуров вынесена в данные); триггеры проверены и оставлены. При желании — публичный релиз.
 3. **Центральный MCP по HTTP:** ✅ обкатан вживую через docker-compose на боевом наборе (`ONEC_SRC_DIR=C:\dev\tvg\rp`, 11 слоёв). Схема: `erp-1c` (SSE) только во внутренней сети + сайдкар `proxy` (Caddy) с bearer-авторизацией наружу. Проверено: 401 без/с неверным токеном, проход с верным, протокол MCP (init/list_tools/list_modules) сквозь Caddy, контейнер видит 11 слоёв из read-only `/src`. Конфиг слоёв пробрасывается (`config/layers.example.toml`). Файлы: `docker-compose.yml`, `caddy/Caddyfile`, `.env.example`, `docs/docker.md`. ⚠ Windows bind-mount медленный для тяжёлого поиска — на Linux-сервере ок.
 4. **СЛЕДУЮЩЕЕ — локализация под организацию** (ОТДЕЛЬНЫМ репозиторием/аккаунтом): фундамент готов, локализация
