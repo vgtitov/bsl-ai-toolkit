@@ -2,6 +2,7 @@
 *token*
 !set_token.ps1
 !set_token.sh
+!set_token.cmd
 *secret*
 *.key
 .env

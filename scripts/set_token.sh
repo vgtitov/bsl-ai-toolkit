@@ -44,7 +44,7 @@ touch "$RC"
 grep -v -E '^export ERP1C_(URL|TOKEN|MODE)=' "$RC" > "$RC.tmp" && mv "$RC.tmp" "$RC"
 { echo "export ERP1C_URL=\"$URL\""; echo "export ERP1C_TOKEN=\"$TOKEN\""; echo "export ERP1C_MODE=\"auto\""; } >> "$RC"
 export ERP1C_URL="$URL"; export ERP1C_TOKEN="$TOKEN"; export ERP1C_MODE="auto"
-ok "ERP1C_URL = $URL"; ok "ERP1C_TOKEN = <скрыт, длина ${#TOKEN}>"; ok "ERP1C_MODE = auto"
+ok "ERP1C_URL = $URL (свой центр — перезапусти с --url <адрес>)"; ok "ERP1C_TOKEN = <скрыт, длина ${#TOKEN}>"; ok "ERP1C_MODE = auto"
 
 # --- Необязательная проверка связи ---
 if [ "$NOTEST" -eq 0 ] && command -v curl >/dev/null 2>&1; then
@@ -64,6 +64,7 @@ printf '\n=== ГОТОВО. Скопируй блок ниже целиком и
 printf -- '------------------------------------------------------------------------\n'
 cat <<EOF
 Прочитай документацию по подключению к центру (docs/docker.md, в локализации — docs/CONNECT.md) и настрой инструменты 1С для Claude Code.
+Сначала покажи дефолты (каталог клонов, URL центра, профиль) и спроси, хочу ли я что-то переопределить и как; объясни, что и где менять. Потом настраивай.
 Профиль: $PROFILE.
 Центр настроен: ERP1C_URL и ERP1C_TOKEN заданы в моём окружении (режим central, токен подставится сам).
 Пройди: onboard -> switch_erp (--mode central) -> self-test (find_object на наборе репозиториев центра).

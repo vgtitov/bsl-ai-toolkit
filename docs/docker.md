@@ -56,7 +56,7 @@ uv run scripts/switch_erp.py --mode auto      # auto|local|central; по умо�
 
 Пример (org-agnostic, URL обязателен — задаётся владельцем центра):
 ```powershell
-# Windows
+# Windows (если PowerShell блокирует .ps1 политикой Restricted — запусти .cmd-обёртку: scripts\set_token.cmd ...)
 .\scripts\set_token.ps1 -Url http://host:8000/sse              # спросит токен, профиль dev
 .\scripts\set_token.ps1 -Url http://host:8000/sse -Profile analyst
 ```
