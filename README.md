@@ -23,6 +23,7 @@ claude-1c-toolkit/
 │       └── references/analysis-workflow.md
 ├── mcp/
 │   ├── erp_mcp.py            # MCP чтения кода 1С (ripgrep по локальным клонам, auto-discovery слоёв)
+│   ├── bsl_ls_mcp.py         # MCP-мост над BSL Language Server (analyze -r json) — свободный, в комплекте
 │   └── dev.mcp.json          # профиль MCP-серверов (пути через env)
 ├── config/
 │   ├── layers.example.toml   # конфиг слоёв/scope/режимов для MCP (локализация = свой файл)
