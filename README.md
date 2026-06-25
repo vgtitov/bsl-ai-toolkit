@@ -28,6 +28,8 @@ claude-1c-toolkit/
 │   ├── layers.example.toml   # конфиг слоёв/scope/режимов для MCP (локализация = свой файл)
 │   └── contours.example.md   # карта контуров/баз для 1c-analyst (данные локализации, не код)
 ├── docker-compose.yml        # центральный erp-1c по HTTP за auth (Caddy) — для команды
+├── scripts/switch_erp.py     # клиент: переключение erp-1c local <-> central (env-плейсхолдеры токена)
+├── scripts/set_token.ps1|sh  # клиент: подключение к центру одной вставкой (токен в env, блок для Claude Code)
 ├── onboard/onboard.ps1|sh    # идемпотентный bootstrap
 └── docs/example.md           # пример: как AI ведёт задачу от тех-проекта до передачи кода
 ```

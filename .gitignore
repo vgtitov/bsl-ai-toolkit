@@ -1,5 +1,7 @@
 # Секреты — НИКОГДА в репозиторий
 *token*
+!set_token.ps1
+!set_token.sh
 *secret*
 *.key
 .env
