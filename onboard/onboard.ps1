@@ -57,7 +57,13 @@ Warn "Центральный erp-1c (если есть) — подключени
   # затем switch_erp сам уйдёт в central (--mode auto). Секрет — только в env, не в файл/git.
 "@ | Write-Host
 
-Say "7/7 Git: коммиты без соавторства Claude (commit-msg хук)"
+Say "7/8 Платформа 1С и BSL-инструменты (поиск + скачивание свободных jar'ов)"
+if (Get-Command uv -ErrorAction SilentlyContinue) {
+  try { uv run (Join-Path $TeamDir 'scripts\detect_tools.py') --install; Ok "detect_tools: платформа/BSL найдены/скачаны, env прописаны (мост BSL_LS_MCP — из mcp\bsl_ls_mcp.py)" }
+  catch { Warn "detect_tools пропущен — запусти: uv run scripts\detect_tools.py --install" }
+} else { Warn "uv не найден — позже: python scripts\detect_tools.py --install" }
+
+Say "8/8 Git: коммиты без соавторства Claude (commit-msg хук)"
 if (Get-Command uv -ErrorAction SilentlyContinue) {
   try { uv run (Join-Path $TeamDir 'scripts\install_git_hooks.py'); Ok "commit-msg хук поставлен" }
   catch { Warn "install_git_hooks пропущен — поставь вручную: uv run scripts\install_git_hooks.py" }
@@ -67,7 +73,7 @@ Say "Готово. Ручные шаги"
 @"
 [ ] Проставь версии под свою конфигурацию в CLAUDE.md (платформа, режим совместимости, БСП, библиотеки).
 [ ] Заполни skills/1c-dev/references/conventions-template.md под свой проект (слои, префикс, точки расширения).
-[ ] BSL-инструменты (если нужны): env BSL_PLATFORM_JAR / BSL_LS_MCP / BSL_JAR; ONEC_PLATFORM_PATH -> платформа 1С.
+[ ] BSL-инструменты: detect_tools уже нашёл/скачал платформу/jar'ы и прописал env. Что помечено [нет] — доложи и повтори uv run scripts\detect_tools.py (мост BSL_LS_MCP берётся из репо mcp\bsl_ls_mcp.py).
 [ ] Git-идентичность площадки и токен push — см. docs/git.md.
 [ ] Перезапусти Claude Code в $WorkDir -> подтверди MCP-серверы.
 [ ] Self-test: спроси erp-1c (find_object) — ответ по коду из $SrcDir (или из центра, если подключён).

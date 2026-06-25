@@ -31,6 +31,7 @@ claude-1c-toolkit/
 ├── docker-compose.yml        # центральный erp-1c по HTTP за auth (Caddy) — для команды
 ├── scripts/switch_erp.py     # клиент: переключение erp-1c local <-> central (env-плейсхолдеры токена)
 ├── scripts/set_token.ps1|sh|cmd  # клиент: подключение к центру одной вставкой (токен в env, блок для Claude Code; .cmd обходит политику PS)
+├── scripts/detect_tools.py  # авто-поиск платформы/JDK + --install качает свободные jar'ы (BSL LS, mcp-bsl-context) и пишет env
 ├── scripts/install_git_hooks.py  # ставит commit-msg хук: коммиты без соавторства Claude (см. docs/git.md)
 ├── scripts/git-hooks/        # эталоны git-хуков (commit-msg)
 ├── onboard/onboard.ps1|sh    # идемпотентный bootstrap
