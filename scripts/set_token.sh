@@ -36,6 +36,10 @@ if [ -z "$TOKEN" ]; then
 fi
 TOKEN="$(printf '%s' "$TOKEN" | tr -d '[:space:]')"
 [ -z "$TOKEN" ] && { warn "Токен пустой — отмена."; exit 1; }
+case "$TOKEN" in
+  *rotate-me*|*change-me*|*example*|*your-token*|*"<"*)
+    warn "Это похоже на ПЛЕЙСХОЛДЕР, не настоящий токен. Возьми реальный bearer у владельца центра. Отмена."; exit 1;;
+esac
 
 # --- Записать в rc-файл (идемпотентно) + текущую сессию ---
 RC="$HOME/.zshrc"; [ -n "${BASH_VERSION:-}" ] && [ ! -f "$HOME/.zshrc" ] && RC="$HOME/.bashrc"
