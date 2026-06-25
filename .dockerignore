@@ -1,0 +1,10 @@
+.git
+**/__pycache__
+*.pyc
+.pytest_cache
+*.log
+.venv
+src/
+.env
+.env.*
+!.env.example

@@ -6,15 +6,19 @@
 Схема: `erp-1c` отдаёт MCP по SSE **только во внутреннюю сеть** compose; наружу публикуется сервис `proxy`
 (Caddy) с проверкой bearer-токена. Так центр не выставлен без авторизации.
 
+> **Серверный стек живёт в `server/`** (`server/Dockerfile`, `server/docker-compose.yml`, `server/caddy/`,
+> `server/.env.example`). Движок `mcp/erp_mcp.py` — общий с клиентом, поэтому контекст сборки оставлен корнем репо
+> (`build.context: ..`). Все команды ниже — из каталога `server/`.
+
 ## Запуск
 1. Положи клоны конфигураций/расширений 1С в каталог исходников (на хосте).
-2. Скопируй `.env.example` → `.env`, заполни:
-   - `ONEC_SRC_DIR` — путь к каталогу исходников на хосте;
+2. Скопируй `server/.env.example` → `server/.env`, заполни:
+   - `ONEC_SRC_DIR` — путь к каталогу исходников на хосте (лучше абсолютный);
    - `ERP_BEARER_TOKEN` — общий секрет (сгенерируй: `openssl rand -hex 32`);
    - `ERP_PUBLIC_PORT` — порт наружу (по умолчанию 8000).
 3. Подними сервис:
 ```bash
-docker compose up -d --build
+cd server && docker compose up -d --build
 ```
 4. Проверь: `docker compose ps` — `proxy` слушает `:8000` наружу, `erp-1c` только внутри сети, `/src` смонтирован read-only.
 
@@ -73,9 +77,9 @@ bash scripts/set_token.sh --url http://host:8000/sse           # спросит 
 и `switch_erp`: ядро = механизм, локализация = данные.
 
 ## Конфиг слоёв/scope/режимов
-В контейнер пробрасывается `config/layers.example.toml` (env `ONEC_LAYERS_CONFIG`). Это generic-дефолт —
+В контейнер пробрасывается `../config/layers.example.toml` (env `ONEC_LAYERS_CONFIG`). Это generic-дефолт —
 каждый слой тегируется именем репозитория, scope `all`. Своя локализация = СВОЙ файл конфига
-(`ONEC_LAYERS_CONFIG=./config/layers.local.toml` в `.env`), код менять не нужно. Схема — в самом example-файле.
+(`ONEC_LAYERS_CONFIG=../config/layers.local.toml` в `server/.env`), код менять не нужно. Схема — в самом example-файле.
 
 ## Обновление кода
 Исходники монтируются read-only с хоста — обновляй их `git pull` на хосте; контейнер перечитывает корни при
@@ -88,7 +92,7 @@ bash scripts/set_token.sh --url http://host:8000/sse           # спросит 
 ## Безопасность
 - Контейнер читает код read-only, ничего не пишет.
 - Наружу торчит только Caddy с bearer-авторизацией; сам `erp-1c` в host-сеть не публикуется (`expose`, не `ports`).
-- Токен — в `.env` (в репозиторий не коммитится); ротация = поменять `ERP_BEARER_TOKEN` и `docker compose up -d`.
+- Токен — в `server/.env` (в репозиторий не коммитится); ротация = поменять `ERP_BEARER_TOKEN` и `cd server && docker compose up -d`.
 - Перед выставлением за пределы доверенной сети — добавь TLS (Caddy умеет автоматически по доменному имени).
 - Никаких секретов в образ не класть; токены интеграций — не сюда.
 

@@ -4,14 +4,18 @@
 # ERP_BEARER_TOKEN — общий секрет; клиент шлёт его в заголовке Authorization. Задаётся в .env (см. .env.example).
 services:
   erp-1c:
-    build: .
+    # Файлы стека живут в server/, но контекст сборки — КОРЕНЬ репо: Dockerfile делает COPY mcp/erp_mcp.py.
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
     image: claude-1c-toolkit/erp-1c:latest
     expose:
       - "8000"            # только внутренняя сеть compose, на хост не публикуется
     volumes:
-      - "${ONEC_SRC_DIR:-./src}:/src:ro"
-      # Необязательный конфиг слоёв/scope/режимов (см. config/layers.example.toml). Нет файла — чистое auto-discovery.
-      - "${ONEC_LAYERS_CONFIG:-./config/layers.example.toml}:/app/layers.toml:ro"
+      # Пути относительны каталога compose (server/). ONEC_SRC_DIR обычно задают абсолютным в .env.
+      - "${ONEC_SRC_DIR:-../src}:/src:ro"
+      # Необязательный конфиг слоёв/scope/режимов (см. ../config/layers.example.toml). Нет файла — чистое auto-discovery.
+      - "${ONEC_LAYERS_CONFIG:-../config/layers.example.toml}:/app/layers.toml:ro"
     environment:
       MCP_TRANSPORT: sse
       MCP_HOST: 0.0.0.0
