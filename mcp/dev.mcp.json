@@ -1,9 +1,9 @@
 {
   "mcpServers": {
-    "erp-1c": {
+    "onec-code": {
       "type": "stdio",
       "command": "uv",
-      "args": ["run", "--quiet", "${ONEC_SRC_DIR}/erp_mcp.py"],
+      "args": ["run", "--quiet", "${ONEC_SRC_DIR}/onec_mcp.py"],
       "env": {
         "ONEC_SRC_DIR": "${ONEC_SRC_DIR}"
       }

@@ -2,7 +2,7 @@
 # dependencies = ["mcp"]
 # ///
 """MCP-сервер bsl-ls — диагностики BSL Language Server (синтаксис + стандарты ИТС) поверх
-официального jar 1c-syntax/bsl-language-server (MIT). Тонкая аудируемая обёртка в духе erp-1c:
+официального jar 1c-syntax/bsl-language-server (MIT). Тонкая аудируемая обёртка в духе onec-code:
 запускает `analyze -r json` по каталогу/файлу 1С и возвращает диагностики. Кроссплатформенно
 (Windows/macOS/Linux): java из PATH, пути через os.path, temp-выгрузка отчёта.
 

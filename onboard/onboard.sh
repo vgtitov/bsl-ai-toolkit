@@ -32,19 +32,19 @@ mkdir -p "$SRC_DIR"
 warn "Склонируй СВОИ репозитории конфигураций/расширений в $SRC_DIR (MCP подхватит их авто)."
 
 say "4/6 Деплой MCP чтения кода"
-cp "$TEAM_DIR/mcp/erp_mcp.py" "$SRC_DIR/erp_mcp.py"; ok "erp_mcp.py -> $SRC_DIR"
+cp "$TEAM_DIR/mcp/onec_mcp.py" "$SRC_DIR/onec_mcp.py"; ok "onec_mcp.py -> $SRC_DIR"
 
 say "5/7 Профиль .mcp.json и CLAUDE.md -> $WORKDIR"
 cp "$TEAM_DIR/mcp/dev.mcp.json" "$WORKDIR/.mcp.json"
 cp "$TEAM_DIR/CLAUDE.md" "$WORKDIR/CLAUDE.md"; ok "профиль + правила"
-# Источник erp-1c: local по умолчанию; central — если задан ERP1C_URL и центр доступен (подключение — set_token, ниже).
+# Источник onec-code: local по умолчанию; central — если задан ONEC_MCP_URL и центр доступен (подключение — set_token, ниже).
 if command -v uv >/dev/null 2>&1; then
-  uv run "$TEAM_DIR/scripts/switch_erp.py" --mode "${ERP1C_MODE:-auto}" --workdir "$WORKDIR" && ok "switch_erp (${ERP1C_MODE:-auto})" || warn "switch_erp пропущен"
-else warn "uv не найден — switch_erp пропущен (erp-1c останется локальным)"; fi
+  uv run "$TEAM_DIR/scripts/switch_source.py" --mode "${ONEC_MCP_MODE:-auto}" --workdir "$WORKDIR" && ok "switch_source (${ONEC_MCP_MODE:-auto})" || warn "switch_source пропущен"
+else warn "uv не найден — switch_source пропущен (onec-code останется локальным)"; fi
 
 say "6/8 Переменные окружения"
 warn "Добавь в ~/.zshrc (или ~/.bashrc): export ONEC_SRC_DIR=\"$SRC_DIR\""
-warn "Центральный erp-1c (если развёрнут в команде) — подключение одной командой (токен у тимлида): bash scripts/set_token.sh"
+warn "Центральный onec-code (если развёрнут в команде) — подключение одной командой (токен у тимлида): bash scripts/set_token.sh"
 
 say "7/8 Платформа 1С и BSL-инструменты (поиск + скачивание свободных jar'ов)"
 if command -v uv >/dev/null 2>&1; then
@@ -63,5 +63,5 @@ cat <<EOF
 [ ] BSL-инструменты: detect_tools уже нашёл/скачал платформу/jar'ы и прописал env. Что [нет] — доложи и повтори uv run scripts/detect_tools.py (мост BSL_LS_MCP — из репо mcp/bsl_ls_mcp.py).
 [ ] Git-идентичность площадки и токен push — см. docs/git.md.
 [ ] Перезапусти Claude Code в $WORKDIR -> подтверди MCP.
-[ ] Self-test: спроси erp-1c (find_object) — ответ по коду из $SRC_DIR (или из центра, если подключён).
+[ ] Self-test: спроси onec-code (find_object) — ответ по коду из $SRC_DIR (или из центра, если подключён).
 EOF

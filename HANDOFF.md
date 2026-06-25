@@ -7,7 +7,7 @@
 - **Скиллы** `1c-dev`, `1c-analyst` (обезличенные): рабочий цикл реализации, IDE-гейт, ЧТЗ-поведение, reuse-first БСП,
   стандарты v8-code-style, производительность/кэш, шаблон конвенций. References на месте, плюс `1c-dev/references/ai-pitfalls.md`
   (чек-лист частых ошибок AI в 1С). Алгоритм поиска задействует `scope`. Триггеры скиллов проверены, оставлены как есть.
-- **MCP** `mcp/erp_mcp.py` — чтение кода 1С (ripgrep, auto-discovery слоёв по `ONEC_SRC_DIR`), транспорт по env
+- **MCP** `mcp/onec_mcp.py` — чтение кода 1С (ripgrep, auto-discovery слоёв по `ONEC_SRC_DIR`), транспорт по env
   `MCP_TRANSPORT` (stdio локально / sse в Docker), `MCP_HOST`/`MCP_PORT`. **Универсальный конфиг слоёв** (TOML,
   `ONEC_LAYERS_CONFIG`, см. `config/layers.example.toml`): роли/группы слоёв, `scope` в search/find/list, ярлыки (pin),
   режимы (`profiles`, `ONEC_PROFILE`). Без конфига — чистое auto-discovery. Доказано: generic + конфиг воспроизводит
@@ -15,9 +15,9 @@
   scope baseline/extension/both) на реальном наборе репозиториев.
 - **Данные локализации аналитика:** `config/contours.example.md` — карта контуров/баз (обезличенный шаблон). Локализация
   кладёт свой файл, скилл/движок не правятся. Единый слой локализации: `layers.toml` + `contours.md` + `conventions-template` + версии в `CLAUDE.md`.
-- **Docker (центр за auth):** `erp-1c` (SSE) только во внутренней сети + сайдкар Caddy (`caddy/Caddyfile`) с bearer-токеном
-  наружу. `.env.example` (ONEC_SRC_DIR / ERP_BEARER_TOKEN / ERP_PUBLIC_PORT / ONEC_LAYERS_CONFIG / ONEC_PROFILE). Обкатано вживую.
-- **Тесты:** `tests/test_erp_mcp.py` (6) + `tests/test_layers_config.py` (5) — **11 passed**. Ручной smoke HTTP — `tests/smoke_http_client.py` (шлёт bearer, если задан).
+- **Docker (центр за auth):** `onec-code` (SSE) только во внутренней сети + сайдкар Caddy (`caddy/Caddyfile`) с bearer-токеном
+  наружу. `.env.example` (ONEC_SRC_DIR / ONEC_BEARER_TOKEN / ONEC_PUBLIC_PORT / ONEC_LAYERS_CONFIG / ONEC_PROFILE). Обкатано вживую.
+- **Тесты:** `tests/test_onec_mcp.py` (6) + `tests/test_layers_config.py` (5) — **11 passed**. Ручной smoke HTTP — `tests/smoke_http_client.py` (шлёт bearer, если задан).
 - **Доки:** README (позиционирование + адаптация = конфиги/данные/слой), CLAUDE.md, docs/example.md, docs/docker.md, LICENSE (MIT), onboard.ps1/sh.
 - **Git:** remote `origin` = `https://github.com/vgtitov/claude-1c-toolkit.git` (private), `main` с upstream-трекингом,
   CI зелёный на каждом пуше. Аутентификация в Windows Credential Manager (нужен scope `workflow` у PAT).
@@ -34,7 +34,7 @@
 ## План дальше (личный продукт)
 1. **CI:** GitHub Actions — прогон pytest на push (workflow `.github/workflows/tests.yml`). ✅ Добавлен (ставит ripgrep + uv, гоняет `pytest tests/`). ✅ Первый push выполнен (`main` → `origin`, upstream-трекинг), CI прошёл зелёным на первом пуше (`completed success`). ⚠ Для push workflow-файлов токену нужен scope `workflow` (классический PAT) — учтено.
 2. **Развитие toolkit:** ✅ скиллы доведены (reference `ai-pitfalls`, `scope` в поиске, карта контуров вынесена в данные); триггеры проверены и оставлены. При желании — публичный релиз.
-3. **Центральный MCP по HTTP:** ✅ обкатан вживую через docker-compose на боевом наборе (`ONEC_SRC_DIR=<каталог клонов>`, 11 слоёв). Схема: `erp-1c` (SSE) только во внутренней сети + сайдкар `proxy` (Caddy) с bearer-авторизацией наружу. Проверено: 401 без/с неверным токеном, проход с верным, протокол MCP (init/list_tools/list_modules) сквозь Caddy, контейнер видит 11 слоёв из read-only `/src`. Конфиг слоёв пробрасывается (`config/layers.example.toml`). Файлы: `docker-compose.yml`, `caddy/Caddyfile`, `.env.example`, `docs/docker.md`. ⚠ Windows bind-mount медленный для тяжёлого поиска — на Linux-сервере ок.
+3. **Центральный MCP по HTTP:** ✅ обкатан вживую через docker-compose на боевом наборе (`ONEC_SRC_DIR=<каталог клонов>`, 11 слоёв). Схема: `onec-code` (SSE) только во внутренней сети + сайдкар `proxy` (Caddy) с bearer-авторизацией наружу. Проверено: 401 без/с неверным токеном, проход с верным, протокол MCP (init/list_tools/list_modules) сквозь Caddy, контейнер видит 11 слоёв из read-only `/src`. Конфиг слоёв пробрасывается (`config/layers.example.toml`). Файлы: `docker-compose.yml`, `caddy/Caddyfile`, `.env.example`, `docs/docker.md`. ⚠ Windows bind-mount медленный для тяжёлого поиска — на Linux-сервере ок.
 4. **СЛЕДУЮЩЕЕ — локализация под организацию** (ОТДЕЛЬНЫМ репозиторием/аккаунтом): фундамент готов, локализация
    сводится к ДАННЫМ поверх generic-ядра — не к правке кода/скиллов:
    - свой `config/layers.<org>.toml` — pin базовой конфигурации и расширения с человекочитаемыми ярлыками; правила

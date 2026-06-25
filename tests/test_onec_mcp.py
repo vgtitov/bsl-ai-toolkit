@@ -1,4 +1,4 @@
-"""Тесты MCP чтения кода 1С (erp_mcp). Запуск:  uv run --with mcp --with pytest pytest -q
+"""Тесты MCP чтения кода 1С (onec_mcp). Запуск:  uv run --with mcp --with pytest pytest -q
 Создают временный «репозиторий» с модулем и проверяют discovery/search/find/read."""
 import importlib
 import sys
@@ -18,10 +18,10 @@ def _make_src(tmp_path):
 
 def _load(tmp_path, monkeypatch):
     monkeypatch.setenv("ONEC_SRC_DIR", str(tmp_path).replace("\\", "/"))
-    sys.modules.pop("erp_mcp", None)               # переимпорт: discovery в момент импорта
+    sys.modules.pop("onec_mcp", None)               # переимпорт: discovery в момент импорта
     if str(MCP_DIR) not in sys.path:
         sys.path.insert(0, str(MCP_DIR))
-    return importlib.import_module("erp_mcp")
+    return importlib.import_module("onec_mcp")
 
 
 def test_discovery_finds_root(tmp_path, monkeypatch):

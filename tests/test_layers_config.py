@@ -1,4 +1,4 @@
-"""Тесты конфиг-driven слоёв erp_mcp: классификация (роли+теги), scope-фильтрация, pin-ярлык, профиль.
+"""Тесты конфиг-driven слоёв onec_mcp: классификация (роли+теги), scope-фильтрация, pin-ярлык, профиль.
 Проверяют, что универсальность достигается КОНФИГОМ (TOML), без правок кода — основа локализации."""
 import importlib
 import sys
@@ -66,10 +66,10 @@ def _load(src, cfg, monkeypatch, profile=""):
     monkeypatch.setenv("ONEC_SRC_DIR", str(src).replace("\\", "/"))
     monkeypatch.setenv("ONEC_LAYERS_CONFIG", str(cfg).replace("\\", "/"))
     monkeypatch.setenv("ONEC_PROFILE", profile)
-    sys.modules.pop("erp_mcp", None)
+    sys.modules.pop("onec_mcp", None)
     if str(MCP_DIR) not in sys.path:
         sys.path.insert(0, str(MCP_DIR))
-    return importlib.import_module("erp_mcp")
+    return importlib.import_module("onec_mcp")
 
 
 def test_classify_roles_and_tags(tmp_path, monkeypatch):
@@ -117,8 +117,8 @@ def test_default_no_config_still_works(tmp_path, monkeypatch):
     monkeypatch.setenv("ONEC_SRC_DIR", str(src).replace("\\", "/"))
     monkeypatch.delenv("ONEC_LAYERS_CONFIG", raising=False)
     monkeypatch.delenv("ONEC_PROFILE", raising=False)
-    sys.modules.pop("erp_mcp", None)
+    sys.modules.pop("onec_mcp", None)
     if str(MCP_DIR) not in sys.path:
         sys.path.insert(0, str(MCP_DIR))
-    m = importlib.import_module("erp_mcp")
+    m = importlib.import_module("onec_mcp")
     assert "[plainrepo]" in m.search_1c("ФункцияОбычная")

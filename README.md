@@ -22,16 +22,16 @@ claude-1c-toolkit/
 │       ├── SKILL.md
 │       └── references/analysis-workflow.md
 ├── mcp/
-│   ├── erp_mcp.py            # MCP чтения кода 1С (ripgrep по локальным клонам, auto-discovery слоёв)
+│   ├── onec_mcp.py            # MCP чтения кода 1С (ripgrep по локальным клонам, auto-discovery слоёв)
 │   ├── bsl_ls_mcp.py         # MCP-мост над BSL Language Server (analyze -r json) — свободный, в комплекте
 │   └── dev.mcp.json          # профиль MCP-серверов (пути через env)
 ├── config/
 │   ├── layers.example.toml   # конфиг слоёв/scope/режимов для MCP (локализация = свой файл)
 │   └── contours.example.md   # карта контуров/баз для 1c-analyst (данные локализации, не код)
-├── server/                   # СЕРВЕРНАЯ часть (центральный erp-1c по HTTP за auth Caddy — для команды)
-│   ├── docker-compose.yml    #   build.context=.. (общий движок mcp/erp_mcp.py), наружу :8000 за bearer
+├── server/                   # СЕРВЕРНАЯ часть (центральный onec-code по HTTP за auth Caddy — для команды)
+│   ├── docker-compose.yml    #   build.context=.. (общий движок mcp/onec_mcp.py), наружу :8000 за bearer
 │   ├── Dockerfile · caddy/Caddyfile · .env.example
-├── scripts/switch_erp.py     # клиент: переключение erp-1c local <-> central (env-плейсхолдеры токена)
+├── scripts/switch_source.py     # клиент: переключение onec-code local <-> central (env-плейсхолдеры токена)
 ├── scripts/set_token.ps1|sh|cmd  # клиент: подключение к центру одной вставкой (токен в env, блок для Claude Code; .cmd обходит политику PS)
 ├── scripts/detect_tools.py  # авто-поиск платформы/JDK + --install качает свободные jar'ы (BSL LS, mcp-bsl-context) и пишет env
 ├── scripts/install_git_hooks.py  # ставит commit-msg хук: коммиты без соавторства Claude (см. docs/git.md)

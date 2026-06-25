@@ -9,7 +9,7 @@ RUN apt-get update \
 RUN pip install --no-cache-dir "mcp>=1.2"
 
 WORKDIR /app
-COPY mcp/erp_mcp.py /app/erp_mcp.py
+COPY mcp/onec_mcp.py /app/onec_mcp.py
 
 ENV ONEC_SRC_DIR=/src \
     MCP_TRANSPORT=sse \
@@ -17,4 +17,4 @@ ENV ONEC_SRC_DIR=/src \
     MCP_PORT=8000
 
 EXPOSE 8000
-CMD ["python", "/app/erp_mcp.py"]
+CMD ["python", "/app/onec_mcp.py"]

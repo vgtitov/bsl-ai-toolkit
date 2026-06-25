@@ -1,24 +1,24 @@
-# Caddy как reverse-proxy с авторизацией перед центральным erp-1c MCP.
-# Простая bearer-аутентификация: клиент шлёт заголовок `Authorization: Bearer <ERP_BEARER_TOKEN>`.
-# Без верного токена — 401, до MCP запрос не доходит. erp-1c наружу не публикуется (только внутренняя сеть).
+# Caddy как reverse-proxy с авторизацией перед центральным onec-code MCP.
+# Простая bearer-аутентификация: клиент шлёт заголовок `Authorization: Bearer <ONEC_BEARER_TOKEN>`.
+# Без верного токена — 401, до MCP запрос не доходит. onec-code наружу не публикуется (только внутренняя сеть).
 {
 	admin off
 	auto_https off
 }
 
-# Порт внутри контейнера Caddy; наружу маппится ERP_PUBLIC_PORT (см. docker-compose.yml).
+# Порт внутри контейнера Caddy; наружу маппится ONEC_PUBLIC_PORT (см. docker-compose.yml).
 :8000 {
-	@unauthorized not header Authorization "Bearer {$ERP_BEARER_TOKEN}"
+	@unauthorized not header Authorization "Bearer {$ONEC_BEARER_TOKEN}"
 
 	# handle-блоки взаимоисключающие и идут по порядку (не зависят от авто-сортировки директив):
-	# нет/неверный токен -> 401, всё остальное -> проксируем на erp-1c.
+	# нет/неверный токен -> 401, всё остальное -> проксируем на onec-code.
 	handle @unauthorized {
 		respond "401 Unauthorized" 401
 	}
 
 	handle {
 		# SSE требует потоковой отдачи без буферизации — flush_interval -1.
-		reverse_proxy erp-1c:8000 {
+		reverse_proxy onec-code:8000 {
 			flush_interval -1
 		}
 	}

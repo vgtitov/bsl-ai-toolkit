@@ -287,7 +287,7 @@ def main():
             ok(f"BSL_LS_MCP={hit} (мост из репозитория){'  [dry-run]' if dry else ''}"); found.append("BSL_LS_MCP")
         else:
             warn(f"мост bsl_ls_mcp.py: не найден. Он вендорится в репо ({vendored}) — обнови репозиторий (git pull) "
-                 "или задай BSL_LS_MCP. Без него работают erp-1c и bsl-platform, но не bsl-ls.")
+                 "или задай BSL_LS_MCP. Без него работают onec-code и bsl-platform, но не bsl-ls.")
             missing.append("BSL_LS_MCP")
 
     print(f"\n== Итог: готово {len(found)}, не хватает {len(missing)} ==")

@@ -1,14 +1,14 @@
-# Центральный erp-1c MCP по HTTP за авторизацией.
-# erp-1c читает код 1С и отдаёт MCP по SSE ТОЛЬКО во внутреннюю сеть; наружу торчит Caddy с bearer-токеном.
+# Центральный onec-code MCP по HTTP за авторизацией.
+# onec-code читает код 1С и отдаёт MCP по SSE ТОЛЬКО во внутреннюю сеть; наружу торчит Caddy с bearer-токеном.
 # ONEC_SRC_DIR — каталог с клонами конфигураций/расширений 1С (на хосте), монтируется read-only.
-# ERP_BEARER_TOKEN — общий секрет; клиент шлёт его в заголовке Authorization. Задаётся в .env (см. .env.example).
+# ONEC_BEARER_TOKEN — общий секрет; клиент шлёт его в заголовке Authorization. Задаётся в .env (см. .env.example).
 services:
-  erp-1c:
-    # Файлы стека живут в server/, но контекст сборки — КОРЕНЬ репо: Dockerfile делает COPY mcp/erp_mcp.py.
+  onec-code:
+    # Файлы стека живут в server/, но контекст сборки — КОРЕНЬ репо: Dockerfile делает COPY mcp/onec_mcp.py.
     build:
       context: ..
       dockerfile: server/Dockerfile
-    image: claude-1c-toolkit/erp-1c:latest
+    image: claude-1c-toolkit/onec-code:latest
     expose:
       - "8000"            # только внутренняя сеть compose, на хост не публикуется
     volumes:
@@ -27,11 +27,11 @@ services:
   proxy:
     image: caddy:2-alpine
     depends_on:
-      - erp-1c
+      - onec-code
     ports:
-      - "${ERP_PUBLIC_PORT:-8000}:8000"
+      - "${ONEC_PUBLIC_PORT:-8000}:8000"
     volumes:
       - "./caddy/Caddyfile:/etc/caddy/Caddyfile:ro"
     environment:
-      ERP_BEARER_TOKEN: "${ERP_BEARER_TOKEN:?задай ERP_BEARER_TOKEN в .env — без него сервис не поднять}"
+      ONEC_BEARER_TOKEN: "${ONEC_BEARER_TOKEN:?задай ONEC_BEARER_TOKEN в .env — без него сервис не поднять}"
     restart: unless-stopped
