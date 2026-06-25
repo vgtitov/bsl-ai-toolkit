@@ -1,0 +1,7 @@
+#!/bin/sh
+# claude-no-coauthor: коммиты без соавторства/атрибуции Claude/Anthropic.
+# Ставится автоматически scripts/setup_git.py (через core.hooksPath). Этот файл — эталон для ручного слияния,
+# если на машине уже есть свой commit-msg хук.
+f="$1"; [ -f "$f" ] || exit 0
+grep -viE 'co-authored-by:[[:space:]]*.*(claude|anthropic)|generated with \[?claude code|claude\.com/claude-code|noreply@anthropic\.com' "$f" > "$f.noai" 2>/dev/null && mv "$f.noai" "$f"
+exit 0
