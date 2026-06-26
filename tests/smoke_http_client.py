@@ -27,7 +27,7 @@ async def main():
                            for ln in txt.splitlines() if ln.startswith("Общие модули")})
             print("LAYERS:", tags)
 
-            fo = await s.call_tool("find_object", {"name": "ВалютыДокументов"})
+            fo = await s.call_tool("find_object", {"name": "Номенклатура"})
             print("FIND head:", fo.content[0].text.splitlines()[:2])
 
             sr = await s.call_tool("search_1c", {"query": "Процедура ПриСозданииНаСервере", "max_results": 3})
