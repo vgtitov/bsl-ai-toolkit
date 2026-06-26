@@ -37,7 +37,7 @@ claude-1c-toolkit/
 ├── scripts/install_git_hooks.py  # ставит commit-msg хук: коммиты без соавторства Claude (см. docs/git.md)
 ├── scripts/git-hooks/        # эталоны git-хуков (commit-msg)
 ├── onboard/onboard.ps1|sh    # идемпотентный bootstrap
-└── docs/                     # connect.md (подключение local/центр + токен), docker.md (сервер), git.md, example.md
+└── docs/                     # connect.md (подключение local/центр + токен), deploy-center.md (развернуть центр «под ключ»), docker.md (стек сервера), git.md, example.md
 ```
 
 ## Ключевые принципы (что внутри методологии)
