@@ -61,8 +61,7 @@ def _central_block():
 
 
 def switch(workdir, mode, profile):
-    # backward-compat: новые имена ONEC_MCP_*, при отсутствии — старые ERP1C_* (переходный период).
-    url = (os.environ.get("ONEC_MCP_URL") or os.environ.get("ERP1C_URL") or "").strip()
+    url = os.environ.get("ONEC_MCP_URL", "").strip()
     if mode == "auto":
         mode = "central" if _reachable(url) else "local"
         print(f"[auto] ONEC_MCP_URL={'задан' if url else 'не задан'}, центр "
@@ -74,6 +73,10 @@ def switch(workdir, mode, profile):
     with open(mcp_path, encoding="utf-8") as f:
         cfg = json.load(f)
     cfg.setdefault("mcpServers", {})
+    # вычистить легаси-ключ прежнего имени сервера (erp-1c) из ранее развёрнутого конфига —
+    # иначе Claude Code пытается поднять его по несуществующему erp_mcp.py и ругается.
+    for legacy in ("erp-1c",):
+        cfg["mcpServers"].pop(legacy, None)
     cfg["mcpServers"]["onec-code"] = _central_block() if mode == "central" else _local_block(profile)
     with open(mcp_path, "w", encoding="utf-8") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
@@ -85,7 +88,7 @@ def switch(workdir, mode, profile):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mode", default=(os.environ.get("ONEC_MCP_MODE") or os.environ.get("ERP1C_MODE") or "auto"),
+    ap.add_argument("--mode", default=os.environ.get("ONEC_MCP_MODE", "auto"),
                     choices=["auto", "local", "central"])
     ap.add_argument("--profile", default=os.environ.get("ONEC_ACTIVE_PROFILE", "dev"))
     ap.add_argument("--workdir", default=os.getcwd(), help="каталог с .mcp.json")
