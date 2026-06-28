@@ -389,6 +389,132 @@ def prometheus_query(base_url, query, time=None, _get=None):
     return out
 
 
+# ============================================================================
+# Журнал регистрации (ЖР) — кейс «доступ ТОЛЬКО к ЖР»: из Excel-выгрузки отчёта 1С
+# ИЛИ из файла журнала нового формата .lgd (SQLite). Анализ ошибок/по пользователям/
+# по событиям, когда нет доступа к ТЖ/rac/СУБД. Только чтение.
+# ============================================================================
+
+def _eventlog_colmap(headers):
+    """Сопоставить столбцы (рус. заголовки выгрузки ЖР / колонки .lgd) к ключам по подстроке."""
+    m = {}
+    for i, h in enumerate(headers):
+        hl = str(h or "").strip().lower()
+        if any(k in hl for k in ("важност", "уровен", "severity")):
+            m.setdefault("level", i)
+        elif "пользоват" in hl or "user" in hl:
+            m.setdefault("user", i)
+        elif "событие" in hl or "event" in hl:
+            m.setdefault("event", i)
+        elif "метадан" in hl or "metadata" in hl:
+            m.setdefault("metadata", i)
+        elif "дата" in hl or "date" in hl or "врем" in hl:
+            m.setdefault("date", i)
+        elif "коммент" in hl or "comment" in hl:
+            m.setdefault("comment", i)
+        elif "компьютер" in hl or "computer" in hl:
+            m.setdefault("computer", i)
+        elif "приложение" in hl or hl == "app":
+            m.setdefault("app", i)
+    return m
+
+
+def _row_to_entry(row, colmap):
+    return {k: (str(row[i]) if i < len(row) and row[i] is not None else "") for k, i in colmap.items()}
+
+
+def _parse_eventlog_xlsx(path):
+    import openpyxl
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    ws = wb.active
+    it = ws.iter_rows(values_only=True)
+    headers = next(it, None)
+    if not headers:
+        wb.close()
+        return [], ["пустой xlsx"]
+    cm = _eventlog_colmap(headers)
+    entries = []
+    for r in it:
+        if r is None or all(c is None for c in r):
+            continue
+        entries.append(_row_to_entry(r, cm))
+    wb.close()
+    return entries, ([] if cm else ["не распознаны столбцы ЖР в заголовке"])
+
+
+def _pick_eventlog_table(tables):
+    for t in tables:
+        if any(k in t.lower() for k in ("eventlog", "журнал", "event")):
+            return t
+    return tables[0]
+
+
+def _parse_eventlog_sqlite(path, table=None):
+    import sqlite3
+    con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    cur = con.cursor()
+    tables = [r[0] for r in cur.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+    if not tables:
+        con.close()
+        return [], ["в базе .lgd нет таблиц"]
+    t = table or _pick_eventlog_table(tables)
+    if t not in tables:
+        con.close()
+        return [], [f"таблица '{t}' не найдена; есть: {tables}"]
+    cur.execute(f'SELECT * FROM "{t}"')
+    cols = [d[0] for d in cur.description]
+    cm = _eventlog_colmap(cols)
+    entries = [_row_to_entry(row, cm) for row in cur.fetchall()]
+    con.close()
+    warn = [] if cm else [f"в таблице '{t}' не распознаны столбцы ЖР (колонки: {cols}) — реальный .lgd версионно-зависим [проверить], надёжнее Excel-выгрузка отчёта ЖР"]
+    return entries, warn
+
+
+def event_log_parse(source, level=None, user=None, events=None, top=100, table=None):
+    """Анализ журнала регистрации 1С из Excel-выгрузки (.xlsx) ИЛИ файла .lgd (SQLite).
+    Фильтры: level (Ошибка/Предупреждение/Информация/Примечание), user, events (подстроки).
+    Возвращает summary (rows, by_level, by_user, by_event) + entries[] (top) + warnings."""
+    empty = {"summary": {"rows": 0, "by_level": {}, "by_user": {}, "by_event": {}}, "entries": [], "warnings": []}
+    if not os.path.exists(source):
+        empty["warnings"] = [f"источник не найден: {source}"]
+        return empty
+    ext = os.path.splitext(source)[1].lower()
+    try:
+        if ext in (".xlsx", ".xlsm"):
+            entries, warn = _parse_eventlog_xlsx(source)
+        elif ext in (".lgd", ".db", ".sqlite", ".sqlite3"):
+            entries, warn = _parse_eventlog_sqlite(source, table)
+        else:
+            empty["warnings"] = [f"неизвестный формат '{ext}'; поддержано .xlsx (выгрузка отчёта ЖР) и .lgd (SQLite журнал)"]
+            return empty
+    except Exception as e:  # noqa: BLE001 — вернуть как warning, не падать
+        empty["warnings"] = [f"ошибка чтения {os.path.basename(source)}: {e}"]
+        return empty
+
+    evset = [e.lower() for e in events] if events else None
+
+    def keep(e):
+        if level and str(e.get("level", "")).strip().lower() != level.strip().lower():
+            return False
+        if user and str(e.get("user", "")) != user:
+            return False
+        if evset and not any(x in str(e.get("event", "")).lower() for x in evset):
+            return False
+        return True
+
+    filt = [e for e in entries if keep(e)]
+    return {
+        "summary": {
+            "rows": len(filt),
+            "by_level": dict(Counter(e["level"] for e in filt if e.get("level")).most_common()),
+            "by_user": dict(Counter(e["user"] for e in filt if e.get("user")).most_common()),
+            "by_event": dict(Counter(e["event"] for e in filt if e.get("event")).most_common()),
+        },
+        "entries": filt[: max(0, int(top))],
+        "warnings": warn,
+    }
+
+
 # --- MCP-обёртка (read-only) ---
 try:
     from mcp.server.fastmcp import FastMCP
@@ -439,6 +565,15 @@ try:
         if not url:
             return [{"error": "укажи url или env ZABBIX_URL (read-only)"}]
         return zabbix_problems(url, auth=token or None, recent=recent)
+
+    @mcp.tool()
+    def event_log_parse_tool(source: str, level: str = "", user: str = "",
+                             events: list = None, top: int = 100, table: str = "") -> dict:
+        """Анализ журнала регистрации 1С (кейс «доступ только к ЖР»): из Excel-выгрузки отчёта (.xlsx)
+        ИЛИ файла .lgd (SQLite). Фильтры level (Ошибка/Предупреждение/Информация/Примечание)/user/events.
+        Возвращает summary (by_level/by_user/by_event) + entries + warnings. Read-only."""
+        return event_log_parse(source, level=level or None, user=user or None,
+                               events=events or None, top=top, table=table or None)
 
     @mcp.tool()
     def prometheus_query_tool(query: str, base_url: str = "") -> list:
