@@ -518,7 +518,10 @@ def event_log_parse(source, level=None, user=None, events=None, top=100, table=N
 # --- MCP-обёртка (read-only) ---
 try:
     from mcp.server.fastmcp import FastMCP
-    mcp = FastMCP("onec-ops")
+    # host/port для сетевого транспорта (sse/streamable-http) при центральном развёртывании в docker
+    mcp = FastMCP("onec-ops",
+                  host=os.environ.get("MCP_HOST", "0.0.0.0"),
+                  port=int(os.environ.get("MCP_PORT", "8001")))
 
     @mcp.tool()
     def tech_journal_parse(roots, events=None, min_duration: int = 0,
@@ -585,6 +588,7 @@ try:
         return prometheus_query(base_url, query)
 
     if __name__ == "__main__":
-        mcp.run()
+        # транспорт: stdio (по умолчанию, для локального Claude Code) | sse | streamable-http (для docker-центра)
+        mcp.run(transport=os.environ.get("MCP_TRANSPORT", "stdio"))
 except ImportError:  # pragma: no cover — модуль остаётся импортируемым без пакета mcp (для тестов парсера)
     mcp = None

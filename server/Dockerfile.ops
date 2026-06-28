@@ -1,0 +1,16 @@
+# Центральный MCP ЭКСПЛУАТАЦИИ 1С (onec-ops) как HTTP-сервис (для команды/нескольких разработчиков).
+# Read-only инструменты: разбор ТЖ/ЖР, Apdex, диагностика по порогам, опц. Zabbix/Prometheus.
+# Каталог(и) логов 1С (ТЖ/ЖР) монтируются томом read-only; сервис отдаёт MCP по HTTP (SSE).
+FROM python:3.12-slim
+
+RUN pip install --no-cache-dir "mcp>=1.2" openpyxl
+
+WORKDIR /app
+COPY mcp/onec_ops_mcp.py /app/onec_ops_mcp.py
+
+ENV MCP_TRANSPORT=sse \
+    MCP_HOST=0.0.0.0 \
+    MCP_PORT=8001
+
+EXPOSE 8001
+CMD ["python", "/app/onec_ops_mcp.py"]

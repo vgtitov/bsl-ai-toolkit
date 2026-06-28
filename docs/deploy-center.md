@@ -156,3 +156,17 @@ cd "$SERVER_DIR" && docker compose up -d --build   # пересоберёт то
 - [ ] ШАГ 4: `docker compose up -d --build`; `ps` — proxy наружу, onec-code внутри, `/src` ro.
 - [ ] ШАГ 5: 401 без токена + осмысленный ответ smoke-клиента с токеном.
 - [ ] ШАГ 6: подключение роздано out-of-band; автообновление (если нужно) — read-only доступ + fail-safe.
+
+---
+
+## onec-ops (MCP эксплуатации) — поднимается тем же compose
+
+Стек `server/` теперь поднимает ДВА MCP за одним Caddy (bearer-auth): `onec-code` (`:8000`, чтение кода) и
+**`onec-ops`** (`:8001`, эксплуатация — ТЖ/ЖР/Apdex/диагностика/Zabbix/Prometheus, read-only).
+- В `.env` добавь: `ONEC_TJ_DIR` (каталог логов ТЖ/выгрузок ЖР, монтируется read-only), при необходимости
+  `ONEC_OPS_PUBLIC_PORT` (по умолч. 8001) и адаптеры `ZABBIX_URL/ZABBIX_TOKEN`, `PROMETHEUS_URL`.
+- `docker compose up -d --build` поднимает оба; `docker compose ps` → `onec-code`, `onec-ops`, `proxy`.
+- Разработчик подключается к `onec-ops` на `:8001` с тем же bearer-токеном (см. `connect.md`).
+- Проверка локально без docker: `MCP_TRANSPORT=sse MCP_PORT=8001 python mcp/onec_ops_mcp.py` → отдаёт SSE на `/sse`.
+
+Team-локализация (org-конфиги/секреты поверх ядра из GitHub, без дублирования) — `team-localization-template.md`.

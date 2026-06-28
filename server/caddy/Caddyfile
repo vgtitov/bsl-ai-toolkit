@@ -23,3 +23,18 @@
 		}
 	}
 }
+
+# Параллельный вход для onec-ops (MCP эксплуатации), та же bearer-аутентификация.
+:8001 {
+	@unauthorized not header Authorization "Bearer {$ONEC_BEARER_TOKEN}"
+
+	handle @unauthorized {
+		respond "401 Unauthorized" 401
+	}
+
+	handle {
+		reverse_proxy onec-ops:8001 {
+			flush_interval -1
+		}
+	}
+}

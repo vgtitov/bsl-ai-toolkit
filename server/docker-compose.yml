@@ -24,12 +24,35 @@ services:
       ONEC_PROFILE: "${ONEC_PROFILE:-}"
     restart: unless-stopped
 
+  onec-ops:
+    # MCP эксплуатации 1С (read-only: ТЖ/ЖР/Apdex/диагностика/Zabbix/Prometheus). Контекст сборки — корень репо.
+    build:
+      context: ..
+      dockerfile: server/Dockerfile.ops
+    image: claude-1c-toolkit/onec-ops:latest
+    expose:
+      - "8001"            # только внутренняя сеть compose, на хост не публикуется (наружу — через proxy)
+    volumes:
+      # Каталог(и) логов 1С (ТЖ/ЖР) — read-only. Путь org-specific, задаётся в .env (Team-слой).
+      - "${ONEC_TJ_DIR:-../logs}:/logs:ro"
+    environment:
+      MCP_TRANSPORT: sse
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: "8001"
+      # Опциональные адаптеры мониторинга (org-specific, задаются в .env Team-слоя). Пусто = выключено.
+      ZABBIX_URL: "${ZABBIX_URL:-}"
+      ZABBIX_TOKEN: "${ZABBIX_TOKEN:-}"
+      PROMETHEUS_URL: "${PROMETHEUS_URL:-}"
+    restart: unless-stopped
+
   proxy:
     image: caddy:2-alpine
     depends_on:
       - onec-code
+      - onec-ops
     ports:
       - "${ONEC_PUBLIC_PORT:-8000}:8000"
+      - "${ONEC_OPS_PUBLIC_PORT:-8001}:8001"
     volumes:
       - "./caddy/Caddyfile:/etc/caddy/Caddyfile:ro"
     environment:
