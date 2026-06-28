@@ -63,6 +63,14 @@ SQL) и её версия, ОС сервера (дистрибутив Linux/Win
 хранилища в git), пайплайны GitLab CI/Jenkins, статический анализ SonarQube + 1С:АПК (тег `ACC`), дымовые/приёмочные
 тесты Vanessa (vanessa-runner, vanessa-automation), допиливание `vrunner.json`.
 
+## Тестирование и качество (QA) — `references/testing-and-quality.md`
+QA-companion к CI/CD: пирамида тестов 1С (дымовые/smoke, модульные/unit на YAXUnit/xUnitFor1C, сценарные/приёмочные
+BDD на Vanessa Automation, регрессионные, сравнение эталонов, нагрузочные), инструменты (Vanessa-ADD, vanessa-runner,
+COVERAGE41C, Allure, система тест-менеджмента). Quality Gates и допуск к релизу (где ворота в пайплайне, храповик
+покрытия, DoD для MR vs релиза, классификация дефектов/Release Stopper). Тестовые данные и окружения (ландшафт
+стендов Dev/CI-эфемерный/QA-Stage/Prod, фикстуры, обезличивание копии прода, golden master). Что встроить в пайплайн
+по ритму прогона и метрики качества (покрытие, доля зелёных, escaped defects).
+
 ## Контейнеры — `references/containers-docker-k8s.md`
 1С в Docker и Kubernetes: сборка образов (сервер, RAS, тонкий/толстый клиент, gitsync, vanessa-runner — на базе
 onec-docker), `Dockerfile` (FROM/RUN/COPY/ENTRYPOINT) и `docker-compose`, лицензирование в контейнере (проброс HASP,

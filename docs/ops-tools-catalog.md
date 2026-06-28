@@ -38,6 +38,7 @@
 | **oscript-library/gitsync** | Мост «хранилище конфигурации → git» (каждая версия → коммит). ~325★ | активен 2026 | Незаменим для легаси на Хранилище. Уже описан в reference. |
 | **Pr-Mex/vanessa-automation** | BDD в 1С (Gherkin на русском), приёмочные UI-сценарии. ~664★ (топ) | активен 2026 | Приёмочные тесты. |
 | **vanessa-opensource/add** (Vanessa-ADD) | TDD/BDD/smoke/unit/acceptance-фреймворк. MPL-2.0, ~373★. (`oscript-library/add` — устаревший форк, не брать.) | активен 2026 | Smoke + BDD. |
+| **bia-technologies/yaxunit** (YAXUnit) | Современный фреймворк **модульных** тестов на встроенном языке 1С (тесты как процедуры расширения, запуск из CI через `vrunner`). Сменил `xDrivenDevelopment/xUnitFor1C` (legacy). | активен 2026 | Unit-тесты бизнес-логики. → testing-and-quality.md. [проверить] актуальность репо/орг. |
 | **1c-syntax/sonar-bsl-plugin-community** | Поддержка 1С/OneScript в SonarQube. ~259★ | активен 2026 | Quality gate (Sonar). |
 | **1C-Company/v8-code-style** | Официальное расширение EDT: проверки кода по стандартам 1С (опенсорс-аналог 1С:АПК). Java, ~232★ | активен 2026 | Рекомендовать для EDT-контура. |
 | **oscript-library/deployka** | Continuous Delivery для 1С (доставка cf/cfe в среды). ~102★ | активен 2026-05 | Опция стадии deploy. |
