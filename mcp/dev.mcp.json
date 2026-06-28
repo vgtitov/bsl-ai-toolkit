@@ -28,6 +28,12 @@
         "BSL_JAR": "${BSL_JAR}",
         "BSL_MEMORY_MB": "${BSL_MEMORY_MB:-4096}"
       }
+    },
+    "onec-ops": {
+      "type": "stdio",
+      "command": "uv",
+      "args": ["run", "--quiet", "${ONEC_OPS_MCP}"],
+      "env": {}
     }
   }
 }
