@@ -202,3 +202,6 @@ WHERE query LIKE 'ВЫБРАТЬ%' LIMIT 20;
   `open_datasync`. Менять только по результатам `pg_test_fsync`, помечай **[проверить]**.
 - **Троттлинг автовакуума под нагрузкой:** держать CPU в пике ≤ 80% (см. `postgres-tuning.md` §4) —
   иначе автовакуум конкурирует с пользовательскими сеансами.
+
+## Готовые инструменты (опенсорс)
+Оперативный разбор тормозов/локов — **lesovsky/pgcenter** (realtime, ноль установки в базу). Пост-фактум по логам — **darold/pgbadger**. Мониторинг — **postgrespro/mamonsu** (Zabbix) / **postgres_exporter** (Prometheus). Готовый MCP health-анализа — **crystaldba/postgres-mcp** (read-only). Полный проверенный список — `docs/ops-tools-catalog.md`.

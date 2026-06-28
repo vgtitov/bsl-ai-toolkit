@@ -187,3 +187,6 @@ stage('Static analysis') {
 - Хранилище и EDT правят одно и то же без синхронизации → расхождение. **Контр:** один источник истины кода.
 - Секреты (пароль ИБ, токен GitLab, pin лицензии) в `sonar-project.properties`/`vrunner.json`/`Jenkinsfile`.
   **Контр:** только переменные CI/секреты, плейсхолдеры в репозитории.
+
+## Готовые инструменты (опенсорс)
+OSS-стек CI/CD 1С: **vanessa-opensource/vanessa-runner** (оркестратор), **oscript-library/gitsync** (хранилище→git), **Pr-Mex/vanessa-automation** + **vanessa-opensource/add** (BDD/smoke), **1c-syntax/bsl-language-server** + **sonar-bsl-plugin-community** (quality gate), **oscript-library/deployka** (CD). Полный проверенный список — `docs/ops-tools-catalog.md`.

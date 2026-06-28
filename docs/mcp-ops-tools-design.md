@@ -97,7 +97,22 @@
 - Передача **сырых дампов/выгрузок ИБ** и персональных данных во внешние сервисы/LLM.
 - Хранение секретов в репозитории или в аргументах инструментов.
 
+## Не изобретать велосипед — готовые опенсорс-реализации (проверено, см. `ops-tools-catalog.md`)
+Перед реализацией свериться с готовым:
+- **`pg_health` уже существует:** `crystaldba/postgres-mcp` (Python, MIT) — health-анализ (index/connection/
+  buffer-cache/vacuum/replication), index-tuning, EXPLAIN, hypothetical indexes, безопасный настраиваемый
+  **read-only**. Вариант: **подключить готовый** для роли `1c-dba` вместо своего `pg_health`.
+- **Ядро `tech_journal_parse`:** `medigor/tech-log-parser` (Rust, MIT, ТЖ→JSON) или `akpaevj/OneSTools.TechLog`
+  (C#, MIT, нормализация + live-режим). Обернуть их вывод MCP-инструментом, не писать парсер ТЖ с нуля.
+- **`cluster_metrics` / снятие живых данных ИБ:** образец — `feenlace/mcp-1c` (Go, MIT, read-only: метаданные +
+  `execute_query` SELECT + `get_event_log` через HTTP-сервис 1С). Метрики кластера через `rac` уже инкапсулированы
+  в `LazarenkoA/prometheus_1C_exporter` (MPL-2.0) — брать список метрик/парсинг вывода `rac` оттуда.
+- **Изоляция/доставка MCP:** `docker/mcp-gateway` (официальный, MIT) — запускать чужие MCP в контейнерах.
+- ⚠️ НЕ брать официальный `@modelcontextprotocol/server-postgres` — заархивирован, SQL-инъекция в обход read-only.
+  Урок: read-only через строковую сборку SQL ненадёжен — нужен безопасный парсинг (как у crystaldba).
+
 ## Следующий шаг (если решим реализовывать)
-Прототип одного инструмента (например `pg_health`) как отдельный `mcp/ops_*_mcp.py` по образцу `bsl_ls_mcp.py`:
-`FastMCP`, зависимость через `# /// script`, конфиг через `env`, набор `@mcp.tool()` read-only, профиль в
-`mcp/dev.mcp.json` (пути через `env`), тесты в `tests/`. До тех пор — статус всего документа: **design-only**.
+Сначала **оценить «подключить готовый vs писать свой»** (для `pg_health` — скорее подключить crystaldba). Если писать
+свой — прототип одного инструмента как отдельный `mcp/ops_*_mcp.py` по образцу `bsl_ls_mcp.py`: `FastMCP`,
+зависимость через `# /// script`, конфиг через `env`, набор `@mcp.tool()` read-only, профиль в `mcp/dev.mcp.json`
+(пути через `env`), тесты в `tests/`. До тех пор — статус всего документа: **design-only**.

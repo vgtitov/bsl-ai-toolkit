@@ -174,3 +174,6 @@ SELECT datname, age(datfrozenxid) FROM pg_database ORDER BY age(datfrozenxid) DE
 
 > Пароли — только в `.pgpass`/секрет-хранилище, НИКОГДА в `.conf`, скрипт, репозиторий или лог. В репо
 > лежат только обезличенные шаблоны.
+
+## Готовые инструменты (опенсорс)
+Онлайн-устранение bloat без блокировки — **reorg/pg_repack**. Подбор недостающих индексов безопасно — **HypoPG/hypopg** + **powa-team/pg_qualstats**. Полный проверенный список — `docs/ops-tools-catalog.md`.

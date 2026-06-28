@@ -51,7 +51,7 @@ claude-1c-toolkit/
 ├── scripts/git-hooks/        # эталоны git-хуков (commit-msg)
 ├── onboard/onboard.ps1|sh    # идемпотентный bootstrap
 └── docs/                     # connect.md (подключение local/центр + токен), deploy-center.md (развернуть центр «под ключ»), docker.md (стек сервера), git.md, example.md,
-                              #   knowledge/README.md (индекс базы знаний ops-ролей), mcp-ops-tools-design.md (дизайн будущих MCP для эксплуатации)
+                              #   knowledge/README.md (индекс базы знаний ops-ролей), ops-tools-catalog.md (проверенные опенсорс-инструменты эксплуатации 1С), mcp-ops-tools-design.md (дизайн будущих MCP)
 ```
 
 Теперь тулкит покрывает не только разработку и анализ, но и **роли эксплуатации и инфраструктуры**:
