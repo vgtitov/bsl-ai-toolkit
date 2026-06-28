@@ -18,9 +18,22 @@ claude-1c-toolkit/
 │   │   ├── SKILL.md
 │   │   └── references/       # dev-workflow, code-standards (v8-code-style), bsp-reuse, performance,
 │   │       └── ...             conventions-template (шаблон под свой проект), platform-ops, ai-pitfalls
-│   └── 1c-analyst/           # анализ/архитектура: ЧТЗ (поведение), /clarify, влияние
+│   ├── 1c-analyst/           # анализ/архитектура: ЧТЗ (поведение), /clarify, влияние
+│   │   ├── SKILL.md
+│   │   └── references/analysis-workflow.md
+│   ├── 1c-admin-devops/      # администрирование + DevOps: кластер/лицензии, публикация, CI/CD, контейнеры, мониторинг/бэкап, Linux
+│   │   ├── SKILL.md
+│   │   └── references/       # cluster-and-licensing, publish-and-web, update-deploy-cicd,
+│   │       └── ...             containers-docker-k8s, monitoring-and-backup, linux-server-ops
+│   ├── 1c-dba/               # DBA под 1С: тюнинг PostgreSQL/MS SQL, регламент, блокировки, бэкап, HA
+│   │   ├── SKILL.md
+│   │   ├── references/       # postgres-tuning, maintenance, monitoring-and-locks,
+│   │   │   └── ...             backup-recovery, ha-and-scaling, mssql-for-1c
+│   │   └── scripts/         # готовые pg-регламенты (daily maintenance, periodic freeze, pgpass-шаблон)
+│   └── 1c-expert/            # эксперт по техн. вопросам и highload: ТЖ, план запроса, блокировки, APDEX, нагрузка
 │       ├── SKILL.md
-│       └── references/analysis-workflow.md
+│       └── references/       # tech-journal, query-optimization, locks-and-deadlocks,
+│           └── ...             performance-apdex, highload-cluster-loadtest, investigation-methodology
 ├── mcp/
 │   ├── onec_mcp.py            # MCP чтения кода 1С (ripgrep по локальным клонам, auto-discovery слоёв)
 │   ├── bsl_ls_mcp.py         # MCP-мост над BSL Language Server (analyze -r json) — свободный, в комплекте
@@ -37,8 +50,16 @@ claude-1c-toolkit/
 ├── scripts/install_git_hooks.py  # ставит commit-msg хук: коммиты без соавторства Claude (см. docs/git.md)
 ├── scripts/git-hooks/        # эталоны git-хуков (commit-msg)
 ├── onboard/onboard.ps1|sh    # идемпотентный bootstrap
-└── docs/                     # connect.md (подключение local/центр + токен), deploy-center.md (развернуть центр «под ключ»), docker.md (стек сервера), git.md, example.md
+└── docs/                     # connect.md (подключение local/центр + токен), deploy-center.md (развернуть центр «под ключ»), docker.md (стек сервера), git.md, example.md,
+                              #   knowledge/README.md (индекс базы знаний ops-ролей), ops-tools-catalog.md (проверенные опенсорс-инструменты эксплуатации 1С), mcp-ops-tools-design.md (дизайн будущих MCP)
 ```
+
+Теперь тулкит покрывает не только разработку и анализ, но и **роли эксплуатации и инфраструктуры**:
+администратор + DevOps, DBA (PostgreSQL / MS SQL), эксперт по технологическим вопросам и высоконагруженным
+системам. Принцип тот же, что и в разработке: **источник истины — реальный инструмент и измерение** (`rac`,
+технологический журнал, `pg_stat_*`, счётчики ОС/СУБД), а не память модели; сначала снять данные — потом вывод,
+непроверенное помечать `[проверить]`. Всё org-agnostic: версии платформы/СУБД/ОС, топологию и регламенты каждый
+заполняет под себя.
 
 ## Ключевые принципы (что внутри методологии)
 - **Спроси MCP, не угадывай** — сигнатуры/поведение только по коду и справке; после правки — BSL Language Server.
