@@ -19,15 +19,35 @@
 - из **Конфигуратора** (Администрирование → Публикация на веб-сервере) — интерактивно;
 - утилитой **`webinst`** — скриптуемо (для CI и серверов без GUI):
 ```bash
-# Linux/Apache, пример — пути/версии ПОД СВОЙ ПРОЕКТ
+# Linux/Apache 2.4 — серверная база (пути/версии ПОД СВОЙ ПРОЕКТ):
 /opt/1cv8/x86_64/<версия>/webinst -publish -apache24 \
-    -wsdir <алиас> -dir /var/www/<алиас> \
+    -wsdir <алиас> -dir /var/www/1c/<алиас> \
     -connstr "Srvr=<сервер>;Ref=<имя-ИБ>;" \
-    -confPath /etc/apache2/apache2.conf
+    -confpath /etc/apache2/apache2.conf
+# файловая база — другая строка соединения:
+#   -connstr "File=""/path"";"
 systemctl reload apache2
+# снять публикацию:
+/opt/1cv8/x86_64/<версия>/webinst -delete -apache24 -wsdir <алиас> -connstr "..."
 ```
-После публикации каталог `-dir` должен быть **читаем пользователем веб-сервера** (`www-data`/`apache`), а каталог
-временных файлов 1С — записываемым. Это источник половины ошибок 403/500.
+Windows — `webinst.exe` с теми же ключами. После публикации каталог `-dir` должен быть **читаем пользователем
+веб-сервера** (`www-data`/`apache`), а каталог временных файлов 1С — записываемым. Это источник половины ошибок
+403/500.
+
+**Модуль `wsap24.so` — мост Apache ↔ сервер 1С.** Подключается директивой
+`LoadModule wsap_module /opt/1cv8/x86_64/<версия>/wsap24.so`. **КРИТИЧНО:** брать `wsap24.so` строго **своей версии
+платформы**, не копировать из другой версии 1С — иначе 500 на загрузке модуля. После апгрейда платформы —
+**переопубликовать** `webinst`-ом новой версии. Проверки: `apachectl configtest` / `apachectl -t`; логи httpd —
+`/var/log/httpd/error_log` (или `/var/log/apache2/error.log`).
+
+**MPM: Apache для 1С требует `worker` (не `prefork`/`event`).**
+```bash
+apachectl -V | grep -i mpm                 # какой MPM активен
+a2dismod mpm_prefork                        # (или mpm_event)
+a2enmod  mpm_worker
+```
+В `/etc/apache2/mods-available/mpm_worker.conf` — минимальные значения: `StartServers 1`, `MinSpareThreads 1`,
+`MaxSpareThreads 1`. Затем `systemctl reload apache2`.
 
 ## 2. `default.vrd` — что в нём
 

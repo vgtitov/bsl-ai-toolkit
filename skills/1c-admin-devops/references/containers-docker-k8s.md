@@ -13,9 +13,12 @@
 - `EDT_VERSION` — версия EDT (для образов с EDT/замером покрытия).
 
 Типовой набор образов: **server** (сервер 1С), **client** (толстый, в т.ч. с VNC), **thin client** (тонкий),
-**config-storage** (хранилище конфигурации), **rac-gui**, **gitsync**, **oscript**, **vanessa-runner**, **EDT**,
-«Исполнитель». RAS поднимают отдельным процессом/командой в server-образе (см. cluster `ras`). Альтернативные
-наборы: `thedemoncat/onec-images-docs` (onec-base / onec-server / onec-full), `ondysss/onec-client`.
+**config-storage** (хранилище конфигурации, `onec-crs`), **rac-gui**, **gitsync**, **oscript**, **vanessa-runner**,
+**EDT**, «Исполнитель». RAS поднимают отдельным процессом/командой в server-образе (см. cluster `ras`). Сборка —
+через build-args `ONEC_USERNAME`/`ONEC_PASSWORD`/`ONEC_VERSION` (учётка `releases.1c.ru`); готовые дистрибутивы
+кладут в папку `distr/`; NLS-локализация — `--build-arg nls_enabled=true`; поддерживаются Swarm и k8s.
+Альтернативные наборы: `pravets/onec-images` и `pravets/oscript-images` (автосборка через GitHub Actions),
+`thedemoncat/onec-images-docs` (onec-base / onec-server / onec-full), `ondysss/onec-client`.
 
 `Dockerfile` — ключевые секции (по методичке): **FROM** (базовый образ), **COPY** (файлы в образ), **RUN**
 (команды → слой образа; объединяй через `&& \`, чтобы не плодить слои), **ENTRYPOINT** (команда запуска — указывай
@@ -56,6 +59,13 @@ volumes: { pgdata: {}, srvdata: {} }
 Тома обязательны для всего, что должно пережить пересоздание контейнера: кластерные данные `srv1cv8`, данные СУБД.
 Без томов пересборка = потеря ИБ.
 
+**Базовые правила compose** (для сервисов 1С и сопутствующих, напр. MCP):
+- порты биндить на `127.0.0.1`, а не `0.0.0.0`, если внешний доступ не нужен;
+- тома для данных/индексов обязательны (иначе теряются при пересоздании), `:ro` где можно;
+- секреты — только в `.env` (он в `.gitignore`), НЕ в самом `compose`;
+- `restart: unless-stopped` (иначе после ребута сервис не поднимется);
+- образ фиксировать по тегу/хешу, **НЕ `latest`** (воспроизводимость).
+
 ## 3. Лицензирование в контейнере
 
 Три пути (выбери под ОС/тип лицензий):
@@ -63,9 +73,11 @@ volumes: { pgdata: {}, srvdata: {} }
   смонтировать его в контейнер сервера в `docker-compose.yml` (`/tmp/.aksusb:/tmp/.aksusb`). На не-Linux хостах
   проброс ключа не поддерживается.
 - **Сетевой сервер лицензий через `nethasp.ini`**: раскомментировать строки и указать имя реального сервера
-  лицензий; файл монтировать в `…/conf/nethasp.ini`. В Jenkins (Docker Swarm plugin) файл кладут как
-  **docker config**: `docker config create nethasp.ini ./nethasp.ini`, в шаблоне агента (Configs) указывают
-  `nethasp.ini:/opt/1cv8/current/conf/nethasp.ini`.
+  лицензий; файл монтировать в `…/conf/nethasp.ini`. В **onec-docker** монтируется в
+  `/opt/1cv8/current/conf/nethasp.ini`; в **docker_fresh** лежит в `docker_fresh/conf/core/nethasp.ini`. В Jenkins
+  (Docker Swarm plugin) файл кладут как **docker config**: `docker config create nethasp.ini ./nethasp.ini`, в
+  шаблоне агента (Configs) указывают `nethasp.ini:/opt/1cv8/current/conf/nethasp.ini`. Владелец каталога лицензий
+  внутри контейнера — `chown -R usr1cv8:grp1cv8 /var/1C/licenses`.
 - **Программные лицензии** — активация утилитой **`ring license activate`** внутри образа (`ring` есть в core-образе
   Fresh), с пробросом каталога лицензий в том, чтобы активация пережила пересоздание контейнера:
   ```bash
@@ -83,8 +95,10 @@ volumes: { pgdata: {}, srvdata: {} }
 
 ## 4. 1С Fresh (облачная подсистема) в Docker
 
-Стенд Fresh разворачивается набором образов (`docker_fresh`) и скриптами `start.py`/`install.py`:
+Стенд Fresh (`docker_fresh`, репозиторий `1C-Company/docker_fresh`) разворачивается набором контейнеров —
+**centos / core / db (PostgreSQL) / site / forum / gate** — за ~30 мин, скриптами `install.py`/`start.py`:
 ```bash
+sudo python3 install.py -v <версия>            # установка нужной версии платформы/конфигурации
 sudo python3 start.py -new -h <имя-стенда>     # новый стенд → https://<имя>.1cfresh-dev.ru
 sudo python3 start.py                           # перезапуск существующего
 sudo python3 start.py -debug                    # подробный лог запуска
