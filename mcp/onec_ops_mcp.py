@@ -204,6 +204,191 @@ def _parse_file(text, label, process, full, base, events_filter, min_duration,
         finalize(cur)
 
 
+# ============================================================================
+# Apdex — КАНОНИЧНАЯ формула. Бизнесу важно реальное УСКОРЕНИЕ операций, не только
+# стабильность: Apdex_T = (Satisfied + Tolerating/2) / Total, где
+#   Satisfied   — время отклика ≤ T            (пользователь доволен),
+#   Tolerating  — T < время ≤ 4T               (терпит),
+#   Frustrated  — время > 4T                   (раздражён).
+# T (порог удовлетворённости) задаётся ОТДЕЛЬНО под каждую операцию (открытие формы,
+# проведение документа, отчёт): у быстрых операций T меньше. Сравнивай Apdex до/после
+# оптимизации — рост Apdex = реальное ускорение, ощущаемое пользователями.
+# ============================================================================
+
+def _apdex_rating(a):
+    if a >= 0.94: return "excellent"
+    if a >= 0.85: return "good"
+    if a >= 0.70: return "fair"
+    if a >= 0.50: return "poor"
+    return "unacceptable"
+
+
+def apdex(samples, t):
+    """Apdex по выборке времён отклика (сек) и порогу T (сек). Границы включительны: ≤T satisfied, ≤4T tolerating."""
+    t = float(t)
+    sat = tol = fr = 0
+    for x in samples:
+        x = float(x)
+        if x <= t:
+            sat += 1
+        elif x <= 4 * t:
+            tol += 1
+        else:
+            fr += 1
+    total = sat + tol + fr
+    a = (sat + tol / 2) / total if total else 0.0
+    return {"apdex": round(a, 4), "threshold_t": t, "satisfied": sat, "tolerating": tol,
+            "frustrated": fr, "total": total, "rating": _apdex_rating(a) if total else "n/a"}
+
+
+def apdex_by_operation(records, thresholds=None, default_t=1.0):
+    """Apdex отдельно по каждой операции (у каждой свой порог T). records: [{"operation","duration"}].
+    thresholds: {операция: T}. Возвращает operations[] (худшие сверху) — где именно «болит» у пользователей."""
+    thresholds = thresholds or {}
+    groups = {}
+    for r in records:
+        groups.setdefault(r.get("operation", "?"), []).append(float(r["duration"]))
+    ops = []
+    for op, durs in groups.items():
+        res = apdex(durs, thresholds.get(op, default_t))
+        res["operation"] = op
+        ops.append(res)
+    ops.sort(key=lambda o: o["apdex"])
+    return {"operations": ops, "worst": ops[0] if ops else None}
+
+
+# ============================================================================
+# Диагностика по порогам 1С/СУБД — находит проблемы из метрик (Zabbix/счётчики).
+# Пороги — общеизвестная методика эксплуатации 1С (см. references performance-apdex,
+# investigation-methodology). Источник истины — измерение; здесь — правила интерпретации.
+# ============================================================================
+
+def diagnose_metrics(metrics, cores=None):
+    """Применить пороги к снимку метрик → список проблем с severity и рекомендацией.
+    Понимает: swap_pct, page_life_expectancy, cpu_queue (+cores), disk_queue,
+    deadlocks_per_sec, lock_waits_per_sec, buffer_cache_hit_pct, latches_ms."""
+    flags = []
+
+    def add(metric, value, threshold, severity, problem, rec):
+        flags.append({"metric": metric, "value": value, "threshold": threshold,
+                      "severity": severity, "problem": problem, "recommendation": rec})
+
+    m = metrics
+    if m.get("swap_pct") is not None and m["swap_pct"] > 70:
+        add("swap_pct", m["swap_pct"], ">70%", "high",
+            "Активный своп — нехватка RAM на сервере 1С",
+            "Добавить RAM / разнести процессы; своп под нагрузкой резко роняет производительность")
+    if m.get("page_life_expectancy") is not None and m["page_life_expectancy"] < 300:
+        add("page_life_expectancy", m["page_life_expectancy"], "<300s", "high",
+            "SQL Page Life Expectancy <300с — буферный кэш вымывается, нехватка RAM у СУБД",
+            "Добавить RAM серверу СУБД и/или найти запросы, читающие лишние страницы (ТОП-25, план запроса)")
+    if m.get("cpu_queue") is not None:
+        thr = 2 * cores if cores else None
+        if thr and m["cpu_queue"] > thr:
+            add("cpu_queue", m["cpu_queue"], f">2×ядер ({thr})",
+                "critical" if m["cpu_queue"] > 16 else "high",
+                "Очередь к ЦП превышает 2×число ядер — нехватка CPU",
+                "Профилировать ТОП-25 вызовов, оптимизировать тяжёлый код/запросы; при стабильном дефиците — нарастить CPU")
+        elif m["cpu_queue"] > 16:
+            add("cpu_queue", m["cpu_queue"], ">16", "critical",
+                "Очередь к ЦП >16 — серьёзная нехватка CPU", "См. рекомендации по ТОП-25 и наращиванию CPU")
+    if m.get("disk_queue") is not None and m["disk_queue"] > 2:
+        add("disk_queue", m["disk_queue"], ">2 на диск", "high",
+            "Очередь к диску >2 — дисковая подсистема не справляется",
+            "Быстрее диски (NVMe), разнести данные/tempdb/логи по дискам; убрать избыточный I/O от запросов")
+    if m.get("deadlocks_per_sec") is not None and m["deadlocks_per_sec"] > 0:
+        add("deadlocks_per_sec", m["deadlocks_per_sec"], ">0", "high",
+            "Взаимоблокировки (дедлоки) — транзакции конфликтуют насмерть",
+            "Разобрать по TDEADLOCK (см. locks-and-deadlocks): упорядочить захваты ресурсов, сократить транзакции, индексы под условия")
+    if m.get("lock_waits_per_sec") is not None and m["lock_waits_per_sec"] > 0:
+        add("lock_waits_per_sec", m["lock_waits_per_sec"], ">0", "medium",
+            "Ожидания на блокировках — конкуренция за данные",
+            "Сократить длительность транзакций, проверить избыточные блокировки и индексы (locks-and-deadlocks)")
+    if m.get("buffer_cache_hit_pct") is not None and m["buffer_cache_hit_pct"] < 90:
+        add("buffer_cache_hit_pct", m["buffer_cache_hit_pct"], "<90%", "medium",
+            "Buffer cache hit низкий — данные читаются с диска, не из кэша",
+            "Добавить RAM СУБД / оптимизировать запросы, читающие лишние страницы")
+    if m.get("latches_ms") is not None and m["latches_ms"] > 0:
+        add("latches_ms", m["latches_ms"], ">0", "medium",
+            "Латчи >0 — внутренняя конкуренция СУБД за страницы в памяти",
+            "Проверить число файлов tempdb, горячие страницы/таблицы, всплески нагрузки")
+    return flags
+
+
+# ============================================================================
+# Zabbix — ОПЦИОНАЛЬНЫЙ адаптер (read-only). Использовать, когда у тебя доступен ТОЛЬКО
+# Zabbix (админы дали его, а прямого доступа к ТЖ/rac/СУБД нет). Тянет проблемы/историю
+# метрик по JSON-RPC API. Токен — read-only пользователь, из env ZABBIX_TOKEN.
+# ============================================================================
+
+def _http_post_json(url, payload):  # pragma: no cover — реальный HTTP, в тестах подменяется
+    import urllib.request
+    import json as _json
+    req = urllib.request.Request(url, data=_json.dumps(payload).encode("utf-8"),
+                                 headers={"Content-Type": "application/json-rpc"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return _json.loads(r.read().decode("utf-8"))
+
+
+def _zbx_call(url, method, params, auth=None, _post=None):
+    payload = {"jsonrpc": "2.0", "method": method, "params": params or {}, "id": 1}
+    if auth:
+        payload["auth"] = auth  # Zabbix <6.4: поле auth; в 6.4+ можно через заголовок Authorization
+    resp = (_post or _http_post_json)(url, payload)
+    if isinstance(resp, dict) and resp.get("error"):
+        e = resp["error"]
+        raise RuntimeError(f"Zabbix API error: {e.get('message', '')} {e.get('data', '')}".strip())
+    return resp.get("result") if isinstance(resp, dict) else resp
+
+
+def zabbix_problems(url, auth=None, severities=None, recent=True, _post=None):
+    """Текущие/недавние проблемы (триггеры) из Zabbix — как панель «Проблемы на сервере»."""
+    params = {"output": ["eventid", "name", "severity", "clock"], "selectHosts": ["name"],
+              "recent": recent, "sortfield": ["eventid"], "sortorder": "DESC"}
+    if severities:
+        params["severities"] = severities
+    return _zbx_call(url, "problem.get", params, auth, _post) or []
+
+
+def zabbix_history(url, auth=None, itemids=None, history=0, time_from=None, limit=500, _post=None):
+    """История значений метрики (item) из Zabbix. history: 0=float,1=str,3=uint. time_from — unixtime."""
+    params = {"output": "extend", "itemids": itemids, "history": history,
+              "sortfield": "clock", "sortorder": "DESC", "limit": limit}
+    if time_from:
+        params["time_from"] = time_from
+    return _zbx_call(url, "history.get", params, auth, _post) or []
+
+
+# ============================================================================
+# Prometheus — ОПЦИОНАЛЬНЫЙ адаптер (встречается реже Zabbix). Read-only PromQL.
+# Полезен, когда метрики кластера 1С отдаёт экспортер (напр. LazarenkoA/prometheus_1C_exporter),
+# а доступен только Prometheus/Grafana.
+# ============================================================================
+
+def _http_get_json(url, params):  # pragma: no cover — реальный HTTP, в тестах подменяется
+    import urllib.request
+    import urllib.parse
+    import json as _json
+    q = urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
+    with urllib.request.urlopen(url + "?" + q, timeout=30) as r:
+        return _json.loads(r.read().decode("utf-8"))
+
+
+def prometheus_query(base_url, query, time=None, _get=None):
+    """Мгновенный PromQL-запрос (read-only) к Prometheus HTTP API /api/v1/query.
+    Возвращает [{metric, timestamp, value}]. На status!=success бросает RuntimeError."""
+    url = base_url.rstrip("/") + "/api/v1/query"
+    resp = (_get or _http_get_json)(url, {"query": query, "time": time})
+    if not isinstance(resp, dict) or resp.get("status") != "success":
+        err = resp.get("error") if isinstance(resp, dict) else str(resp)
+        raise RuntimeError(f"Prometheus error: {err}")
+    out = []
+    for s in resp.get("data", {}).get("result", []):
+        val = s.get("value") or [None, None]
+        out.append({"metric": s.get("metric", {}), "timestamp": val[0], "value": val[1]})
+    return out
+
+
 # --- MCP-обёртка (read-only) ---
 try:
     from mcp.server.fastmcp import FastMCP
@@ -224,6 +409,45 @@ try:
         """
         return parse_techlog(roots, events=events or None, min_duration=min_duration,
                              since=since or None, until=until or None, top=top)
+
+    @mcp.tool()
+    def apdex_tool(samples: list, threshold_t: float) -> dict:
+        """Apdex по выборке времён отклика операции (сек) и порогу T (сек). Каноничная формула
+        (Satisfied≤T, Tolerating≤4T, Frustrated>4T). Бизнес-смысл: рост Apdex до/после = реальное
+        ускорение, ощущаемое пользователями. Возвращает apdex, satisfied/tolerating/frustrated, rating."""
+        return apdex(samples, threshold_t)
+
+    @mcp.tool()
+    def apdex_by_operation_tool(records: list, thresholds: "dict | None" = None, default_t: float = 1.0) -> dict:
+        """Apdex ОТДЕЛЬНО по каждой операции (у каждой свой порог T). records: [{"operation","duration"}].
+        thresholds: {операция: T}. Возвращает operations[] (худшие сверху) — где именно «болит» у пользователей."""
+        return apdex_by_operation(records, thresholds=thresholds or None, default_t=default_t)
+
+    @mcp.tool()
+    def diagnose_metrics_tool(metrics: dict, cores: int = 0) -> list:
+        """Найти проблемы в снимке метрик 1С/СУБД по общеизвестным порогам (swap>70%, page life<300с,
+        очередь ЦП>2×ядер, очередь диска>2, дедлоки>0, latches>0, cache hit<90%). Возвращает список
+        проблем с severity и рекомендацией. cores — число ядер (для порога очереди ЦП)."""
+        return diagnose_metrics(metrics, cores=cores or None)
+
+    @mcp.tool()
+    def zabbix_problems_tool(url: str = "", token: str = "", recent: bool = True) -> list:
+        """ОПЦИОНАЛЬНО: текущие проблемы из Zabbix (когда доступен только он). url/token — или из env
+        ZABBIX_URL/ZABBIX_TOKEN (read-only пользователь). Read-only (problem.get)."""
+        url = url or os.environ.get("ZABBIX_URL", "")
+        token = token or os.environ.get("ZABBIX_TOKEN", "")
+        if not url:
+            return [{"error": "укажи url или env ZABBIX_URL (read-only)"}]
+        return zabbix_problems(url, auth=token or None, recent=recent)
+
+    @mcp.tool()
+    def prometheus_query_tool(query: str, base_url: str = "") -> list:
+        """ОПЦИОНАЛЬНО (реже Zabbix): мгновенный PromQL-запрос к Prometheus (read-only). base_url — или из
+        env PROMETHEUS_URL. Полезно с экспортером метрик кластера 1С."""
+        base_url = base_url or os.environ.get("PROMETHEUS_URL", "")
+        if not base_url:
+            return [{"error": "укажи base_url или env PROMETHEUS_URL"}]
+        return prometheus_query(base_url, query)
 
     if __name__ == "__main__":
         mcp.run()
