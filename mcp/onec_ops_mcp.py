@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["mcp"]
+# dependencies = ["mcp", "openpyxl"]
 # ///
 """MCP-сервер onec-ops — инструменты ЭКСПЛУАТАЦИИ 1С (read-only). Первый инструмент:
 `tech_journal_parse` — разбор технологического журнала по каталогу ИЛИ ГРУППЕ каталогов
