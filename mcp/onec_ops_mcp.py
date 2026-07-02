@@ -265,53 +265,76 @@ def apdex_by_operation(records, thresholds=None, default_t=1.0):
 
 def diagnose_metrics(metrics, cores=None):
     """Применить пороги к снимку метрик → список проблем с severity и рекомендацией.
-    Понимает: swap_pct, page_life_expectancy, cpu_queue (+cores), disk_queue,
-    deadlocks_per_sec, lock_waits_per_sec, buffer_cache_hit_pct, latches_ms."""
+    Понимает: swap_pct, page_life_expectancy, cpu_queue (+cores), cpu_util, disk_queue,
+    disk_util, disk_await_ms, mem_available_pct, net_errors_per_sec,
+    deadlocks_per_sec, lock_waits_per_sec, buffer_cache_hit_pct, latches_ms.
+    threshold_value — числовой порог (для ранжирования по кратности превышения)."""
     flags = []
 
-    def add(metric, value, threshold, severity, problem, rec):
+    def add(metric, value, threshold, severity, problem, rec, thr_value=None):
         flags.append({"metric": metric, "value": value, "threshold": threshold,
-                      "severity": severity, "problem": problem, "recommendation": rec})
+                      "threshold_value": thr_value, "severity": severity,
+                      "problem": problem, "recommendation": rec})
 
     m = metrics
     if m.get("swap_pct") is not None and m["swap_pct"] > 70:
         add("swap_pct", m["swap_pct"], ">70%", "high",
             "Активный своп — нехватка RAM на сервере 1С",
-            "Добавить RAM / разнести процессы; своп под нагрузкой резко роняет производительность")
+            "Добавить RAM / разнести процессы; своп под нагрузкой резко роняет производительность", 70)
     if m.get("page_life_expectancy") is not None and m["page_life_expectancy"] < 300:
         add("page_life_expectancy", m["page_life_expectancy"], "<300s", "high",
             "SQL Page Life Expectancy <300с — буферный кэш вымывается, нехватка RAM у СУБД",
-            "Добавить RAM серверу СУБД и/или найти запросы, читающие лишние страницы (ТОП-25, план запроса)")
+            "Добавить RAM серверу СУБД и/или найти запросы, читающие лишние страницы (ТОП-25, план запроса)", 300)
     if m.get("cpu_queue") is not None:
         thr = 2 * cores if cores else None
         if thr and m["cpu_queue"] > thr:
             add("cpu_queue", m["cpu_queue"], f">2×ядер ({thr})",
                 "critical" if m["cpu_queue"] > 16 else "high",
                 "Очередь к ЦП превышает 2×число ядер — нехватка CPU",
-                "Профилировать ТОП-25 вызовов, оптимизировать тяжёлый код/запросы; при стабильном дефиците — нарастить CPU")
+                "Профилировать ТОП-25 вызовов, оптимизировать тяжёлый код/запросы; при стабильном дефиците — нарастить CPU", thr)
         elif m["cpu_queue"] > 16:
             add("cpu_queue", m["cpu_queue"], ">16", "critical",
-                "Очередь к ЦП >16 — серьёзная нехватка CPU", "См. рекомендации по ТОП-25 и наращиванию CPU")
+                "Очередь к ЦП >16 — серьёзная нехватка CPU", "См. рекомендации по ТОП-25 и наращиванию CPU", 16)
+    if m.get("cpu_util") is not None and m["cpu_util"] > 80:
+        add("cpu_util", m["cpu_util"], ">80%", "high" if m["cpu_util"] > 90 else "medium",
+            "ЦП стабильно загружен — запас исчерпывается, отклик деградирует",
+            "Найти ТОП-25 потребителей (ТЖ CALL/DBMSSQL, планы запросов); балансировка rphost; при устойчивом >90% — нарастить CPU", 80)
+    if m.get("mem_available_pct") is not None and m["mem_available_pct"] < 10:
+        add("mem_available_pct", m["mem_available_pct"], "<10%", "high",
+            "Свободной RAM <10% — сервер на грани свопа/выселения кэшей",
+            "Добавить RAM / разнести роли (1С и СУБД на разных серверах); проверить утечки rphost (рестарты по памяти)", 10)
     if m.get("disk_queue") is not None and m["disk_queue"] > 2:
         add("disk_queue", m["disk_queue"], ">2 на диск", "high",
             "Очередь к диску >2 — дисковая подсистема не справляется",
-            "Быстрее диски (NVMe), разнести данные/tempdb/логи по дискам; убрать избыточный I/O от запросов")
+            "Быстрее диски (NVMe), разнести данные/tempdb/логи по дискам; убрать избыточный I/O от запросов", 2)
+    if m.get("disk_util") is not None and m["disk_util"] > 90:
+        add("disk_util", m["disk_util"], ">90%", "high",
+            "Диск занят >90% времени — узкое место I/O",
+            "Проверить кто грузит (СУБД/бэкапы/антивирус), разнести нагрузку, быстрее диски", 90)
+    if m.get("disk_await_ms") is not None and m["disk_await_ms"] > 20:
+        add("disk_await_ms", m["disk_await_ms"], ">20ms", "high" if m["disk_await_ms"] > 50 else "medium",
+            "Латентность диска высокая — операции ждут I/O",
+            "Для СУБД целевая латентность ≤5–10мс: быстрее диски/массив, проверить очереди и кэш контроллера", 20)
+    if m.get("net_errors_per_sec") is not None and m["net_errors_per_sec"] > 0:
+        add("net_errors_per_sec", m["net_errors_per_sec"], ">0", "medium",
+            "Ошибки сетевого интерфейса — потери/ретрансмиты бьют по клиент-серверным вызовам",
+            "Проверить дуплекс/драйвер/кабель/коммутатор; для кластера 1С сеть до СУБД критична", 0)
     if m.get("deadlocks_per_sec") is not None and m["deadlocks_per_sec"] > 0:
         add("deadlocks_per_sec", m["deadlocks_per_sec"], ">0", "high",
             "Взаимоблокировки (дедлоки) — транзакции конфликтуют насмерть",
-            "Разобрать по TDEADLOCK (см. locks-and-deadlocks): упорядочить захваты ресурсов, сократить транзакции, индексы под условия")
+            "Разобрать по TDEADLOCK (см. locks-and-deadlocks): упорядочить захваты ресурсов, сократить транзакции, индексы под условия", 0)
     if m.get("lock_waits_per_sec") is not None and m["lock_waits_per_sec"] > 0:
         add("lock_waits_per_sec", m["lock_waits_per_sec"], ">0", "medium",
             "Ожидания на блокировках — конкуренция за данные",
-            "Сократить длительность транзакций, проверить избыточные блокировки и индексы (locks-and-deadlocks)")
+            "Сократить длительность транзакций, проверить избыточные блокировки и индексы (locks-and-deadlocks)", 0)
     if m.get("buffer_cache_hit_pct") is not None and m["buffer_cache_hit_pct"] < 90:
         add("buffer_cache_hit_pct", m["buffer_cache_hit_pct"], "<90%", "medium",
             "Buffer cache hit низкий — данные читаются с диска, не из кэша",
-            "Добавить RAM СУБД / оптимизировать запросы, читающие лишние страницы")
+            "Добавить RAM СУБД / оптимизировать запросы, читающие лишние страницы", 90)
     if m.get("latches_ms") is not None and m["latches_ms"] > 0:
         add("latches_ms", m["latches_ms"], ">0", "medium",
             "Латчи >0 — внутренняя конкуренция СУБД за страницы в памяти",
-            "Проверить число файлов tempdb, горячие страницы/таблицы, всплески нагрузки")
+            "Проверить число файлов tempdb, горячие страницы/таблицы, всплески нагрузки", 0)
     return flags
 
 
@@ -321,20 +344,39 @@ def diagnose_metrics(metrics, cores=None):
 # метрик по JSON-RPC API. Токен — read-only пользователь, из env ZABBIX_TOKEN.
 # ============================================================================
 
-def _http_post_json(url, payload):  # pragma: no cover — реальный HTTP, в тестах подменяется
+def _http_post_json(url, payload, headers=None):  # pragma: no cover — реальный HTTP, в тестах подменяется
     import urllib.request
     import json as _json
-    req = urllib.request.Request(url, data=_json.dumps(payload).encode("utf-8"),
-                                 headers={"Content-Type": "application/json-rpc"})
-    with urllib.request.urlopen(req, timeout=30) as r:
+    h = {"Content-Type": "application/json-rpc"}
+    if headers:
+        h.update(headers)
+    req = urllib.request.Request(url, data=_json.dumps(payload).encode("utf-8"), headers=h)
+    with urllib.request.urlopen(req, timeout=60) as r:
         return _json.loads(r.read().decode("utf-8"))
 
 
+def _post_supports_headers(post):
+    """Принимает ли пользовательский _post третий аргумент headers (новая сигнатура)."""
+    import inspect
+    try:
+        params = inspect.signature(post).parameters.values()
+    except (TypeError, ValueError):  # builtin/C-callable — считаем современным
+        return True
+    return len(params) >= 3 or any(p.kind == p.VAR_KEYWORD for p in params)
+
+
 def _zbx_call(url, method, params, auth=None, _post=None):
+    """Вызов Zabbix JSON-RPC. Токен — заголовком Authorization: Bearer (6.4+/7.x;
+    поле auth в payload deprecated в 7.0 и удалено в 7.2). Если переданный _post
+    не принимает headers (старая сигнатура, по inspect), fallback — auth в payload (<7.2)."""
     payload = {"jsonrpc": "2.0", "method": method, "params": params or {}, "id": 1}
-    if auth:
-        payload["auth"] = auth  # Zabbix <6.4: поле auth; в 6.4+ можно через заголовок Authorization
-    resp = (_post or _http_post_json)(url, payload)
+    post = _post or _http_post_json
+    if _post_supports_headers(post):
+        resp = post(url, payload, {"Authorization": f"Bearer {auth}"} if auth else None)
+    else:
+        if auth:
+            payload["auth"] = auth
+        resp = post(url, payload)
     if isinstance(resp, dict) and resp.get("error"):
         e = resp["error"]
         raise RuntimeError(f"Zabbix API error: {e.get('message', '')} {e.get('data', '')}".strip())
@@ -357,6 +399,382 @@ def zabbix_history(url, auth=None, itemids=None, history=0, time_from=None, limi
     if time_from:
         params["time_from"] = time_from
     return _zbx_call(url, "history.get", params, auth, _post) or []
+
+
+# ============================================================================
+# Zabbix: слой АНАЛИЗА ПРОИЗВОДИТЕЛЬНОСТИ (read-only). Идеи взяты из обзора
+# опенсорса (см. docs/ops-tools-catalog.md): универсальный вызов с whitelist
+# read-only методов; составные инструменты «дашборд → items → история → находки»;
+# автовыбор history.get/trend.get по глубине окна (как в grafana-zabbix).
+# Дашборд может меняться — извлечение item'ов не завязано на конкретные виджеты.
+# ============================================================================
+
+_ZBX_READONLY_RE = re.compile(r"^(?:[a-z]+\.get|apiinfo\.version|[a-z]+\.export)$")
+
+
+def zabbix_api(url, method, params=None, auth=None, _post=None):
+    """Универсальный read-only вызов Zabbix API: разрешены только *.get / apiinfo.version /
+    *.export (whitelist). Любой другой метод — отказ без обращения к серверу."""
+    if not _ZBX_READONLY_RE.match(str(method or "")):
+        raise RuntimeError(f"метод '{method}' запрещён: адаптер read-only (только *.get/apiinfo.version/*.export)")
+    return _zbx_call(url, method, params or {}, auth, _post)
+
+
+# --- классификация item → каноничная метрика -------------------------------
+# Правила матчатся по "key_ name" (lower). transform: (value, units) → каноничное значение.
+def _t_ident(v, units=""):
+    return v
+
+
+def _t_invert_pct(v, units=""):
+    return 100.0 - v
+
+
+def _t_to_ms(v, units=""):
+    return v * 1000.0 if units == "s" else v
+
+
+_ZBX_CLASS_RULES = [
+    (r"processor queue length|system\.cpu\.load", "cpu_queue", _t_ident),
+    (r"system\.cpu\.util|cpu utilization|% processor time|processor time", "cpu_util", _t_ident),
+    (r"vm\.memory\.size\[pavailable\]|available memory in %|memory available %", "mem_available_pct", _t_ident),
+    (r"vm\.memory\.util|memory utilization", "mem_available_pct", _t_invert_pct),
+    (r"system\.swap\.pfree|free swap", "swap_pct", _t_invert_pct),
+    (r"swap.*pused|swap.*used", "swap_pct", _t_ident),
+    (r"page life expectancy", "page_life_expectancy", _t_ident),
+    (r"buffer cache hit", "buffer_cache_hit_pct", _t_ident),
+    (r"deadlock", "deadlocks_per_sec", _t_ident),
+    (r"lock wait", "lock_waits_per_sec", _t_ident),
+    (r"latch wait|average latch wait", "latches_ms", _t_ident),
+    (r"avg\. disk queue|disk queue length|vfs\.dev\.queue", "disk_queue", _t_ident),
+    (r"vfs\.dev\.util|disk utili[sz]ation|% disk time", "disk_util", _t_ident),
+    (r"avg\. disk sec/|await|disk latency|read time.*ms|write time.*ms", "disk_await_ms", _t_to_ms),
+    (r"net\.if\.(?:in|out).*errors|network.*errors|errors per second", "net_errors_per_sec", _t_ident),
+]
+_ZBX_CLASS_COMPILED = [(re.compile(pat), metric, tr) for pat, metric, tr in _ZBX_CLASS_RULES]
+
+# Направление «хуже»: True = плохо, когда БОЛЬШЕ; False = плохо, когда МЕНЬШЕ.
+_METRIC_BAD_HIGH = {
+    "page_life_expectancy": False,
+    "buffer_cache_hit_pct": False,
+    "mem_available_pct": False,
+}
+
+
+def zbx_classify_item(item):
+    """Определить каноничную метрику по item Zabbix (key_ + name, любые шаблоны:
+    Windows perf_counter, Linux-агент, MSSQL/PG). → (metric, transform) или None."""
+    hay = f"{item.get('key_', '')} {item.get('name', '')}".lower()
+    units = item.get("units", "")
+    for rx, metric, tr in _ZBX_CLASS_COMPILED:
+        if rx.search(hay):
+            return metric, (lambda v, _tr=tr, _u=units: _tr(float(v), _u))
+    return None
+
+
+# --- дашборд → items --------------------------------------------------------
+def zabbix_dashboard_items(url, auth=None, dashboardid=None, _post=None):
+    """Собрать элементы данных (items) с дашборда: widget fields type=4 (item) +
+    type=6 (graph → items графика). Не зависит от типов виджетов и имён полей —
+    дашборд можно менять. Возвращает {dashboard, items[{itemid,host,...}], warnings}."""
+    dashboards = _zbx_call(url, "dashboard.get",
+                           {"dashboardids": [str(dashboardid)], "selectPages": "extend",
+                            "output": ["dashboardid", "name"]}, auth, _post) or []
+    if not dashboards:
+        return {"dashboard": None, "items": [], "warnings": [f"дашборд {dashboardid} не найден или нет прав"]}
+    dash = dashboards[0]
+    itemids, graphids = set(), set()
+    for page in dash.get("pages") or []:
+        for w in page.get("widgets") or []:
+            for f in w.get("fields") or []:
+                t = str(f.get("type"))
+                if t == "4":
+                    itemids.add(str(f.get("value")))
+                elif t == "6":
+                    graphids.add(str(f.get("value")))
+    warnings = []
+    if graphids:
+        graphs = _zbx_call(url, "graph.get",
+                           {"graphids": sorted(graphids), "selectGraphItems": "extend",
+                            "output": ["graphid"]}, auth, _post) or []
+        for g in graphs:
+            for gi in g.get("gitems") or []:
+                itemids.add(str(gi.get("itemid")))
+    if not itemids:
+        warnings.append("на дашборде не найдено item/graph-виджетов с данными")
+        return {"dashboard": dash.get("name"), "items": [], "warnings": warnings}
+    raw = _zbx_call(url, "item.get",
+                    {"itemids": sorted(itemids),
+                     "output": ["itemid", "hostid", "name", "key_", "units", "value_type",
+                                "lastvalue", "lastclock"],
+                     "selectHosts": ["host", "name"]}, auth, _post) or []
+    items = []
+    for it in raw:
+        hosts = it.get("hosts") or [{}]
+        items.append({**{k: it.get(k) for k in ("itemid", "name", "key_", "units",
+                                                "value_type", "lastvalue", "lastclock")},
+                      "host": hosts[0].get("name") or hosts[0].get("host") or "?"})
+    return {"dashboard": dash.get("name"), "items": items, "warnings": warnings}
+
+
+def zabbix_host_items(url, auth=None, hosts=None, key_search=None, limit=2000, _post=None):
+    """Items по хостам (имя/паттерн): host.get → item.get. Для анализа без дашборда."""
+    found = _zbx_call(url, "host.get",
+                      {"output": ["hostid", "host", "name"],
+                       "search": {"name": hosts}, "searchByAny": True,
+                       "searchWildcardsEnabled": True}, auth, _post) or []
+    if not found:
+        return {"hosts": [], "items": [], "warnings": [f"хосты не найдены: {hosts}"]}
+    params = {"hostids": [h["hostid"] for h in found], "monitored": True,
+              "output": ["itemid", "hostid", "name", "key_", "units", "value_type",
+                         "lastvalue", "lastclock"],
+              "selectHosts": ["host", "name"], "limit": int(limit)}
+    if key_search:
+        params["search"] = {"key_": key_search}
+    raw = _zbx_call(url, "item.get", params, auth, _post) or []
+    items = []
+    for it in raw:
+        hh = it.get("hosts") or [{}]
+        items.append({**{k: it.get(k) for k in ("itemid", "name", "key_", "units",
+                                                "value_type", "lastvalue", "lastclock")},
+                      "host": hh[0].get("name") or hh[0].get("host") or "?"})
+    return {"hosts": [h.get("name") or h.get("host") for h in found], "items": items, "warnings": []}
+
+
+# --- история/тренды → статистика --------------------------------------------
+_TREND_WINDOW_S = 48 * 3600  # глубже 48ч — trend.get (как grafana-zabbix)
+_HIST_LIMIT = 10000          # строк на ОДИН item (запрос на item, чтобы лимит не делился на батч)
+
+
+def _stats_from_values(values):
+    if not values:
+        return None
+    vs = sorted(values)
+    n = len(vs)
+    return {"n": n, "min": vs[0], "max": vs[-1], "avg": sum(vs) / n,
+            "p95": vs[min(n - 1, int(0.95 * (n - 1) + 0.5))], "last": values[-1],
+            "values": values[-2000:]}
+
+
+def zabbix_item_stats(url, auth=None, items=None, time_from=None, time_till=None, _post=None):
+    """Статистика значений по items за окно: history.get (окно ≤48ч) или trend.get (глубже).
+    → {itemid: {n,min,max,avg,p95,last,values[,truncated]}}. value_type учитывается (0 float, 3 uint).
+    Запрос — ПО ОДНОМУ item (общий limit на батч делился бы между items → тихая потеря данных);
+    history запрашивается свежими вперёд (DESC), порядок восстанавливается по clock на клиенте,
+    при упоре в лимит ставится truncated=True (учтены последние _HIST_LIMIT точек окна)."""
+    import time as _time
+    time_till = int(time_till or _time.time())
+    time_from = int(time_from or (time_till - 3600))
+    use_trend = (time_till - time_from) > _TREND_WINDOW_S
+    out = {}
+    for it in items or []:
+        vt = int(it.get("value_type", 0))
+        if vt not in (0, 3):  # только числовые
+            continue
+        iid = str(it["itemid"])
+        if use_trend:
+            rows = _zbx_call(url, "trend.get",
+                             {"itemids": [iid], "output": "extend",
+                              "time_from": time_from, "time_till": time_till,
+                              "limit": _HIST_LIMIT}, auth, _post) or []
+            pairs, vmax, cnt = [], float("-inf"), 0
+            for r in rows:
+                try:
+                    pairs.append((int(r.get("clock", 0)), float(r["value_avg"])))
+                    vmax = max(vmax, float(r["value_max"]))
+                    cnt += int(r.get("num", 1))
+                except (TypeError, ValueError):
+                    continue
+            pairs.sort()  # trend.get не гарантирует порядок — сортируем по clock
+            s = _stats_from_values([v for _c, v in pairs])
+            if s:
+                s["max"] = max(s["max"], vmax) if vmax != float("-inf") else s["max"]
+                s["n"] = cnt or s["n"]
+                out[iid] = s
+        else:
+            rows = _zbx_call(url, "history.get",
+                             {"itemids": [iid], "history": vt, "output": "extend",
+                              "time_from": time_from, "time_till": time_till,
+                              "sortfield": "clock", "sortorder": "DESC",
+                              "limit": _HIST_LIMIT}, auth, _post) or []
+            pairs = []
+            for r in rows:
+                try:
+                    pairs.append((int(r.get("clock", 0)), float(r["value"])))
+                except (TypeError, ValueError):
+                    continue
+            pairs.sort()
+            s = _stats_from_values([v for _c, v in pairs])
+            if s:
+                if len(rows) >= _HIST_LIMIT:
+                    s["truncated"] = True  # окно плотнее лимита — статистика по последним точкам
+                out[iid] = s
+    return out
+
+
+# --- ранжирование находок по вкладу в производительность ---------------------
+_SEV_WEIGHT = {"critical": 3.0, "high": 2.0, "medium": 1.0, "low": 0.5}
+
+
+def _violates(metric, value, thr):
+    bad_high = _METRIC_BAD_HIGH.get(metric, True)
+    return value > thr if bad_high else value < thr
+
+
+def _exceedance(metric, value, thr):
+    """Во сколько раз значение хуже порога (≥1, cap 10)."""
+    try:
+        bad_high = _METRIC_BAD_HIGH.get(metric, True)
+        r = (value / thr) if bad_high else (thr / value if value > 0 else 10.0)
+    except ZeroDivisionError:
+        r = 10.0
+    return max(1.0, min(10.0, r))
+
+
+def rank_findings(host_metrics):
+    """Ранжировать проблемы по вкладу в производительность (самое значимое — первым).
+    host_metrics: {host: {snapshot:{metric:value}, samples:{metric:[...]}, cores:int}}.
+    score = вес severity × кратность превышения порога × доля времени за порогом."""
+    findings = []
+    for host, hm in (host_metrics or {}).items():
+        snapshot = hm.get("snapshot") or {}
+        samples = hm.get("samples") or {}
+        for flag in diagnose_metrics(snapshot, cores=hm.get("cores")):
+            metric, thr = flag["metric"], flag.get("threshold_value")
+            value = flag["value"]
+            if thr is not None:
+                sv = samples.get(metric) or []
+                persistence = (sum(1 for x in sv if _violates(metric, x, thr)) / len(sv)) if sv else 0.5
+                exceed = _exceedance(metric, float(value), float(thr))
+            else:
+                persistence, exceed = 0.5, 1.0
+            score = round(_SEV_WEIGHT.get(flag["severity"], 1.0) * exceed * max(persistence, 0.05), 2)
+            findings.append({**flag, "host": host, "persistence": round(persistence, 3),
+                             "impact_score": score})
+    findings.sort(key=lambda f: f["impact_score"], reverse=True)
+    return findings
+
+
+_ZBX_SEVERITY_NAMES = {0: "not classified", 1: "information", 2: "warning",
+                       3: "average", 4: "high", 5: "disaster"}
+
+
+def zabbix_perf_report(url, auth=None, dashboardid=None, hosts=None, window_hours=1,
+                       cores_by_host=None, _post=None):
+    """Сквозной отчёт производительности: items (с дашборда и/или хостов) → история за окно
+    → каноничные метрики по хостам → находки, ранжированные по вкладу (самое значимое первым)
+    + активные проблемы Zabbix. Read-only."""
+    import time as _time
+    warnings, items, scope = [], [], {}
+    if dashboardid:
+        d = zabbix_dashboard_items(url, auth, dashboardid, _post=_post)
+        scope["dashboard"] = d["dashboard"]
+        items += d["items"]
+        warnings += d["warnings"]
+    if hosts:
+        h = zabbix_host_items(url, auth, hosts, _post=_post)
+        scope["hosts"] = h["hosts"]
+        items += h["items"]
+        warnings += h["warnings"]
+    # dedup по itemid
+    items = list({i["itemid"]: i for i in items}.values())
+
+    classified, unclassified = [], []
+    for it in items:
+        c = zbx_classify_item(it)
+        if c:
+            classified.append((it, *c))
+        else:
+            unclassified.append(f"{it.get('host', '?')}: {it.get('name', '')} [{it.get('key_', '')}]")
+
+    time_till = int(_time.time())
+    time_from = time_till - int(float(window_hours) * 3600)
+    stats = zabbix_item_stats(url, auth, [it for it, _m, _t in classified],
+                              time_from=time_from, time_till=time_till, _post=_post)
+
+    host_metrics = {}
+    evidence = {}
+    for it, metric, transform in classified:
+        host = it.get("host", "?")
+        st = stats.get(str(it["itemid"]))
+        if st:
+            vals = [transform(v) for v in st["values"]]
+            rep_val = transform(st["avg"])
+        else:
+            try:
+                rep_val = transform(float(it.get("lastvalue")))
+                vals = [rep_val]
+            except (TypeError, ValueError):
+                continue
+        if st and st.get("truncated"):
+            warnings.append(f"{host}: история '{it.get('name')}' плотнее лимита {_HIST_LIMIT} — "
+                            f"статистика по последним {_HIST_LIMIT} точкам окна")
+        hm = host_metrics.setdefault(host, {"snapshot": {}, "samples": {}, "cores": (cores_by_host or {}).get(host)})
+        prev = hm["snapshot"].get(metric)
+        bad_high = _METRIC_BAD_HIGH.get(metric, True)
+        # несколько item'ов одной метрики на хосте (диски и т.п.) — берём ХУДШИЙ item,
+        # и samples тоже его (иначе persistence размывается образцами здоровых собратьев)
+        if prev is None or (rep_val > prev if bad_high else rep_val < prev):
+            hm["snapshot"][metric] = rep_val
+            hm["samples"][metric] = list(vals)
+            evidence[(host, metric)] = {"item": it.get("name"), "key": it.get("key_"),
+                                        "samples": len(vals)}
+
+    findings = rank_findings(host_metrics)
+    for f in findings:
+        f["evidence"] = evidence.get((f["host"], f["metric"]))
+
+    problems = []
+    try:
+        for p in zabbix_problems(url, auth=auth, _post=_post):
+            sev = int(p.get("severity", 0))
+            problems.append({"name": p.get("name"), "severity": sev,
+                             "severity_name": _ZBX_SEVERITY_NAMES.get(sev, str(sev)),
+                             "hosts": [h.get("name") for h in p.get("hosts") or []],
+                             "clock": p.get("clock")})
+        problems.sort(key=lambda p: p["severity"], reverse=True)
+    except RuntimeError as e:
+        warnings.append(f"problem.get: {e}")
+
+    return {"scope": scope, "window_hours": window_hours,
+            "items_total": len(items), "items_classified": len(classified),
+            "findings": findings, "active_problems": problems,
+            "unclassified": unclassified[:50], "warnings": warnings}
+
+
+def render_perf_report(report):
+    """Отчёт → markdown для человека: находки от самого значимого вклада к незначимому."""
+    lines = []
+    sc = report.get("scope", {})
+    title = sc.get("dashboard") or ", ".join(sc.get("hosts") or []) or "Zabbix"
+    lines.append(f"# Производительность: {title} (окно {report.get('window_hours')}ч)")
+    lines.append(f"_Элементов данных: {report.get('items_total')}, распознано: {report.get('items_classified')}_")
+    findings = report.get("findings") or []
+    if findings:
+        lines.append("\n## Предложения (по убыванию вклада в производительность)")
+        for i, f in enumerate(findings, 1):
+            pct = round(f.get("persistence", 0) * 100)
+            lines.append(f"\n**{i}. [{f['severity']}] {f['host']} — {f['problem']}**")
+            lines.append(f"   - метрика: `{f['metric']}` = {f['value']} (порог {f['threshold']}), "
+                         f"за порогом {pct}% времени, impact {f['impact_score']}")
+            if f.get("evidence"):
+                lines.append(f"   - источник: {f['evidence']['item']} `{f['evidence']['key']}`")
+            lines.append(f"   - что делать: {f['recommendation']}")
+    else:
+        lines.append("\nПо распознанным метрикам порогов не превышено.")
+    probs = report.get("active_problems") or []
+    if probs:
+        lines.append("\n## Активные проблемы Zabbix (триггеры)")
+        for p in probs[:20]:
+            lines.append(f"- [{p['severity_name']}] {p['name']} ({', '.join(p['hosts'])})")
+    unc = report.get("unclassified") or []
+    if unc:
+        lines.append(f"\n## Не распознано ({len(unc)} — расширяй правила классификации)")
+        for u in unc[:15]:
+            lines.append(f"- {u}")
+    for w in report.get("warnings") or []:
+        lines.append(f"\n⚠ {w}")
+    return "\n".join(lines)
 
 
 # ============================================================================
@@ -568,6 +986,43 @@ try:
         if not url:
             return [{"error": "укажи url или env ZABBIX_URL (read-only)"}]
         return zabbix_problems(url, auth=token or None, recent=recent)
+
+    @mcp.tool()
+    def zabbix_api_tool(method: str, params: dict = None, url: str = "", token: str = "") -> "list | dict":
+        """Универсальный READ-ONLY вызов Zabbix API (whitelist: только *.get / apiinfo.version /
+        *.export). Покрывает всё, чего нет в составных инструментах: host.get, trigger.get,
+        item.get, dashboard.get... url/token — или env ZABBIX_URL/ZABBIX_TOKEN."""
+        url = url or os.environ.get("ZABBIX_URL", "")
+        token = token or os.environ.get("ZABBIX_TOKEN", "")
+        if not url:
+            return [{"error": "укажи url или env ZABBIX_URL"}]
+        return zabbix_api(url, method, params or {}, auth=token or None)
+
+    @mcp.tool()
+    def zabbix_dashboard_items_tool(dashboardid: str, url: str = "", token: str = "") -> dict:
+        """Элементы данных (items) с дашборда Zabbix: виджеты-item + виджеты-график → items.
+        Работает с любым дашбордом (dashboardid из URL: ...dashboardid=408). Read-only."""
+        url = url or os.environ.get("ZABBIX_URL", "")
+        token = token or os.environ.get("ZABBIX_TOKEN", "")
+        if not url:
+            return {"error": "укажи url или env ZABBIX_URL"}
+        return zabbix_dashboard_items(url, auth=token or None, dashboardid=dashboardid)
+
+    @mcp.tool()
+    def zabbix_perf_report_tool(dashboardid: str = "", hosts: list = None,
+                                window_hours: float = 1, url: str = "", token: str = "") -> dict:
+        """ГЛАВНЫЙ инструмент анализа производительности по Zabbix: дашборд и/или хосты →
+        items → история за окно (history/trend автоматически) → каноничные метрики → находки,
+        РАНЖИРОВАННЫЕ по вкладу в производительность (самое значимое первым) + активные
+        проблемы. Возвращает report (данные) + markdown (для человека). Read-only."""
+        url = url or os.environ.get("ZABBIX_URL", "")
+        token = token or os.environ.get("ZABBIX_TOKEN", "")
+        if not url:
+            return {"error": "укажи url или env ZABBIX_URL"}
+        rep = zabbix_perf_report(url, auth=token or None, dashboardid=dashboardid or None,
+                                 hosts=hosts or None, window_hours=window_hours)
+        rep["markdown"] = render_perf_report(rep)
+        return rep
 
     @mcp.tool()
     def event_log_parse_tool(source: str, level: str = "", user: str = "",

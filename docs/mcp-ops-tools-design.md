@@ -5,7 +5,7 @@
 > `1c-expert`, в том же духе, что уже существующие `mcp/onec_mcp.py` (чтение кода 1С) и `mcp/bsl_ls_mcp.py` (мост
 > над BSL Language Server): тонкая аудируемая обёртка над реальным инструментом, **только чтение**, секреты через
 > `env`, кроссплатформенно. Статус: `tech_journal_parse` (§1) — ✅ **реализован** (`mcp/onec_ops_mcp.py`);
-> остальные (§2–4) — **design-only, не реализовано**.
+> Zabbix perf-слой (§5) — ✅ **реализован 2026-07**; остальные (§2–4) — **design-only, не реализовано**.
 
 ## Зачем и общие принципы
 Эксплуатационные скиллы требуют «сначала снять данные — потом вывод». Сейчас данные снимаются вручную (вывод `rac`,
@@ -116,6 +116,26 @@
 - **Изоляция/доставка MCP:** `docker/mcp-gateway` (официальный, MIT) — запускать чужие MCP в контейнерах.
 - ⚠️ НЕ брать официальный `@modelcontextprotocol/server-postgres` — заархивирован, SQL-инъекция в обход read-only.
   Урок: read-only через строковую сборку SQL ненадёжен — нужен безопасный парсинг (как у crystaldba).
+
+## 5. Zabbix perf-слой — ✅ РЕАЛИЗОВАНО (2026-07)
+- **Назначение:** анализ производительности, когда данные есть в Zabbix (кейс КЗ): дашборд/хосты → элементы
+  данных → история за окно → каноничные метрики → **находки, ранжированные по вкладу в производительность**
+  (самое значимое первым) + активные проблемы. Дашборд может меняться — извлечение item'ов не завязано
+  на типы виджетов (fields type=4 item, type=6 graph→items).
+- **Состав** (`mcp/onec_ops_mcp.py`, тесты `tests/test_onec_ops_zabbix_perf.py`):
+  - `zabbix_api(method, params)` — универсальный вызов с **regex-whitelist read-only** (`*.get`,
+    `apiinfo.version`, `*.export`); остальным методам — отказ без обращения к серверу (идея mpeirone, GPL → только идея).
+  - `zabbix_dashboard_items` / `zabbix_host_items` — items с любого дашборда/хостов (wildcards).
+  - `zabbix_item_stats` — history.get (окно ≤48ч) / trend.get (глубже), n/min/avg/max/p95/last (идея grafana-zabbix).
+  - `zbx_classify_item` — item → каноничная метрика (Windows perf_counter / Linux-агент / MSSQL-шаблоны;
+    cpu_util, cpu_queue, mem_available_pct, swap_pct, PLE, buffer_cache_hit, deadlocks, disk_queue/util/await, net_errors).
+  - `rank_findings` — **impact = вес severity × кратность превышения порога × доля времени за порогом**;
+    неклассифицированные items не теряются (секция unclassified).
+  - `zabbix_perf_report` + `render_perf_report` — сквозной отчёт + markdown; MCP-тулы
+    `zabbix_api_tool`/`zabbix_dashboard_items_tool`/`zabbix_perf_report_tool`; CLI `scripts/zabbix_perf.py`.
+- **Аутентификация:** токен заголовком `Authorization: Bearer` (Zabbix 6.4+; payload-`auth` deprecated в 7.0,
+  удалён в 7.2 — legacy-fallback оставлен). Токен: **read-only пользователь → Профиль → API tokens** → env `ZABBIX_TOKEN`.
+- **Безопасность:** строго read-only (whitelist), секреты из env, ПДн в именах хостов наружу не отправлять.
 
 ## Следующий шаг (если решим реализовывать)
 Сначала **оценить «подключить готовый vs писать свой»** (для `pg_health` — скорее подключить crystaldba). Если писать

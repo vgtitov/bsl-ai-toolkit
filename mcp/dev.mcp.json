@@ -33,7 +33,11 @@
       "type": "stdio",
       "command": "uv",
       "args": ["run", "--quiet", "${ONEC_OPS_MCP}"],
-      "env": {}
+      "env": {
+        "ZABBIX_URL": "${ZABBIX_URL:-}",
+        "ZABBIX_TOKEN": "${ZABBIX_TOKEN:-}",
+        "PROMETHEUS_URL": "${PROMETHEUS_URL:-}"
+      }
     }
   }
 }

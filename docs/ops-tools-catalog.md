@@ -101,6 +101,22 @@
 
 ⚠️ **НЕ использовать** официальный `@modelcontextprotocol/server-postgres` — **заархивирован**, найдена SQL-инъекция в обход read-only. Урок для нашего дизайна: «read-only» через строковую сборку SQL ненадёжен — безопасный парсинг (как у crystaldba) обязателен.
 
+### 5а. Zabbix + MCP / perf-анализ по Zabbix API (обзор 2026-07, лицензии сверены)
+
+Итог обзора: **готового свободного инструмента perf-анализа поверх Zabbix API нет** — зрелые MCP-серверы
+GPL/AGPL (код в toolkit не переносим), MIT-варианты тянут FastMCP/pydantic/Node. Поэтому свой stdlib-слой
+в `mcp/onec_ops_mcp.py` (✅ реализован: `zabbix_api` whitelist + `zabbix_dashboard_items` + `zabbix_item_stats`
+history/trend + `zabbix_perf_report` с ранжированием по вкладу; CLI `scripts/zabbix_perf.py`).
+
+| Инструмент | Лиц. | Что взять |
+| --- | --- | --- |
+| **mpeirone/zabbix-mcp-server** (Python, 234★) | GPL-3.0 ⚠ | Только идея: «3 тула вместо 200» — универсальный `zabbix_api(method,params)` + regex-whitelist read-only (`.get`/`apiinfo.version`/`.export`). Реализовано у нас. |
+| **initMAX/zabbix-mcp-server** (Python, 237 тулов) | AGPL-3.0 ⚠ | Идея «extension tools»: пре-коррелированные составные инструменты (LLM плохо чейнит host→item→history). Реализовано как `zabbix_perf_report`. |
+| **zabbix/python-zabbix-utils** (официальная) | MIT ✅ | Единственный легитимный код-донор: JSON-RPC на stdlib, токен заголовком `Authorization: Bearer` (payload-`auth` deprecated в 7.0, удалён в 7.2). Учтено. |
+| **mhajder/zabbix-mcp** (Python, fastmcp3) | MIT ✅ | Схемы параметров history_get/trend_get (value_type 0/3, time_from/till), READ_ONLY_MODE. |
+| **grafana/grafana-zabbix** | Apache-2.0 ✅ | Правило выбора источника: окно ≤ хранения history → `history.get`, глубже → `trend.get` (avg/min/max по часам). Реализовано (порог 48ч). |
+| q1x/zabbix-gnomes, ZhuoRoger/zabbix-report | легаси/без лицензии ⚠ | Не брать (Python2-эпоха, прямой SQL мимо API). |
+
 ---
 
 ## Что сделать с toolkit (рекомендации)
