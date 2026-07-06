@@ -258,6 +258,90 @@ def apdex_by_operation(records, thresholds=None, default_t=1.0):
 
 
 # ============================================================================
+# БСП «Оценка производительности»: парсер ШТАТНОГО экспорта замеров (Apdex).
+# Регламентное задание ЭкспортОценкиПроизводительности пишет XML
+# (ns …/apdexExport/1.0.0.4): KeyOperation(name, nameFull, priority, targetValue, uid)
+# → measurement(value=длительность сек, weight, tUTC, userName, sessionNumber, runningError).
+# targetValue операции = её порог T для Apdex. Локальный каталог или сетевая папка/FTP.
+# ============================================================================
+
+def _localname(tag):
+    return tag.rsplit("}", 1)[-1]
+
+
+def bsp_apdex_parse(source, default_t=1.0):
+    """Разобрать файл или каталог XML-экспорта БСП «Оценка производительности» → Apdex по
+    каждой ключевой операции (T = targetValue операции), худшие сверху. Read-only."""
+    import xml.etree.ElementTree as ET
+    paths = []
+    if os.path.isdir(source):
+        for fn in sorted(os.listdir(source)):
+            if fn.lower().endswith(".xml"):
+                paths.append(os.path.join(source, fn))
+    elif os.path.isfile(source):
+        paths.append(source)
+    warnings = []
+    ops = {}  # name -> {"t":..., "name_full":..., "priority":..., "values": [...], "errors": n}
+    parsed = 0
+    for p in paths:
+        try:
+            root = ET.parse(p).getroot()
+        except ET.ParseError as e:
+            warnings.append(f"{os.path.basename(p)}: не XML ({e})")
+            continue
+        parsed += 1
+        for ko in root:
+            if _localname(ko.tag) != "KeyOperation":
+                continue
+            fields = {}
+            values, errors = [], 0
+            for child in ko:
+                ln = _localname(child.tag)
+                if ln == "measurement":
+                    mv = {_localname(c.tag): (c.text or "") for c in child}
+                    try:
+                        values.append(float(mv.get("value")))
+                    except (TypeError, ValueError):
+                        continue
+                    if str(mv.get("runningError", "")).lower() == "true":
+                        errors += 1
+                else:
+                    fields[ln] = (child.text or "").strip()
+            name = fields.get("name") or "?"
+            try:
+                t = float(fields.get("targetValue") or default_t) or default_t
+            except ValueError:
+                t = default_t
+            agg = ops.setdefault(name, {"t": t, "name_full": fields.get("nameFull", ""),
+                                        "priority": fields.get("priority", ""), "values": [], "errors": 0})
+            agg["values"].extend(values)
+            agg["errors"] += errors
+    operations = []
+    for name, agg in ops.items():
+        res = apdex(agg["values"], agg["t"])
+        res.update({"operation": name, "name_full": agg["name_full"],
+                    "priority": agg["priority"], "errors": agg["errors"]})
+        operations.append(res)
+    operations.sort(key=lambda o: o["apdex"])
+    return {"files": parsed, "operations": operations,
+            "worst": operations[0] if operations else None, "warnings": warnings}
+
+
+def apdex_sender_lines(parse_result, zbx_host):
+    """Строки для zabbix_sender -i (trapper items): '<host> 1c.apdex[<операция>] <значение>'
+    + 1c.apdex.worst (худший Apdex) и 1c.apdex.worst.name (какая операция)."""
+    lines = []
+    for op in parse_result.get("operations") or []:
+        key = re.sub(r"[\[\]\s\"']+", "_", str(op["operation"]))
+        lines.append(f"{zbx_host} 1c.apdex[{key}] {op['apdex']:.4f}")
+    worst = parse_result.get("worst")
+    if worst:
+        lines.append(f"{zbx_host} 1c.apdex.worst {worst['apdex']:.4f}")
+        lines.append(f'{zbx_host} 1c.apdex.worst.name "{worst["operation"]}"')
+    return lines
+
+
+# ============================================================================
 # Диагностика по порогам 1С/СУБД — находит проблемы из метрик (Zabbix/счётчики).
 # Пороги — общеизвестная методика эксплуатации 1С (см. references performance-apdex,
 # investigation-methodology). Источник истины — измерение; здесь — правила интерпретации.
@@ -1133,6 +1217,14 @@ try:
         if not url:
             return [{"error": "укажи url или env ZABBIX_URL (read-only)"}]
         return zabbix_problems(url, auth=token or None, recent=recent)
+
+    @mcp.tool()
+    def bsp_apdex_parse_tool(source: str, default_t: float = 1.0) -> dict:
+        """Apdex из ШТАТНОГО экспорта БСП «Оценка производительности»: файл или каталог XML
+        (регламентное задание ЭкспортОценкиПроизводительности пишет их в локальный/сетевой каталог).
+        T каждой операции = её targetValue. Возвращает operations[] (худшие сверху) + worst.
+        Бизнес-смысл: сравнение apdex до/после = доказанное ускорение. Read-only."""
+        return bsp_apdex_parse(source, default_t=default_t)
 
     @mcp.tool()
     def zabbix_api_tool(method: str, params: dict = None, url: str = "", token: str = "") -> "list | dict":
