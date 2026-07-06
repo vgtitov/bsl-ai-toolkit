@@ -426,8 +426,10 @@ def diagnose_metrics(metrics, cores=None):
     if m.get("pages_per_sec") is not None and m["pages_per_sec"] > 20:
         add("pages_per_sec", m["pages_per_sec"], ">20 (методика 1С)",
             "medium" if m["pages_per_sec"] > 1000 else "low",
-            "Memory Pages/sec выше методического порога — возможен пейджинг/интенсивный файловый кэш",
-            "Сигнал к проверке, не приговор: смотреть вместе со свопом и Available RAM; при подтверждении нехватки — добавить RAM/разнести процессы", 20)
+            "Memory Pages/sec выше методического порога — возможен пейджинг ИЛИ интенсивный файловый I/O",
+            "ЛОВУШКА Windows: Pages/sec включает memory-mapped I/O (чтение DLL/файлов 1С), а не только pagefile. "
+            "Реальный своп подтверждается ТОЛЬКО связкой: Paging file %Usage растёт + Available RAM мало. "
+            "Если Available в норме и %Usage≈0 — это файловый I/O: смотреть, что читает диск (Disk Read Bytes/sec)", 20)
     if m.get("tlock_count") is not None and m["tlock_count"] > 0:
         add("tlock_count", m["tlock_count"], ">0", "medium",
             "Длинные ожидания на блокировках (TLOCK) — транзакции стоят в очереди за данными",
