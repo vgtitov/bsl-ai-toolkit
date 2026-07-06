@@ -295,14 +295,53 @@ def diagnose_metrics(metrics, cores=None):
         elif m["cpu_queue"] > 16:
             add("cpu_queue", m["cpu_queue"], ">16", "critical",
                 "Очередь к ЦП >16 — серьёзная нехватка CPU", "См. рекомендации по ТОП-25 и наращиванию CPU", 16)
-    if m.get("cpu_util") is not None and m["cpu_util"] > 80:
-        add("cpu_util", m["cpu_util"], ">80%", "high" if m["cpu_util"] > 90 else "medium",
-            "ЦП стабильно загружен — запас исчерпывается, отклик деградирует",
-            "Найти ТОП-25 потребителей (ТЖ CALL/DBMSSQL, планы запросов); балансировка rphost; при устойчивом >90% — нарастить CPU", 80)
+    if m.get("cpu_util") is not None and m["cpu_util"] > 70:
+        add("cpu_util", m["cpu_util"], ">70% (методика 1С)", "high" if m["cpu_util"] > 90 else "medium",
+            "ЦП загружен выше методического порога 70% — запас исчерпывается, отклик деградирует",
+            "Найти ТОП-25 потребителей (ТЖ CALL/DBMSSQL, планы запросов); балансировка rphost; при устойчивом >90% — нарастить CPU", 70)
     if m.get("mem_available_pct") is not None and m["mem_available_pct"] < 10:
         add("mem_available_pct", m["mem_available_pct"], "<10%", "high",
             "Свободной RAM <10% — сервер на грани свопа/выселения кэшей",
             "Добавить RAM / разнести роли (1С и СУБД на разных серверах); проверить утечки rphost (рестарты по памяти)", 10)
+    if m.get("mem_available_bytes") is not None and m["mem_available_bytes"] < 2 * 1024**3:
+        _gib = m["mem_available_bytes"] / 1024**3
+        add("mem_available_bytes", m["mem_available_bytes"],
+            "<2 GiB", "high" if _gib < 0.5 else "medium",
+            f"Свободной RAM всего {_gib:.1f} GiB — сервер близок к нехватке памяти",
+            "Добавить RAM / проверить рост rphost (Working Set) и утечки; настроить рестарт rphost по порогу памяти", 2 * 1024**3)
+    if m.get("commit_pct") is not None and m["commit_pct"] > 80:
+        add("commit_pct", m["commit_pct"], ">80%", "high" if m["commit_pct"] > 90 else "medium",
+            "Выделенная виртуальная память (Commit) близка к пределу — риск отказов выделения памяти",
+            "Добавить RAM/увеличить файл подкачки; найти процессы с растущим Commit (rphost, SQL)", 80)
+    if m.get("pages_per_sec") is not None and m["pages_per_sec"] > 20:
+        add("pages_per_sec", m["pages_per_sec"], ">20 (методика 1С)",
+            "medium" if m["pages_per_sec"] > 1000 else "low",
+            "Memory Pages/sec выше методического порога — возможен пейджинг/интенсивный файловый кэш",
+            "Сигнал к проверке, не приговор: смотреть вместе со свопом и Available RAM; при подтверждении нехватки — добавить RAM/разнести процессы", 20)
+    if m.get("tlock_count") is not None and m["tlock_count"] > 0:
+        add("tlock_count", m["tlock_count"], ">0", "medium",
+            "Длинные ожидания на блокировках (TLOCK) — транзакции стоят в очереди за данными",
+            "Разобрать ТЖ по TLOCK: какие таблицы/регистры, кто держит; сократить транзакции, проверить индексы", 0)
+    if m.get("lock_timeouts_count") is not None and m["lock_timeouts_count"] > 0:
+        add("lock_timeouts_count", m["lock_timeouts_count"], ">0", "high",
+            "Таймауты блокировок (TTIMEOUT) — пользователи ловят «превышено время ожидания блокировки»",
+            "Разобрать ТЖ по TTIMEOUT/TLOCK (tech_journal_parse): кто держит, длина транзакций, индексы под условия", 0)
+    if m.get("excp_count") is not None and m["excp_count"] > 0:
+        add("excp_count", m["excp_count"], ">0", "low",
+            "Исключения в ТЖ (EXCP) — есть ошибки на сервере 1С",
+            "Выбрать EXCP из ТЖ (tech_journal_parse events=[\"EXCP\"]), сгруппировать по контексту — часто виден источник тормозов/сбоев", 0)
+    if m.get("cpu_iowait_pct") is not None and m["cpu_iowait_pct"] > 10:
+        add("cpu_iowait_pct", m["cpu_iowait_pct"], ">10%", "high" if m["cpu_iowait_pct"] > 25 else "medium",
+            "CPU iowait высокий — процессор простаивает в ожидании диска",
+            "Смотреть дисковую подсистему (await/util), быстрее диски, убрать лишний I/O (запросы, temp files)", 10)
+    if m.get("pg_temp_files_per_sec") is not None and m["pg_temp_files_per_sec"] > 0.1:
+        add("pg_temp_files_per_sec", m["pg_temp_files_per_sec"], ">0.1/с", "medium",
+            "PostgreSQL пишет временные файлы — сортировки/хэши не помещаются в work_mem",
+            "Поднять work_mem (осторожно, на сессию); найти запросы с Sort/Hash on disk (log_temp_files, EXPLAIN)", 0.1)
+    if m.get("pg_bloating_tables") is not None and m["pg_bloating_tables"] > 10:
+        add("pg_bloating_tables", m["pg_bloating_tables"], ">10", "medium",
+            "Распухшие таблицы PostgreSQL — bloat замедляет чтение и раздувает диск",
+            "Настроить autovacuum агрессивнее для горячих таблиц; разово — pg_repack без блокировки", 10)
     if m.get("disk_queue") is not None and m["disk_queue"] > 2:
         add("disk_queue", m["disk_queue"], ">2 на диск", "high",
             "Очередь к диску >2 — дисковая подсистема не справляется",
@@ -384,12 +423,28 @@ def _zbx_call(url, method, params, auth=None, _post=None):
 
 
 def zabbix_problems(url, auth=None, severities=None, recent=True, _post=None):
-    """Текущие/недавние проблемы (триггеры) из Zabbix — как панель «Проблемы на сервере»."""
-    params = {"output": ["eventid", "name", "severity", "clock"], "selectHosts": ["name"],
+    """Текущие/недавние проблемы (триггеры) из Zabbix — как панель «Проблемы на сервере».
+    ВАЖНО: problem.get НЕ поддерживает selectHosts (проверено на живом 7.0.27) — хосты
+    добираются отдельно, см. zabbix_problems_with_hosts."""
+    params = {"output": ["eventid", "objectid", "name", "severity", "clock"],
               "recent": recent, "sortfield": ["eventid"], "sortorder": "DESC"}
     if severities:
         params["severities"] = severities
     return _zbx_call(url, "problem.get", params, auth, _post) or []
+
+
+def zabbix_problems_with_hosts(url, auth=None, severities=None, recent=True, _post=None):
+    """Проблемы + имена хостов: problem.get (objectid = triggerid) → trigger.get selectHosts."""
+    problems = zabbix_problems(url, auth=auth, severities=severities, recent=recent, _post=_post)
+    trig_ids = sorted({str(p["objectid"]) for p in problems if p.get("objectid")})
+    hosts_by_trigger = {}
+    if trig_ids:
+        for t in _zbx_call(url, "trigger.get",
+                           {"triggerids": trig_ids, "output": ["triggerid"],
+                            "selectHosts": ["host", "name"]}, auth, _post) or []:
+            hosts_by_trigger[str(t.get("triggerid"))] = [
+                h.get("name") or h.get("host") for h in t.get("hosts") or []]
+    return [{**p, "hosts": hosts_by_trigger.get(str(p.get("objectid")), [])} for p in problems]
 
 
 def zabbix_history(url, auth=None, itemids=None, history=0, time_from=None, limit=500, _post=None):
@@ -436,11 +491,36 @@ def _t_to_ms(v, units=""):
 
 _ZBX_CLASS_RULES = [
     (r"processor queue length|system\.cpu\.load", "cpu_queue", _t_ident),
-    (r"system\.cpu\.util|cpu utilization|% processor time|processor time", "cpu_util", _t_ident),
+    # CPU конкретного процесса (\Process(...)\% Processor Time) — НЕ системный: 100% = одно ядро,
+    # значение может быть кратно больше. Правило стоит ДО системного cpu_util (первый матч выигрывает).
+    (r"\\process\(.*% processor time", "process_cpu_pct", _t_ident),
+    # Режимы CPU (util[,idle]/user/system/…) — не «общая загрузка»; iowait — своя метрика,
+    # остальные режимы отсекаются заглушкой ДО правила cpu_util (кейс: idle 82% ≠ «ЦП загружен»).
+    (r"system\.cpu\.util\[,?iowait\]|cpu iowait", "cpu_iowait_pct", _t_ident),
+    (r"system\.cpu\.util\[,?\w+\]|cpu (?:idle|user|system|steal|nice|guest|interrupt|softirq|privileged|dpc) time", None, None),
+    (r"system\.cpu\.util|cpu utilization|% processor time", "cpu_util", _t_ident),
     (r"vm\.memory\.size\[pavailable\]|available memory in %|memory available %", "mem_available_pct", _t_ident),
+    (r"vm\.memory\.size\[available\]|available memory in bytes", "mem_available_bytes", _t_ident),
+    (r"memory.*pages/sec|\\memory\\pages", "pages_per_sec", _t_ident),
+    (r"committed bytes in use|commit.*%|процент выделенной", "commit_pct", _t_ident),
+    # PostgreSQL (официальный шаблон Zabbix)
+    (r"pgsql\.cache\.hit|cache hit ratio", "buffer_cache_hit_pct", _t_ident),
+    (r"pgsql\..*temp_files|temp files per second", "pg_temp_files_per_sec", _t_ident),
+    (r"pgsql\.db\.bloating_tables|bloating tables", "pg_bloating_tables", _t_ident),
+    # Кастомные 1С-метрики (шаблоны Zabbix для кластера 1С; ключи 1c.*)
+    (r"1c\.tj\.ttimeout|lock timeouts", "lock_timeouts_count", _t_ident),
+    (r"1c\.tj\.tlock|long lock waits", "tlock_count", _t_ident),
+    (r"1c\.tj\.excp|exceptions count", "excp_count", _t_ident),
+    (r"1c\.sessions\.total|total sessions count", "sessions_total", _t_ident),
+    (r"1c\.sessions\.thin|thin clients count", "sessions_thin", _t_ident),
+    (r"1c\.sessions\.hibernate|hibernating sessions", "sessions_hibernate", _t_ident),
+    (r"1c\.sessions\.licenses|licenses count", "licenses_count", _t_ident),
+    (r"1c\.sessions\.connections|total connections count", "connections_total", _t_ident),
+    (r"1c\.sessions\.max_held|max session held time", "session_max_held_s", _t_ident),
+    (r"1c\.rphost\.mem|ram процессов rphost", "rphost_mem_bytes", _t_ident),
     (r"vm\.memory\.util|memory utilization", "mem_available_pct", _t_invert_pct),
-    (r"system\.swap\.pfree|free swap", "swap_pct", _t_invert_pct),
-    (r"swap.*pused|swap.*used", "swap_pct", _t_ident),
+    (r"system\.swap\.(?:size\[,?pfree\]|pfree)|free swap space in %|free swap", "swap_pct", _t_invert_pct),
+    (r"swap.*pused|paging file.*% usage|used swap space", "swap_pct", _t_ident),
     (r"page life expectancy", "page_life_expectancy", _t_ident),
     (r"buffer cache hit", "buffer_cache_hit_pct", _t_ident),
     (r"deadlock", "deadlocks_per_sec", _t_ident),
@@ -458,18 +538,56 @@ _METRIC_BAD_HIGH = {
     "page_life_expectancy": False,
     "buffer_cache_hit_pct": False,
     "mem_available_pct": False,
+    "mem_available_bytes": False,
 }
+
+# КОНТЕКСТ нагрузки, а не проблема: порогов нет, в отчёте — отдельной секцией.
+# process_cpu_pct здесь же: 100% = одно ядро, без числа ядер порогом не мерить.
+_METRIC_CONTEXT = {"sessions_total", "sessions_thin", "sessions_hibernate", "licenses_count",
+                   "connections_total", "session_max_held_s", "rphost_mem_bytes", "process_cpu_pct"}
+
+# ТЕКСТОВЫЕ evidence-item'ы: прямые указатели на места кода/держателей сессий
+# (выгружаются в Zabbix скриптом разбора ТЖ на сервере 1С). В отчёте — evidence_texts.
+_ZBX_TEXT_EVIDENCE = [
+    (re.compile(r"1c\.tj\.call_context|call context", re.I), "tj_call_context"),
+    (re.compile(r"1c\.sessions\.held_info|held context", re.I), "session_held_info"),
+]
+
+
+def zbx_classify_text_evidence(item):
+    hay = f"{item.get('key_', '')} {item.get('name', '')}".lower()
+    for rx, kind in _ZBX_TEXT_EVIDENCE:
+        if rx.search(hay):
+            return kind
+    return None
 
 
 def zbx_classify_item(item):
     """Определить каноничную метрику по item Zabbix (key_ + name, любые шаблоны:
-    Windows perf_counter, Linux-агент, MSSQL/PG). → (metric, transform) или None."""
+    Windows perf_counter, Linux-агент, MSSQL/PG). → (metric, transform) или None.
+    Правило с metric=None — осознанная заглушка (перехватить и отбросить)."""
     hay = f"{item.get('key_', '')} {item.get('name', '')}".lower()
     units = item.get("units", "")
     for rx, metric, tr in _ZBX_CLASS_COMPILED:
         if rx.search(hay):
+            if metric is None:
+                return None
             return metric, (lambda v, _tr=tr, _u=units: _tr(float(v), _u))
     return None
+
+
+# Инвентарные/служебные item'ы — не метрики производительности: не считать «нераспознанными».
+_ZBX_INVENTORY_RE = re.compile(
+    r"^agent\.|^system\.(?:uname|uptime|hostname|localtime|boottime|sw\.|users\.)|^wmi\.get"
+    r"|^vm\.memory\.size\[(?:total|used)\]|^system\.swap\.(?:size\[,?(?:total|free)\]|free$)"
+    r"|^kernel\.|^proc\.num|^zabbix\[|^vfs\.file\.(?:cksum|contents)|^net\.if\.(?:speed|status|type)"
+    r"|\.text$|^pgsql\.(?:ping|uptime|version|replication\.(?:recovery_role|status|count)|db\.age)"
+    r"|^system\.cpu\.num|number of cores")
+
+
+def zbx_is_inventory_item(item):
+    hay = f"{item.get('key_', '')} {item.get('name', '')}".lower()
+    return bool(_ZBX_INVENTORY_RE.search(hay))
 
 
 # --- дашборд → items --------------------------------------------------------
@@ -680,10 +798,20 @@ def zabbix_perf_report(url, auth=None, dashboardid=None, hosts=None, window_hour
     items = list({i["itemid"]: i for i in items}.values())
 
     classified, unclassified = [], []
+    evidence_texts = {}
+    ignored = 0
     for it in items:
+        kind = zbx_classify_text_evidence(it)
+        if kind:
+            val = str(it.get("lastvalue") or "").strip()
+            if val:
+                evidence_texts.setdefault(it.get("host", "?"), {})[kind] = val[:4000]
+            continue
         c = zbx_classify_item(it)
         if c:
             classified.append((it, *c))
+        elif zbx_is_inventory_item(it):
+            ignored += 1
         else:
             unclassified.append(f"{it.get('host', '?')}: {it.get('name', '')} [{it.get('key_', '')}]")
 
@@ -694,6 +822,7 @@ def zabbix_perf_report(url, auth=None, dashboardid=None, hosts=None, window_hour
 
     host_metrics = {}
     evidence = {}
+    context = {}
     for it, metric, transform in classified:
         host = it.get("host", "?")
         st = stats.get(str(it["itemid"]))
@@ -706,6 +835,10 @@ def zabbix_perf_report(url, auth=None, dashboardid=None, hosts=None, window_hour
                 vals = [rep_val]
             except (TypeError, ValueError):
                 continue
+        if metric in _METRIC_CONTEXT:
+            # контекст нагрузки (сессии/лицензии/CPU процесса) — текущее значение, не порог
+            context.setdefault(host, {})[metric] = transform(st["last"]) if st else rep_val
+            continue
         if st and st.get("truncated"):
             warnings.append(f"{host}: история '{it.get('name')}' плотнее лимита {_HIST_LIMIT} — "
                             f"статистика по последним {_HIST_LIMIT} точкам окна")
@@ -726,19 +859,20 @@ def zabbix_perf_report(url, auth=None, dashboardid=None, hosts=None, window_hour
 
     problems = []
     try:
-        for p in zabbix_problems(url, auth=auth, _post=_post):
+        for p in zabbix_problems_with_hosts(url, auth=auth, _post=_post):
             sev = int(p.get("severity", 0))
             problems.append({"name": p.get("name"), "severity": sev,
                              "severity_name": _ZBX_SEVERITY_NAMES.get(sev, str(sev)),
-                             "hosts": [h.get("name") for h in p.get("hosts") or []],
-                             "clock": p.get("clock")})
+                             "hosts": p.get("hosts") or [], "clock": p.get("clock")})
         problems.sort(key=lambda p: p["severity"], reverse=True)
     except RuntimeError as e:
         warnings.append(f"problem.get: {e}")
 
     return {"scope": scope, "window_hours": window_hours,
             "items_total": len(items), "items_classified": len(classified),
-            "findings": findings, "active_problems": problems,
+            "items_inventory_ignored": ignored,
+            "findings": findings, "active_problems": problems, "context": context,
+            "evidence_texts": evidence_texts,
             "unclassified": unclassified[:50], "warnings": warnings}
 
 
@@ -762,11 +896,24 @@ def render_perf_report(report):
             lines.append(f"   - что делать: {f['recommendation']}")
     else:
         lines.append("\nПо распознанным метрикам порогов не превышено.")
+    ctx = report.get("context") or {}
+    if ctx:
+        lines.append("\n## Контекст нагрузки (не проблемы — фон для интерпретации)")
+        for host, metrics in ctx.items():
+            pretty = ", ".join(f"{k}={v:g}" for k, v in sorted(metrics.items()))
+            lines.append(f"- {host}: {pretty}")
+    evt = report.get("evidence_texts") or {}
+    if evt:
+        lines.append("\n## Указатели на места кода (из ТЖ через Zabbix)")
+        for host, kinds in evt.items():
+            for kind, text in kinds.items():
+                lines.append(f"\n### {host} · {kind}\n```\n{text}\n```")
     probs = report.get("active_problems") or []
     if probs:
         lines.append("\n## Активные проблемы Zabbix (триггеры)")
         for p in probs[:20]:
-            lines.append(f"- [{p['severity_name']}] {p['name']} ({', '.join(p['hosts'])})")
+            hosts = ", ".join(p["hosts"]) if p["hosts"] else "?"
+            lines.append(f"- [{p['severity_name']}] {p['name']} ({hosts})")
     unc = report.get("unclassified") or []
     if unc:
         lines.append(f"\n## Не распознано ({len(unc)} — расширяй правила классификации)")

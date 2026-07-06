@@ -147,6 +147,195 @@ def test_classify_items_canonical_metrics():
     assert c("agent.ping", "Zabbix agent ping") is None
 
 
+def test_classify_1c_and_windows_memory_items():
+    """Реальный дашборд КЗ (vc-1c-app-01): кастомные 1С-метрики и память Windows
+    должны распознаваться, а CPU процесса (\\Process(rphost*)) НЕ должен попадать
+    в системный cpu_util (счётчик процесса >100% = больше одного ядра)."""
+    m = _load()
+
+    def c(key_, name="", units=""):
+        return m.zbx_classify_item({"key_": key_, "name": name, "units": units})
+
+    assert c('perf_counter_en["\\Process(rphost*)\\% Processor Time"]', "CPU процессов rphost")[0] == "process_cpu_pct"
+    assert c("system.cpu.util", "CPU utilization")[0] == "cpu_util"  # системный — как раньше
+    assert c('perf_counter_en["\\Memory\\Pages/sec"]', "Memory pages per second")[0] == "pages_per_sec"
+    assert c('perf_counter_en["\\Memory\\% Committed Bytes In Use"]', "Процент выделенной виртуальной памяти")[0] == "commit_pct"
+    assert c("vm.memory.size[available]", "Available memory in Bytes", "B")[0] == "mem_available_bytes"
+    assert c("1c.tj.ttimeout", "1C: Techlog Lock Timeouts Count (TTIMEOUT)")[0] == "lock_timeouts_count"
+    assert c("1c.tj.excp", "1C: Techlog Exceptions Count (EXCP)")[0] == "excp_count"
+    assert c("1c.sessions.total", "1C: Total Sessions Count")[0] == "sessions_total"
+    assert c("1c.sessions.licenses", "1C: Licenses Count")[0] == "licenses_count"
+
+
+def test_diagnose_windows_memory_and_1c_thresholds():
+    m = _load()
+    flags = m.diagnose_metrics({"commit_pct": 95, "pages_per_sec": 2500,
+                                "mem_available_bytes": 400 * 1024 * 1024,
+                                "lock_timeouts_count": 3, "excp_count": 50, "tlock_count": 10})
+    by = {f["metric"]: f for f in flags}
+    assert by["commit_pct"]["severity"] == "high"
+    assert "pages_per_sec" in by and "mem_available_bytes" in by
+    assert by["lock_timeouts_count"]["severity"] == "high"  # таймауты блокировок = боль пользователей
+    assert "excp_count" in by and "tlock_count" in by
+    # контекстные метрики (сессии/лицензии/CPU процесса) НЕ дают находок сами по себе
+    assert m.diagnose_metrics({"sessions_total": 500, "licenses_count": 400, "process_cpu_pct": 250}) == []
+
+
+def test_diagnose_its_thresholds():
+    """Пороги по методике ИТС (metod8dev/5838): CPU >70%, Pages/sec >20 (сигнал к проверке)."""
+    m = _load()
+    by = {f["metric"]: f for f in m.diagnose_metrics({"cpu_util": 75, "pages_per_sec": 30})}
+    assert "cpu_util" in by, "по ИТС загрузка ЦП штатно не должна превышать 70%"
+    assert by["cpu_util"]["severity"] == "medium"  # 75 — выше методики, но не пожар
+    assert by["pages_per_sec"]["severity"] == "low"  # >20 по ИТС — проверить вместе с RAM/свопом
+    assert {f["metric"] for f in m.diagnose_metrics({"cpu_util": 95})} == {"cpu_util"}
+    assert next(iter(m.diagnose_metrics({"cpu_util": 95})))["severity"] == "high"
+
+
+def test_text_evidence_classified_and_reported():
+    """Текстовые item'ы (контекст CALL из ТЖ, инфо о держателе сессии) → секция evidence_texts,
+    а не unclassified: это прямые указатели на места кода."""
+    m = _load()
+
+    def fake_post(url, payload, headers=None):
+        meth = payload["method"]
+        if meth == "dashboard.get":
+            return {"result": [{"dashboardid": "4", "name": "D", "pages": [{"widgets": [
+                {"type": "item", "name": "w", "fields": [{"type": "4", "name": "itemid.0", "value": "7"}]},
+                {"type": "item", "name": "w2", "fields": [{"type": "4", "name": "itemid.0", "value": "8"}]},
+            ]}]}], "id": 1}
+        if meth == "item.get":
+            return {"result": [
+                {"itemid": "7", "name": "1C: Techlog CALL Context Logs", "key_": "1c.tj.call_context",
+                 "units": "", "value_type": "4",
+                 "lastvalue": "22046 ms  База->ОбщийМодуль.ОбменДаннымиСервер.Модуль : 3689", "lastclock": "1",
+                 "hosts": [{"host": "h", "name": "H"}]},
+                {"itemid": "8", "name": "1C: Max Session Held Context Info", "key_": "1c.sessions.held_info",
+                 "units": "", "value_type": "4",
+                 "lastvalue": "База: X | Пользователь: Y | Время: 114 мин.", "lastclock": "1",
+                 "hosts": [{"host": "h", "name": "H"}]},
+            ], "id": 1}
+        if meth == "history.get":
+            return {"result": [], "id": 1}
+        if meth == "problem.get":
+            return {"result": [], "id": 1}
+        raise AssertionError(meth)
+
+    rep = m.zabbix_perf_report("http://zbx/api_jsonrpc.php", auth="T", dashboardid="4", _post=fake_post)
+    assert not rep["unclassified"]
+    ev = rep["evidence_texts"]["H"]
+    assert "ОбменДаннымиСервер" in ev["tj_call_context"]
+    assert "114 мин" in ev["session_held_info"]
+    assert "ОбменДаннымиСервер" in m.render_perf_report(rep)
+
+
+def test_context_metrics_in_report():
+    """Сессии/лицензии/CPU rphost — не проблемы, а контекст нагрузки: в отчёте отдельно."""
+    m = _load()
+
+    def fake_post(url, payload, headers=None):
+        meth = payload["method"]
+        if meth == "dashboard.get":
+            return {"result": [{"dashboardid": "3", "name": "D", "pages": [{"widgets": [
+                {"type": "item", "name": "w", "fields": [{"type": "4", "name": "itemid.0", "value": "1"}]},
+                {"type": "item", "name": "w2", "fields": [{"type": "4", "name": "itemid.0", "value": "2"}]},
+            ]}]}], "id": 1}
+        if meth == "item.get":
+            return {"result": [
+                {"itemid": "1", "name": "1C: Total Sessions Count", "key_": "1c.sessions.total",
+                 "units": "", "value_type": "3", "lastvalue": "412", "lastclock": "1", "hosts": [{"host": "h", "name": "H"}]},
+                {"itemid": "2", "name": "CPU процессов rphost", "key_": 'perf_counter_en["\\Process(rphost*)\\% Processor Time"]',
+                 "units": "%", "value_type": "0", "lastvalue": "114", "lastclock": "1", "hosts": [{"host": "h", "name": "H"}]},
+            ], "id": 1}
+        if meth == "history.get":
+            iid = payload["params"]["itemids"][0]
+            return {"result": [{"itemid": iid, "clock": "1750000000", "value": "412" if iid == "1" else "114"}], "id": 1}
+        if meth == "problem.get":
+            return {"result": [], "id": 1}
+        raise AssertionError(meth)
+
+    rep = m.zabbix_perf_report("http://zbx/api_jsonrpc.php", auth="T", dashboardid="3", _post=fake_post)
+    assert rep["findings"] == []  # контекст не превращается в находки
+    assert rep["context"]["H"]["sessions_total"] == 412.0
+    assert rep["context"]["H"]["process_cpu_pct"] == 114.0
+    assert not rep["unclassified"]  # распознаны, не потеряны
+    text = m.render_perf_report(rep)
+    assert "Контекст нагрузки" in text and "412" in text
+
+
+def test_problems_hosts_resolved_via_trigger_get():
+    """Живой Zabbix 7.0 отверг selectHosts у problem.get — хосты добираются через trigger.get."""
+    m = _load()
+    methods = []
+
+    def fake_post(url, payload, headers=None):
+        meth = payload["method"]
+        methods.append(meth)
+        if meth == "problem.get":
+            assert "selectHosts" not in payload["params"], "problem.get не поддерживает selectHosts (Zabbix 7.0)"
+            return {"result": [{"eventid": "9", "objectid": "555", "name": "High CPU",
+                                "severity": "4", "clock": "1750000000"}], "id": 1}
+        if meth == "trigger.get":
+            assert payload["params"]["triggerids"] == ["555"]
+            return {"result": [{"triggerid": "555", "hosts": [{"host": "h1", "name": "KZ APP01"}]}], "id": 1}
+        raise AssertionError(meth)
+
+    res = m.zabbix_problems_with_hosts("http://zbx/api_jsonrpc.php", auth="T", _post=fake_post)
+    assert methods == ["problem.get", "trigger.get"]
+    assert res[0]["hosts"] == ["KZ APP01"]
+
+
+def test_classify_cpu_idle_not_cpu_util():
+    """system.cpu.util[,idle|user|system|iowait] — режимы, НЕ общая загрузка (кейс: idle 82%
+    ложно давал «ЦП загружен 82%»). iowait — своя метрика, idle/user/system — контекст/None."""
+    m = _load()
+
+    def c(key_, name=""):
+        return m.zbx_classify_item({"key_": key_, "name": name, "units": "%"})
+
+    assert c("system.cpu.util", "CPU utilization")[0] == "cpu_util"
+    assert c("system.cpu.util[,idle]", "CPU idle time") is None
+    assert c("system.cpu.util[,user]", "CPU user time") is None
+    assert c("system.cpu.util[,iowait]", "CPU iowait time")[0] == "cpu_iowait_pct"
+
+
+def test_classify_postgres_metrics():
+    m = _load()
+
+    def c(key_, name="", units=""):
+        return m.zbx_classify_item({"key_": key_, "name": name, "units": units})
+
+    assert c("pgsql.cache.hit", "Cache hit ratio, %")[0] == "buffer_cache_hit_pct"
+    assert c("pgsql.dbstat.sum.temp_files.rate", "Dbstat: Number temp files per second")[0] == "pg_temp_files_per_sec"
+    assert c('pgsql.db.bloating_tables[...,"ERP"]', "DB [ERP]: Bloating tables")[0] == "pg_bloating_tables"
+    assert c("pgsql.dbstat.sum.deadlocks.rate", "Deadlocks per second")[0] == "deadlocks_per_sec"
+    # Linux swap free % в варианте system.swap.size[,pfree] и Windows Paging file % Usage
+    ms, tr = c("system.swap.size[,pfree]", "Free swap space in %")
+    assert ms == "swap_pct" and tr(70.0) == 30.0
+    assert c('perf_counter_en["\\Paging file(_Total)\\% Usage"]', "Used swap space in %")[0] == "swap_pct"
+
+
+def test_inventory_items_not_in_unclassified():
+    """Служебные/инвентарные item'ы (agent.ping, hostname, total memory, uptime) — не шум
+    в unclassified: игнорируются осознанно."""
+    m = _load()
+    for key_, name in [("agent.ping", "Zabbix agent ping"), ("system.uname", "System description"),
+                       ("system.uptime", "Uptime"), ("vm.memory.size[total]", "Total memory"),
+                       ("system.hostname", "System name"), ("agent.version", "Version of Zabbix agent"),
+                       ('wmi.get[root/cimv2,"Select X"]', "Number of cores")]:
+        assert m.zbx_is_inventory_item({"key_": key_, "name": name}), f"{key_} должен игнорироваться"
+    assert not m.zbx_is_inventory_item({"key_": "system.cpu.util", "name": "CPU utilization"})
+
+
+def test_diagnose_pg_thresholds():
+    m = _load()
+    by = {f["metric"]: f for f in m.diagnose_metrics(
+        {"pg_temp_files_per_sec": 0.5, "pg_bloating_tables": 18, "cpu_iowait_pct": 30})}
+    assert "pg_temp_files_per_sec" in by  # сортировки на диске → work_mem
+    assert "pg_bloating_tables" in by     # регламент обслуживания
+    assert by["cpu_iowait_pct"]["severity"] in {"medium", "high"}
+
+
 def test_classify_swap_pfree_transforms_to_used_pct():
     m = _load()
     metric, transform = m.zbx_classify_item({"key_": "system.swap.pfree", "name": "Free swap in %", "units": "%"})
@@ -277,8 +466,10 @@ def test_perf_report_end_to_end():
             return {"result": [{"itemid": "5", "clock": "1750000000", "value": "100"},
                                {"itemid": "5", "clock": "1750000060", "value": "120"}], "id": 1}
         if meth == "problem.get":
-            return {"result": [{"eventid": "77", "name": "High CPU", "severity": "4", "clock": "1750000000",
-                                "hosts": [{"name": "KZ APP01"}]}], "id": 1}
+            return {"result": [{"eventid": "77", "objectid": "555", "name": "High CPU",
+                                "severity": "4", "clock": "1750000000"}], "id": 1}
+        if meth == "trigger.get":
+            return {"result": [{"triggerid": "555", "hosts": [{"host": "app01", "name": "KZ APP01"}]}], "id": 1}
         raise AssertionError(f"неожиданный метод {meth}")
 
     rep = m.zabbix_perf_report("http://zbx/api_jsonrpc.php", auth="T",
@@ -287,6 +478,7 @@ def test_perf_report_end_to_end():
     assert rep["findings"], "PLE=110с должен дать находку"
     assert rep["findings"][0]["metric"] == "page_life_expectancy"
     assert rep["active_problems"][0]["name"] == "High CPU"
+    assert rep["active_problems"][0]["hosts"] == ["KZ APP01"]
     # рендер: человекочитаемый markdown, самое значимое первым
     text = m.render_perf_report(rep)
     assert "page_life_expectancy" in text or "Page life expectancy" in text or "буферный кэш" in text.lower()
