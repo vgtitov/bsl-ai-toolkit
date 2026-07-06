@@ -23,6 +23,9 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "mcp"))
 import onec_ops_mcp as ops  # noqa: E402
 
+# нет переменных в окружении → подхватить .env (текущий каталог, затем корень репо)
+ops.load_dotenv_defaults()
+
 
 def main():
     p = argparse.ArgumentParser(description="Apdex из экспорта БСП → zabbix_sender (trapper)")

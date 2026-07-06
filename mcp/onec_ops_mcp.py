@@ -20,6 +20,32 @@ import os
 import re
 from collections import Counter
 
+
+def load_dotenv_defaults(*dirs):
+    """Подхватить KEY=VALUE из .env в указанных каталогах (по умолчанию: CWD, корень репо).
+    Уже установленные переменные окружения НЕ перетираются — .env лишь дополняет.
+    Возвращает {ключ: значение} реально добавленных. Секреты наружу не печатает."""
+    search = list(dirs) or [os.getcwd(), os.path.dirname(os.path.dirname(os.path.abspath(__file__)))]
+    added = {}
+    for d in search:
+        path = os.path.join(d, ".env")
+        if not os.path.isfile(path):
+            continue
+        try:
+            lines = open(path, "r", encoding="utf-8", errors="replace").read().splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            k, v = k.strip(), v.strip().strip("'\"")
+            if k and k not in os.environ:
+                os.environ[k] = v
+                added[k] = v
+    return added
+
 # Стартовая строка события ТЖ: mm:ss.микросек-<длительность>,<Событие>,<остальное>
 _EVENT_RE = re.compile(r"^(\d\d):(\d\d)\.(\d+)-(\d+),(.*)$")
 _MAXVAL = 1000  # усечение длинных значений (Sql/Context) в выводе
