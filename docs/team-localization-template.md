@@ -38,6 +38,8 @@
    - `ONEC_BEARER_TOKEN` — `openssl rand -hex 32`;
    - `ONEC_TJ_DIR` — каталог логов ТЖ/выгрузок ЖР для onec-ops;
    - `ZABBIX_URL/ZABBIX_TOKEN`, `PROMETHEUS_URL` — если используются (read-only).
+   - `JIRA_URL/JIRA_PAT`, `CONFLUENCE_URL/CONFLUENCE_PAT` — трекер задач и база знаний организации (для
+     `scripts/atlassian.py`); Cloud — добавить `JIRA_USER/CONFLUENCE_USER`. Домены и токены — только здесь, не в ядро.
 4. **Поднять центр в корп-docker** (на корп-хосте с Docker; runbook — `toolkit/docs/deploy-center.md`):
    ```bash
    cd toolkit/server
@@ -51,6 +53,7 @@
 | Что | Где (Team-слой) | НЕ в публичном ядре |
 | --- | --- | --- |
 | Карта баз/контуров, какие репо = конфигурация/расширения | `config/layers.<org>.toml`, `config/contours.<org>.md` | да — обезличено |
+| Карта базы знаний (домен, разделы/id, «когда смотреть»), префиксы трекера | Team-слой по `references/knowledge-base-map-template.md` | да — обезличено |
 | Версии платформы/совместимости/конфигурации | `CLAUDE.md` (org) | да |
 | Реальные пути (код, логи ТЖ/ЖР), хост docker | `server/.env` (вне git) | да |
 | Секреты (bearer, Zabbix-токен) | `server/.env` / секрет-стор | НИКОГДА в git |
