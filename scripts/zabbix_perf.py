@@ -5,7 +5,7 @@
 Итог — предложения, ранжированные по вкладу в производительность (значимое первым).
 
 Примеры:
-  python scripts/zabbix_perf.py --dashboard 408 --window 24
+  python scripts/zabbix_perf.py --dashboard 408,410 --hosts "vc-1c-*" --window 24
   python scripts/zabbix_perf.py --hosts "kz-*" --window 1 --json
   ZABBIX_URL=http://zbx.example/api_jsonrpc.php ZABBIX_TOKEN=... python scripts/zabbix_perf.py --dashboard 408
 
@@ -33,7 +33,7 @@ def main():
     p.add_argument("--token", default=os.environ.get("ZABBIX_TOKEN", ""), help="API-токен (или env ZABBIX_TOKEN)")
     p.add_argument("--user", default=os.environ.get("ZABBIX_USER", ""),
                    help="логин для user.login (пароль спросится интерактивно), если нет токена")
-    p.add_argument("--dashboard", default="", help="dashboardid (из URL ...dashboardid=408)")
+    p.add_argument("--dashboard", default="", help="dashboardid (из URL ...dashboardid=408); несколько через запятую: 408,410")
     p.add_argument("--hosts", default="", help="имена/шаблоны хостов через запятую (напр. 'kz-*,SQL*')")
     p.add_argument("--window", type=float, default=1.0, help="окно анализа, часов (default 1; >48ч — тренды)")
     p.add_argument("--json", action="store_true", help="вывести сырой JSON отчёта вместо markdown")

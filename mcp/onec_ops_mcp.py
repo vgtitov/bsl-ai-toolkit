@@ -453,7 +453,14 @@ def diagnose_metrics(metrics, cores=None):
     if m.get("pg_bloating_tables") is not None and m["pg_bloating_tables"] > 10:
         add("pg_bloating_tables", m["pg_bloating_tables"], ">10", "medium",
             "Распухшие таблицы PostgreSQL — bloat замедляет чтение и раздувает диск",
-            "Настроить autovacuum агрессивнее для горячих таблиц; разово — pg_repack без блокировки", 10)
+            "Настроить autovacuum агрессивнее для горячих таблиц; разово — pg_repack без блокировки. "
+            "Если рядом видны длинные транзакции (pg_long_transactions) — сперва убрать их: "
+            "открытая транзакция держит xmin и не даёт vacuum'у чистить строки", 10)
+    if m.get("pg_connections_pct") is not None and m["pg_connections_pct"] > 80:
+        add("pg_connections_pct", m["pg_connections_pct"], ">80%", "high" if m["pg_connections_pct"] > 90 else "medium",
+            "Подключения PostgreSQL близки к max_connections — новые соединения получат отказ",
+            "Проверить, кто держит соединения (idle in transaction?); пул соединений 1С/pgbouncer; "
+            "поднимать max_connections — последним (каждый backend ест RAM)", 80)
     if m.get("disk_queue") is not None and m["disk_queue"] > 2:
         add("disk_queue", m["disk_queue"], ">2 на диск", "high",
             "Очередь к диску >2 — дисковая подсистема не справляется",
@@ -619,6 +626,7 @@ _ZBX_CLASS_RULES = [
     (r"pgsql\.cache\.hit|cache hit ratio", "buffer_cache_hit_pct", _t_ident),
     (r"pgsql\..*temp_files|temp files per second", "pg_temp_files_per_sec", _t_ident),
     (r"pgsql\.db\.bloating_tables|bloating tables", "pg_bloating_tables", _t_ident),
+    (r"pgsql\.connections\.sum\.total_pct|connections sum: total, %", "pg_connections_pct", _t_ident),
     # Кастомные 1С-метрики (шаблоны Zabbix для кластера 1С; ключи 1c.*)
     (r"1c\.tj\.ttimeout|lock timeouts", "lock_timeouts_count", _t_ident),
     (r"1c\.tj\.tlock|long lock waits", "tlock_count", _t_ident),
@@ -659,11 +667,24 @@ _METRIC_CONTEXT = {"sessions_total", "sessions_thin", "sessions_hibernate", "lic
                    "connections_total", "session_max_held_s", "rphost_mem_bytes", "process_cpu_pct"}
 
 # ТЕКСТОВЫЕ evidence-item'ы: прямые указатели на места кода/держателей сессий
-# (выгружаются в Zabbix скриптом разбора ТЖ на сервере 1С). В отчёте — evidence_texts.
+# (выгружаются в Zabbix скриптом разбора ТЖ на сервере 1С) И на тяжёлый SQL/транзакции
+# СУБД (админ-скрипт поверх pg_stat_statements / pg_stat_activity). В отчёте — evidence_texts.
 _ZBX_TEXT_EVIDENCE = [
     (re.compile(r"1c\.tj\.call_context|call context", re.I), "tj_call_context"),
     (re.compile(r"1c\.sessions\.held_info|held context", re.I), "session_held_info"),
+    (re.compile(r"pg\.top\.sql\.time|sql.*(?:запросов по времени|by (?:total )?time)", re.I), "pg_top_sql_time"),
+    (re.compile(r"pg\.top\.sql\.disk|sql.*(?:по дисковому чтению|by disk|disk io)", re.I), "pg_top_sql_disk"),
+    (re.compile(r"pg\.long\.transactions|(?:долг|длинн|завис)\w*\s+.*транзакц|long.*transactions", re.I), "pg_long_transactions"),
 ]
+
+# Человекочитаемые подписи видов evidence для рендера отчёта.
+_ZBX_EVIDENCE_LABELS = {
+    "tj_call_context": "топ CALL-контекстов ТЖ — места кода 1С",
+    "session_held_info": "держатели сессий",
+    "pg_top_sql_time": "СУБД: топ SQL по суммарному времени",
+    "pg_top_sql_disk": "СУБД: топ SQL по чтению с диска",
+    "pg_long_transactions": "СУБД: длинные/зависшие транзакции",
+}
 
 
 def zbx_classify_text_evidence(item):
@@ -674,32 +695,51 @@ def zbx_classify_text_evidence(item):
     return None
 
 
-def zbx_classify_item(item):
-    """Определить каноничную метрику по item Zabbix (key_ + name, любые шаблоны:
-    Windows perf_counter, Linux-агент, MSSQL/PG). → (metric, transform) или None.
-    Правило с metric=None — осознанная заглушка (перехватить и отбросить)."""
+_ZBX_STUB = "__stub__"  # осознанная заглушка (режимы CPU и т.п.) — игнор, не «нераспознано»
+
+
+def _zbx_classify_raw(item):
+    """Внутренняя классификация: (metric, transform) | _ZBX_STUB (осознанный игнор) | None."""
     hay = f"{item.get('key_', '')} {item.get('name', '')}".lower()
     units = item.get("units", "")
     for rx, metric, tr in _ZBX_CLASS_COMPILED:
         if rx.search(hay):
             if metric is None:
-                return None
+                return _ZBX_STUB
             return metric, (lambda v, _tr=tr, _u=units: _tr(float(v), _u))
     return None
 
 
+def zbx_classify_item(item):
+    """Определить каноничную метрику по item Zabbix (key_ + name, любые шаблоны:
+    Windows perf_counter, Linux-агент, MSSQL/PG). → (metric, transform) или None.
+    Правило с metric=None — осознанная заглушка (перехватить и отбросить)."""
+    r = _zbx_classify_raw(item)
+    return None if r == _ZBX_STUB else r
+
+
 # Инвентарные/служебные item'ы — не метрики производительности: не считать «нераспознанными».
+# Паттерны с ^/$ рассчитаны на КЛЮЧ — проверяется и key_ отдельно, и key_+name вместе.
 _ZBX_INVENTORY_RE = re.compile(
     r"^agent\.|^system\.(?:uname|uptime|hostname|localtime|boottime|sw\.|users\.)|^wmi\.get"
     r"|^vm\.memory\.size\[(?:total|used)\]|^system\.swap\.(?:size\[,?(?:total|free)\]|free$)"
     r"|^kernel\.|^proc\.num|^zabbix\[|^vfs\.file\.(?:cksum|contents)|^net\.if\.(?:speed|status|type)"
     r"|\.text$|^pgsql\.(?:ping|uptime|version|replication\.(?:recovery_role|status|count)|db\.age)"
-    r"|^system\.cpu\.num|number of cores")
+    r"|^system\.cpu\.num|number of cores|^vfs\.fs\.(?:get$|dependent\[[^,]+,data\])")
+# Мастер-item'ы официальных шаблонов СУБД (сырой JSON «Get dbstat/bgwriter/…») и
+# текстовые заготовки для виджетов — служебные по ИМЕНИ.
+_ZBX_INVENTORY_NAME_RE = re.compile(r"(?:^|:\s)get\s|\(текст для виджета\)|text for widget", re.I)
 
 
 def zbx_is_inventory_item(item):
-    hay = f"{item.get('key_', '')} {item.get('name', '')}".lower()
-    return bool(_ZBX_INVENTORY_RE.search(hay))
+    key = str(item.get("key_", "")).lower()
+    name = str(item.get("name", "")).lower()
+    if _ZBX_INVENTORY_RE.search(key) or _ZBX_INVENTORY_RE.search(f"{key} {name}"):
+        return True
+    if _ZBX_INVENTORY_NAME_RE.search(name):
+        return True
+    # сырые JSON-агрегаты шаблонов PG (dependent-item'ы разбирают их в метрики)
+    return str(item.get("value_type", "")) == "4" and "{$pg.connstring" in key
 
 
 # --- дашборд → items --------------------------------------------------------
@@ -888,19 +928,57 @@ def rank_findings(host_metrics):
 _ZBX_SEVERITY_NAMES = {0: "not classified", 1: "information", 2: "warning",
                        3: "average", 4: "high", 5: "disaster"}
 
+# Длительности в текстовых evidence (снимки админ-скриптов): «6147.3 сек» / «42 sec».
+_ZBX_DURATION_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*(?:сек|sec)\b", re.I)
+_ZBX_TEXT_HIST_LIMIT = 500  # снимков текстового item'а на окно (обычно 1/мин — сутки с запасом)
+
+
+def zbx_text_evidence_window(url, auth, item, time_from, time_till, _post=None):
+    """История ТЕКСТОВОГО evidence-item'а за окно (history=4): свежий непустой снимок +
+    пиковый снимок по максимальной длительности «N сек» в тексте. Снимок «сейчас» может
+    быть пустым/спокойным, а пик окна (транзакция на 6000 сек час назад) — главная улика.
+    → {"last": str, "peak": {"text","clock","max_seconds"}|None}."""
+    rows = _zbx_call(url, "history.get",
+                     {"itemids": [str(item["itemid"])], "history": 4, "output": "extend",
+                      "time_from": int(time_from), "time_till": int(time_till),
+                      "sortfield": "clock", "sortorder": "DESC",
+                      "limit": _ZBX_TEXT_HIST_LIMIT}, auth, _post) or []
+    snaps = []
+    for r in rows:  # DESC: свежие первыми
+        try:
+            snaps.append((int(r.get("clock", 0)), str(r.get("value") or "")))
+        except (TypeError, ValueError):
+            continue
+    last = next((v for _c, v in snaps if v.strip()), "")
+    peak = None
+    for clock, val in snaps:
+        for mt in _ZBX_DURATION_RE.finditer(val):
+            secs = float(mt.group(1).replace(",", "."))
+            if peak is None or secs > peak["max_seconds"]:
+                peak = {"max_seconds": secs, "clock": clock, "text": val}
+    return {"last": last, "peak": peak}
+
 
 def zabbix_perf_report(url, auth=None, dashboardid=None, hosts=None, window_hours=1,
                        cores_by_host=None, _post=None):
-    """Сквозной отчёт производительности: items (с дашборда и/или хостов) → история за окно
-    → каноничные метрики по хостам → находки, ранжированные по вкладу (самое значимое первым)
-    + активные проблемы Zabbix. Read-only."""
+    """Сквозной отчёт производительности: items (с дашборда/дашбордОВ и/или хостов) → история
+    за окно → каноничные метрики по хостам → находки, ранжированные по вкладу (самое значимое
+    первым) + активные проблемы Zabbix. dashboardid: один id или несколько через запятую
+    («408,410» — app-сервер + СУБД). Read-only."""
     import time as _time
     warnings, items, scope = [], [], {}
     if dashboardid:
-        d = zabbix_dashboard_items(url, auth, dashboardid, _post=_post)
-        scope["dashboard"] = d["dashboard"]
-        items += d["items"]
-        warnings += d["warnings"]
+        dash_names = []
+        for did in str(dashboardid).split(","):
+            did = did.strip()
+            if not did:
+                continue
+            d = zabbix_dashboard_items(url, auth, did, _post=_post)
+            if d["dashboard"]:
+                dash_names.append(d["dashboard"])
+            items += d["items"]
+            warnings += d["warnings"]
+        scope["dashboard"] = ", ".join(dash_names) or None
     if hosts:
         h = zabbix_host_items(url, auth, hosts, _post=_post)
         scope["hosts"] = h["hosts"]
@@ -909,26 +987,42 @@ def zabbix_perf_report(url, auth=None, dashboardid=None, hosts=None, window_hour
     # dedup по itemid
     items = list({i["itemid"]: i for i in items}.values())
 
+    time_till = int(_time.time())
+    time_from = time_till - int(float(window_hours) * 3600)
+
     classified, unclassified = [], []
     evidence_texts = {}
+    evidence_peaks = {}
     ignored = 0
     for it in items:
         kind = zbx_classify_text_evidence(it)
         if kind:
-            val = str(it.get("lastvalue") or "").strip()
+            # смотреть ИСТОРИЮ за окно, не только lastvalue: текущий снимок бывает пустым,
+            # а пик окна (транзакция на тысячи секунд час назад) — главная улика
+            try:
+                win = zbx_text_evidence_window(url, auth, it, time_from, time_till, _post=_post)
+            except RuntimeError as e:
+                warnings.append(f"история текстового item '{it.get('name')}': {e}")
+                win = {"last": "", "peak": None}
+            val = (win["last"] or str(it.get("lastvalue") or "")).strip()
             if val:
                 evidence_texts.setdefault(it.get("host", "?"), {})[kind] = val[:4000]
+            peak = win["peak"]
+            if peak and peak["text"].strip() and peak["text"] != val:
+                evidence_peaks.setdefault(it.get("host", "?"), {})[kind] = {
+                    "max_seconds": peak["max_seconds"], "clock": peak["clock"],
+                    "text": peak["text"][:4000]}
             continue
-        c = zbx_classify_item(it)
-        if c:
+        c = _zbx_classify_raw(it)
+        if c == _ZBX_STUB:
+            ignored += 1
+        elif c:
             classified.append((it, *c))
         elif zbx_is_inventory_item(it):
             ignored += 1
         else:
             unclassified.append(f"{it.get('host', '?')}: {it.get('name', '')} [{it.get('key_', '')}]")
 
-    time_till = int(_time.time())
-    time_from = time_till - int(float(window_hours) * 3600)
     stats = zabbix_item_stats(url, auth, [it for it, _m, _t in classified],
                               time_from=time_from, time_till=time_till, _post=_post)
 
@@ -984,7 +1078,7 @@ def zabbix_perf_report(url, auth=None, dashboardid=None, hosts=None, window_hour
             "items_total": len(items), "items_classified": len(classified),
             "items_inventory_ignored": ignored,
             "findings": findings, "active_problems": problems, "context": context,
-            "evidence_texts": evidence_texts,
+            "evidence_texts": evidence_texts, "evidence_peaks": evidence_peaks,
             "unclassified": unclassified[:50], "warnings": warnings}
 
 
@@ -1015,11 +1109,21 @@ def render_perf_report(report):
             pretty = ", ".join(f"{k}={v:g}" for k, v in sorted(metrics.items()))
             lines.append(f"- {host}: {pretty}")
     evt = report.get("evidence_texts") or {}
-    if evt:
-        lines.append("\n## Указатели на места кода (из ТЖ через Zabbix)")
-        for host, kinds in evt.items():
-            for kind, text in kinds.items():
-                lines.append(f"\n### {host} · {kind}\n```\n{text}\n```")
+    peaks = report.get("evidence_peaks") or {}
+    if evt or peaks:
+        lines.append("\n## Указатели на места кода и SQL (из ТЖ и СУБД через Zabbix)")
+        for host in sorted(set(evt) | set(peaks)):
+            kinds = dict(evt.get(host) or {})
+            for kind in sorted(set(kinds) | set(peaks.get(host) or {})):
+                label = _ZBX_EVIDENCE_LABELS.get(kind, kind)
+                text = kinds.get(kind)
+                if text:
+                    lines.append(f"\n### {host} · {label}\n```\n{text}\n```")
+                pk = (peaks.get(host) or {}).get(kind)
+                if pk:
+                    import time as _time
+                    ts = _time.strftime("%d.%m %H:%M", _time.localtime(int(pk["clock"]))) if pk.get("clock") else "?"
+                    lines.append(f"\n**Пик за окно** ({label}): {pk['max_seconds']:g} сек @ {ts}\n```\n{pk['text']}\n```")
     probs = report.get("active_problems") or []
     if probs:
         lines.append("\n## Активные проблемы Zabbix (триггеры)")
@@ -1278,10 +1382,12 @@ try:
     @mcp.tool()
     def zabbix_perf_report_tool(dashboardid: str = "", hosts: list = None,
                                 window_hours: float = 1, url: str = "", token: str = "") -> dict:
-        """ГЛАВНЫЙ инструмент анализа производительности по Zabbix: дашборд и/или хосты →
+        """ГЛАВНЫЙ инструмент анализа производительности по Zabbix: дашборд(ы) и/или хосты →
         items → история за окно (history/trend автоматически) → каноничные метрики → находки,
         РАНЖИРОВАННЫЕ по вкладу в производительность (самое значимое первым) + активные
-        проблемы. Возвращает report (данные) + markdown (для человека). Read-only."""
+        проблемы + текстовые улики (CALL-контексты ТЖ, топ SQL СУБД, длинные транзакции —
+        с пиком за окно). dashboardid: один id или несколько через запятую («408,410»).
+        Возвращает report (данные) + markdown (для человека). Read-only."""
         url = url or os.environ.get("ZABBIX_URL", "")
         token = token or os.environ.get("ZABBIX_TOKEN", "")
         if not url:

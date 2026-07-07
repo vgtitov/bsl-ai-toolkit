@@ -540,3 +540,139 @@ def test_perf_report_unclassified_not_lost():
     rep = m.zabbix_perf_report("http://zbx/api_jsonrpc.php", auth="T", dashboardid="1", _post=fake_post)
     # неклассифицированное не теряется молча — фиксируется в отчёте
     assert any("custom.metric" in u or "экзотика" in u for u in rep["unclassified"])
+
+
+# ---------------------------------------------------------------------------
+# СУБД-evidence: топ SQL по времени/диску и длинные транзакции (текстовые item'ы
+# админ-скрипта поверх pg_stat_statements / pg_stat_activity) — улики, не «нераспознано».
+# История за окно: снимок «сейчас» бывает пустым, пик окна — главная улика.
+# ---------------------------------------------------------------------------
+def test_pg_text_evidence_classified():
+    m = _load()
+
+    def k(key_, name):
+        return m.zbx_classify_text_evidence({"key_": key_, "name": name})
+
+    assert k("pg.top.sql.time", "Postgres: ТОП-10 тяжелых SQL запросов по времени (CPU)") == "pg_top_sql_time"
+    assert k("pg.top.sql.disk", "Postgres: ТОП-10 тяжелых SQL запросов по дисковому чтению (Disk IO)") == "pg_top_sql_disk"
+    assert k("pg.long.transactions", "Postgres: Зависшие длинные транзакции 1С (>30 сек)") == "pg_long_transactions"
+    # обычные метрики не захватываются
+    assert k("pgsql.cache.hit", "Cache hit ratio, %") is None
+
+
+def test_pg_evidence_history_last_and_peak_in_report():
+    """Снимок lastvalue пуст, но час назад была транзакция на 6147 сек — отчёт обязан
+    показать и свежий непустой снимок, и ПИК за окно."""
+    m = _load()
+    quiet = "База 1С | PID | Длительность | SQL\n(пусто)"
+    spike = "База 1С | PID | Длительность | SQL\nERP | 3084938 | 6147.3 сек | INSERT INTO pg_temp.tt694"
+
+    def fake_post(url, payload, headers=None):
+        meth = payload["method"]
+        if meth == "dashboard.get":
+            return {"result": [{"dashboardid": "410", "name": "db", "pages": [{"widgets": [
+                {"type": "itemhistory", "name": "w", "fields": [{"type": "4", "name": "columns.0.itemid", "value": "52450"}]},
+            ]}]}], "id": 1}
+        if meth == "item.get":
+            return {"result": [{"itemid": "52450", "name": "Postgres: Зависшие длинные транзакции 1С (>30 сек)",
+                                "key_": "pg.long.transactions", "units": "", "value_type": "4",
+                                "lastvalue": "", "lastclock": "1750003600",
+                                "hosts": [{"host": "db", "name": "DB"}]}], "id": 1}
+        if meth == "history.get":
+            assert payload["params"]["history"] == 4
+            return {"result": [
+                {"itemid": "52450", "clock": "1750003600", "value": quiet},
+                {"itemid": "52450", "clock": "1750000000", "value": spike},
+            ], "id": 1}
+        if meth == "problem.get":
+            return {"result": [], "id": 1}
+        raise AssertionError(meth)
+
+    rep = m.zabbix_perf_report("http://zbx/api_jsonrpc.php", auth="T", dashboardid="410",
+                               window_hours=24, _post=fake_post)
+    assert not rep["unclassified"]
+    assert rep["evidence_texts"]["DB"]["pg_long_transactions"] == quiet
+    pk = rep["evidence_peaks"]["DB"]["pg_long_transactions"]
+    assert pk["max_seconds"] == 6147.3 and "tt694" in pk["text"]
+    text = m.render_perf_report(rep)
+    assert "длинные/зависшие транзакции" in text and "Пик за окно" in text and "6147.3" in text
+
+
+def test_multi_dashboard_ids_merged():
+    """dashboardid='408,410' — items обоих дашбордов в одном отчёте (app + СУБД)."""
+    m = _load()
+    seen = []
+
+    def fake_post(url, payload, headers=None):
+        meth = payload["method"]
+        if meth == "dashboard.get":
+            did = payload["params"]["dashboardids"][0]
+            seen.append(did)
+            return {"result": [{"dashboardid": did, "name": f"D{did}", "pages": [{"widgets": [
+                {"type": "item", "name": "w", "fields": [{"type": "4", "name": "itemid.0", "value": did + "1"}]},
+            ]}]}], "id": 1}
+        if meth == "item.get":
+            iid = payload["params"]["itemids"][0]
+            return {"result": [{"itemid": iid, "name": "CPU utilization", "key_": "system.cpu.util",
+                                "units": "%", "value_type": "0", "lastvalue": "10", "lastclock": "1",
+                                "hosts": [{"host": "h" + iid, "name": "H" + iid}]}], "id": 1}
+        if meth == "history.get":
+            return {"result": [], "id": 1}
+        if meth == "problem.get":
+            return {"result": [], "id": 1}
+        raise AssertionError(meth)
+
+    rep = m.zabbix_perf_report("http://zbx/api_jsonrpc.php", auth="T", dashboardid="408, 410", _post=fake_post)
+    assert seen == ["408", "410"]
+    assert rep["scope"]["dashboard"] == "D408, D410"
+    assert rep["items_total"] == 2
+
+
+def test_pg_master_json_and_widget_text_items_ignored():
+    """Сырые JSON-агрегаты шаблона PG («Get dbstat», ключ с {$PG.CONNSTRING…}) и текстовые
+    заготовки для виджетов — служебные: не в unclassified."""
+    m = _load()
+    assert m.zbx_is_inventory_item({"key_": 'pgsql.dbstat.get_metrics["CompanyKZ_ERP"]',
+                                    "name": "DB [CompanyKZ_ERP]: Get dbstat", "value_type": "4"})
+    assert m.zbx_is_inventory_item({"key_": 'pgsql.connections["{$PG.CONNSTRING.AGENT2}","{$PG.USER}"]',
+                                    "name": "Get connections sum", "value_type": "4"})
+    assert m.zbx_is_inventory_item({"key_": "windows.commit.text", "name": "Выделенная память (Текст для виджета)"})
+    assert m.zbx_is_inventory_item({"key_": "vfs.fs.get", "name": "Get filesystems"})
+    assert m.zbx_is_inventory_item({"key_": "vfs.fs.dependent[C:,data]", "name": "FS [(C:)]: Get data"})
+    # полезные метрики не задеты
+    assert not m.zbx_is_inventory_item({"key_": "pgsql.cache.hit", "name": "Cache hit ratio, %", "value_type": "0"})
+    assert not m.zbx_is_inventory_item({"key_": "vfs.fs.dependent.size[C:,free]", "name": "FS [(C:)]: Space: Available"})
+
+
+def test_cpu_mode_stubs_counted_ignored_not_unclassified():
+    """Режимы CPU (user/privileged/DPC…) — осознанные заглушки: игнор, а не шум unclassified."""
+    m = _load()
+
+    def fake_post(url, payload, headers=None):
+        meth = payload["method"]
+        if meth == "dashboard.get":
+            return {"result": [{"dashboardid": "1", "name": "D", "pages": [{"widgets": [
+                {"type": "item", "name": "w", "fields": [{"type": "4", "name": "itemid.0", "value": "9"}]},
+            ]}]}], "id": 1}
+        if meth == "item.get":
+            return {"result": [{"itemid": "9", "name": "CPU user time",
+                                "key_": 'perf_counter_en["\\Processor Information(_total)\\% User Time"]',
+                                "units": "%", "value_type": "0", "lastvalue": "12", "lastclock": "0",
+                                "hosts": [{"host": "h", "name": "H"}]}], "id": 1}
+        if meth == "history.get":
+            return {"result": [], "id": 1}
+        if meth == "problem.get":
+            return {"result": [], "id": 1}
+        raise AssertionError(meth)
+
+    rep = m.zabbix_perf_report("http://zbx/api_jsonrpc.php", auth="T", dashboardid="1", _post=fake_post)
+    assert rep["unclassified"] == []
+    assert rep["items_inventory_ignored"] == 1
+
+
+def test_diagnose_pg_connections_pct():
+    m = _load()
+    by = {f["metric"]: f for f in m.diagnose_metrics({"pg_connections_pct": 92})}
+    assert by["pg_connections_pct"]["severity"] == "high"
+    assert m.zbx_classify_item({"key_": "pgsql.connections.sum.total_pct",
+                                "name": "Connections sum: Total, %", "units": "%"})[0] == "pg_connections_pct"
