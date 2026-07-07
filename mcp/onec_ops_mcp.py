@@ -739,7 +739,9 @@ _ZBX_INVENTORY_RE = re.compile(
 _ZBX_INVENTORY_NAME_RE = re.compile(r"(?:^|:\s)get\s|\(текст для виджета\)|text for widget", re.I)
 
 
-_ZBX_INV_FS_RE = re.compile(r"^vfs\.fs\.(?:dependent|size)\[([^,\]]+),(total|used|pused)\]")
+# реальные формы ключей: vfs.fs.size[...] (классический агент) и vfs.fs.dependent.size[...]
+# (dependent-item'ы современных шаблонов «by Zabbix agent» от мастера vfs.fs.get)
+_ZBX_INV_FS_RE = re.compile(r"^vfs\.fs\.(?:dependent\.size|dependent|size)\[([^,\]]+),(total|used|pused)\]")
 
 
 def zbx_inventory_facts(items):
@@ -757,16 +759,17 @@ def zbx_inventory_facts(items):
         m = _ZBX_INV_FS_RE.match(key)
         if m:
             fs, kind = m.group(1), m.group(2)
-            d = h.setdefault("disks", {}).setdefault(fs, {})
-            try:
-                if kind == "total":
-                    d["total_bytes"] = int(float(val))
-                elif kind == "used":
-                    d["used_bytes"] = int(float(val))
-                else:
-                    d["used_pct"] = float(val)
+            try:  # сначала распарсить значение — мусор не должен оставлять пустую запись диска
+                parsed = float(val)
             except ValueError:
-                pass
+                continue
+            d = h.setdefault("disks", {}).setdefault(fs, {})
+            if kind == "total":
+                d["total_bytes"] = int(parsed)
+            elif kind == "used":
+                d["used_bytes"] = int(parsed)
+            else:
+                d["used_pct"] = parsed
             continue
         try:
             if key.startswith("system.cpu.num"):
@@ -1064,8 +1067,11 @@ def load_zabbix_contours(path=None):
     path = path or default_contours_config()
     if not path or not os.path.isfile(path):
         return {}
-    with open(path, "rb") as f:
-        return tomllib.load(f)
+    try:
+        with open(path, "rb") as f:
+            return tomllib.load(f)
+    except (tomllib.TOMLDecodeError, OSError) as e:  # файл правят руками — ошибка человеческая
+        raise RuntimeError(f"пресеты контуров: не читается {path}: {e}")
 
 
 def resolve_zabbix_contour(name, path=None):
@@ -1088,15 +1094,20 @@ def resolve_zabbix_contour(name, path=None):
     hosts = c.get("hosts") or []
     if isinstance(hosts, str):
         hosts = [h.strip() for h in hosts.split(",") if h.strip()]
-    return {"name": str(name),
-            "url": str(c.get("url") or ""),
-            "dashboards": str(c.get("dashboards") or ""),
-            "hosts": [str(h) for h in hosts],
-            "window_hours": float(c.get("window_hours") or 24),
-            "licensed_cores": {str(h): int(n) for h, n in (c.get("licensed_cores") or {}).items()},
-            "storage_map_base": str(c.get("storage_map_base") or ""),
-            "onec_profile": str(c.get("onec_profile") or ""),
-            "notes": str(c.get("notes") or "")}
+    try:  # значения в TOML пишут руками — кривой тип объясняем словами, не трейсбеком
+        return {"name": str(name),
+                "url": str(c.get("url") or ""),
+                "dashboards": str(c.get("dashboards") or ""),
+                "hosts": [str(h) for h in hosts],
+                "window_hours": float(c.get("window_hours") or 24),
+                "licensed_cores": {str(h): int(n) for h, n in (c.get("licensed_cores") or {}).items()},
+                "storage_map_base": str(c.get("storage_map_base") or ""),
+                "onec_profile": str(c.get("onec_profile") or ""),
+                "notes": str(c.get("notes") or "")}
+    except (TypeError, ValueError) as e:
+        raise RuntimeError(
+            f"контур '{name}': кривое значение в пресетах ({e}); проверь window_hours (число), "
+            "hosts (строка через запятую или список), licensed_cores ({{хост = целое}})")
 
 
 def resolve_zabbix_scope(contour="", url="", token="", dashboardid="", hosts=None,
@@ -1111,7 +1122,7 @@ def resolve_zabbix_scope(contour="", url="", token="", dashboardid="", hosts=Non
             "token": token or os.environ.get("ZABBIX_TOKEN", ""),
             "dashboardid": dashboardid or preset.get("dashboards", ""),
             "hosts": list(hosts) if hosts else list(preset.get("hosts") or []),
-            "window_hours": float(window_hours) if window_hours else float(preset.get("window_hours") or 1.0),
+            "window_hours": float(window_hours) if window_hours is not None else float(preset.get("window_hours") or 1.0),
             "licensed_cores": dict(licensed_cores) if licensed_cores else dict(preset.get("licensed_cores") or {}),
             "maps_dir": maps_dir or "",
             "onec_profile": preset.get("onec_profile", ""),
@@ -1400,8 +1411,11 @@ def perf_report_diff(baseline, current):
         mism.append(f"дашборды: {bs.get('dashboard')} → {cs.get('dashboard')}")
     if sorted(bs.get("hosts") or []) != sorted(cs.get("hosts") or []):
         mism.append(f"хосты: {bs.get('hosts')} → {cs.get('hosts')}")
-    if (bs.get("contour") or "") != (cs.get("contour") or ""):
-        mism.append(f"контур: {bs.get('contour')} → {cs.get('contour')}")
+    # имя пресета сравниваем только когда названы ОБА: baseline без пресета при том же
+    # фактическом охвате (миграция на --contour) — не смена охвата
+    if (bs.get("contour") and cs.get("contour")
+            and bs["contour"] != cs["contour"]):
+        mism.append(f"контур: {bs['contour']} → {cs['contour']}")
 
     def _by_key(rep):
         return {(f.get("host"), f.get("metric")): f for f in rep.get("findings") or []}

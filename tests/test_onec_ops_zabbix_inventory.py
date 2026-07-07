@@ -27,10 +27,14 @@ ITEMS = [
      "lastvalue": str(42 * 86400), "units": "s", "value_type": "3"},
     {"itemid": "5", "host": "db-01", "name": "PostgreSQL version", "key_": "pgsql.version[...]",
      "lastvalue": "15.2", "units": "", "value_type": "1"},
-    {"itemid": "6", "host": "db-01", "name": "/data: Total space", "key_": "vfs.fs.dependent[/data,total]",
+    # реальные ключи современных шаблонов: dependent-item'ы называются vfs.fs.dependent.size[...]
+    {"itemid": "6", "host": "db-01", "name": "/data: Total space", "key_": "vfs.fs.dependent.size[/data,total]",
      "lastvalue": str(676 * 10**9), "units": "B", "value_type": "3"},
-    {"itemid": "7", "host": "db-01", "name": "/data: Space utilization", "key_": "vfs.fs.dependent[/data,pused]",
+    {"itemid": "7", "host": "db-01", "name": "/data: Space utilization", "key_": "vfs.fs.dependent.size[/data,pused]",
      "lastvalue": "63.5", "units": "%", "value_type": "0"},
+    # классическая форма ключа (агент без dependent) — тоже должна собираться
+    {"itemid": "9", "host": "db-01", "name": "/: Space utilization", "key_": "vfs.fs.size[/,pused]",
+     "lastvalue": "41", "units": "%", "value_type": "0"},
     # НЕ инвентарь — не должен попасть в факты
     {"itemid": "8", "host": "db-01", "name": "CPU utilization", "key_": "system.cpu.util",
      "lastvalue": "40", "units": "%", "value_type": "0"},
@@ -49,7 +53,18 @@ def test_inventory_facts_collects_per_host():
     assert d["dbms"].startswith("PostgreSQL 15.2")
     assert d["disks"]["/data"]["total_bytes"] == 676 * 10**9
     assert d["disks"]["/data"]["used_pct"] == 63.5
+    assert d["disks"]["/"]["used_pct"] == 41.0
     assert "cpu_num" not in d  # метрика производительности не утекла в инвентарь
+
+
+def test_inventory_junk_disk_value_leaves_no_empty_entry():
+    m = _load()
+    inv = m.zbx_inventory_facts([
+        {"itemid": "1", "host": "h", "name": "/: Space utilization",
+         "key_": "vfs.fs.size[/,pused]", "lastvalue": "abc", "units": "%", "value_type": "0"}])
+    # мусорное значение → ни пустой записи диска, ни пустого хоста в инвентаре
+    assert "/" not in (inv.get("h", {}).get("disks") or {})
+    assert not inv.get("h")
 
 
 def test_perf_report_carries_inventory_and_renders_it():

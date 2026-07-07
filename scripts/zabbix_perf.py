@@ -102,17 +102,22 @@ def main():
         with open(a.out, "w", encoding="utf-8") as f:
             json.dump(rep, f, ensure_ascii=False, indent=2)
         print(f"# JSON отчёта сохранён: {a.out}", file=sys.stderr)
-    if a.json:
-        json.dump(rep, sys.stdout, ensure_ascii=False, indent=2)
-    else:
-        print(ops.render_perf_report(rep))
+    diff = None
     if a.baseline:
         try:
             with open(a.baseline, encoding="utf-8") as f:
                 base = json.load(f)
         except (OSError, ValueError) as e:
             sys.exit(f"ОШИБКА --baseline: {e}")
-        print("\n" + ops.render_perf_diff(ops.perf_report_diff(base, rep)))
+        diff = ops.perf_report_diff(base, rep)
+    if a.json:
+        if diff is not None:
+            rep["baseline_diff"] = diff  # stdout остаётся валидным JSON (пайп в jq/файл)
+        json.dump(rep, sys.stdout, ensure_ascii=False, indent=2)
+    else:
+        print(ops.render_perf_report(rep))
+        if diff is not None:
+            print("\n" + ops.render_perf_diff(diff))
 
 
 if __name__ == "__main__":

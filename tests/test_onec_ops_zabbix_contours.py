@@ -147,3 +147,39 @@ def test_report_scope_carries_contour():
     rep = m.zabbix_perf_report("http://z/api_jsonrpc.php", hosts=["h1"], window_hours=24,
                                contour="kz", _post=fake_post)
     assert rep["scope"].get("contour") == "kz"
+
+
+# ---------------------------------------------------------------------------
+# Кривой рукописный TOML (файл локализации правят руками) — человеческая ошибка,
+# не сырой трейсбек tomllib/ValueError/TypeError
+# ---------------------------------------------------------------------------
+def _expect_runtime_error(m, toml_text, tmp_path, name="kz"):
+    p = tmp_path / "bad.toml"
+    p.write_text(toml_text, encoding="utf-8")
+    try:
+        m.resolve_zabbix_contour(name, str(p))
+        assert False, "ожидалась RuntimeError с человеческим текстом"
+    except RuntimeError as e:
+        assert "bad.toml" in str(e) or "контур" in str(e)
+
+
+def test_broken_toml_syntax_is_runtime_error(tmp_path):
+    _expect_runtime_error(_load(), "[kz\nне toml", tmp_path)
+
+
+def test_bad_licensed_cores_is_runtime_error(tmp_path):
+    _expect_runtime_error(_load(), '[kz]\nlicensed_cores = { app = "twelve" }\n', tmp_path)
+
+
+def test_bad_window_hours_is_runtime_error(tmp_path):
+    _expect_runtime_error(_load(), '[kz]\nwindow_hours = "day"\n', tmp_path)
+
+
+def test_bad_hosts_type_is_runtime_error(tmp_path):
+    _expect_runtime_error(_load(), '[kz]\nhosts = 5\n', tmp_path)
+
+
+def test_scope_explicit_window_zero_is_honored(tmp_path):
+    m = _load()
+    s = m.resolve_zabbix_scope(contour="kz", contours_path=_cfg(tmp_path), window_hours=0)
+    assert s["window_hours"] == 0.0  # явный 0 не подменяется дефолтом пресета

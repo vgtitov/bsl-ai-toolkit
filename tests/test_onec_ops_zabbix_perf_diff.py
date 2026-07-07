@@ -61,3 +61,18 @@ def test_diff_render_mentions_dynamics():
     assert "tlock_count" in md and "185" in md and "40" in md
     # решённых/новых нет — разделы не мусорят
     assert "Решён" not in md or "нет" in md.lower()
+
+
+def test_diff_contour_migration_not_flagged_when_actual_scope_same():
+    """Старый baseline снят вручную (без пресета), новый — через --contour с ТЕМ ЖЕ фактическим
+    охватом: это миграция на пресеты, а не смена охвата — брака быть не должно."""
+    m = _load()
+    base = _rep([], contour="")
+    cur = _rep([], contour="kz")
+    assert m.perf_report_diff(base, cur)["scope_mismatch"] == []
+
+
+def test_diff_two_named_contours_flagged():
+    m = _load()
+    d = m.perf_report_diff(_rep([], contour="kz"), _rep([], contour="by"))
+    assert any("kz" in s and "by" in s for s in d["scope_mismatch"])
