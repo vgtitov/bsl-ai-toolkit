@@ -739,6 +739,80 @@ _ZBX_INVENTORY_RE = re.compile(
 _ZBX_INVENTORY_NAME_RE = re.compile(r"(?:^|:\s)get\s|\(текст для виджета\)|text for widget", re.I)
 
 
+_ZBX_INV_FS_RE = re.compile(r"^vfs\.fs\.(?:dependent|size)\[([^,\]]+),(total|used|pused)\]")
+
+
+def zbx_inventory_facts(items):
+    """Инвентарные факты по хостам из item'ов — знаменатели для интерпретации находок
+    (методика: «31 GiB rphost — много или норм? только относительно общей RAM»): ядра,
+    RAM total, ОС, версия СУБД, uptime, диски (объём/заполненность). По lastvalue —
+    истории для инвентаря не нужно."""
+    inv = {}
+    for it in items:
+        key = str(it.get("key_", ""))
+        val = str(it.get("lastvalue") or "").strip()
+        if not val:
+            continue
+        h = inv.setdefault(it.get("host", "?"), {})
+        m = _ZBX_INV_FS_RE.match(key)
+        if m:
+            fs, kind = m.group(1), m.group(2)
+            d = h.setdefault("disks", {}).setdefault(fs, {})
+            try:
+                if kind == "total":
+                    d["total_bytes"] = int(float(val))
+                elif kind == "used":
+                    d["used_bytes"] = int(float(val))
+                else:
+                    d["used_pct"] = float(val)
+            except ValueError:
+                pass
+            continue
+        try:
+            if key.startswith("system.cpu.num"):
+                h["cpu_num"] = int(float(val))
+                continue
+            if key.startswith("vm.memory.size[total]"):
+                h["mem_total_bytes"] = int(float(val))
+                continue
+            if key.startswith("system.uptime"):
+                h["uptime_s"] = int(float(val))
+                continue
+        except ValueError:
+            continue
+        if key.startswith(("system.sw.os", "system.uname")):
+            h.setdefault("os", val)
+        elif key.startswith("pgsql.version"):
+            h["dbms"] = val if val[:1].isalpha() else f"PostgreSQL {val}"
+    return {h: f for h, f in inv.items() if f}
+
+
+def _render_inventory_host(host, f):
+    """Одна строка инвентаря хоста для markdown-отчёта. RAM — GiB (двоичные),
+    диски — GB (десятичные, как их показывает Zabbix/df)."""
+    parts = []
+    if f.get("os"):
+        parts.append(f["os"])
+    if f.get("dbms"):
+        parts.append(f["dbms"])
+    if f.get("cpu_num"):
+        parts.append(f"{f['cpu_num']} vCPU")
+    if f.get("mem_total_bytes"):
+        parts.append(f"{f['mem_total_bytes'] / 1024 ** 3:.0f} GiB RAM")
+    for fs, d in sorted((f.get("disks") or {}).items()):
+        s = fs
+        if d.get("total_bytes"):
+            s += f" {d['total_bytes'] / 10 ** 9:.0f} GB"
+        if d.get("used_pct") is not None:
+            s += f" (занято {d['used_pct']:g}%)"
+        elif d.get("used_bytes") and d.get("total_bytes"):
+            s += f" (занято {d['used_bytes'] / d['total_bytes'] * 100:.0f}%)"
+        parts.append(s)
+    if f.get("uptime_s"):
+        parts.append(f"uptime {f['uptime_s'] // 86400} дн")
+    return f"- **{host}**: " + " · ".join(parts)
+
+
 def zbx_is_inventory_item(item):
     key = str(item.get("key_", "")).lower()
     name = str(item.get("name", "")).lower()
@@ -1096,6 +1170,9 @@ def zabbix_perf_report(url, auth=None, dashboardid=None, hosts=None, window_hour
         warnings += h["warnings"]
     # dedup по itemid
     items = list({i["itemid"]: i for i in items}.values())
+    inventory = zbx_inventory_facts(items)
+    if licensed_cores_by_host:
+        scope["licensed_cores"] = dict(licensed_cores_by_host)
 
     time_till = int(_time.time())
     time_from = time_till - int(float(window_hours) * 3600)
@@ -1214,7 +1291,7 @@ def zabbix_perf_report(url, auth=None, dashboardid=None, hosts=None, window_hour
 
     return {"scope": scope, "window_hours": window_hours,
             "items_total": len(items), "items_classified": len(classified),
-            "items_inventory_ignored": ignored,
+            "items_inventory_ignored": ignored, "inventory": inventory,
             "findings": findings, "active_problems": problems, "context": context,
             "evidence_texts": evidence_texts, "evidence_peaks": evidence_peaks,
             "evidence_tables": evidence_tables,
@@ -1230,6 +1307,15 @@ def render_perf_report(report):
         title = f"контур {sc['contour']} — {title}"
     lines.append(f"# Производительность: {title} (окно {report.get('window_hours')}ч)")
     lines.append(f"_Элементов данных: {report.get('items_total')}, распознано: {report.get('items_classified')}_")
+    inv = report.get("inventory") or {}
+    if inv:
+        lines.append("\n## Инвентарь хостов (знаменатели для интерпретации)")
+        lic = (report.get("scope") or {}).get("licensed_cores") or {}
+        for host in sorted(inv):
+            line = _render_inventory_host(host, inv[host])
+            if host in lic:
+                line += f" · **потолок {lic[host]} ядер rphost (лицензия 1С)**"
+            lines.append(line)
     findings = report.get("findings") or []
     if findings:
         lines.append("\n## Предложения (по убыванию вклада в производительность)")
