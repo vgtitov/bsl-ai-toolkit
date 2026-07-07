@@ -969,15 +969,17 @@ def zbx_text_evidence_window(url, auth, item, time_from, time_till, _post=None):
 
 def _load_storage_maps_for_report(maps_dir):
     """Карты структуры хранения (scripts/storage_map.py) для аннотации SQL-уликов.
-    Возвращает (модуль, maps) или (None, None) — аннотация опциональна."""
-    if not maps_dir or not os.path.isdir(maps_dir):
-        return None, None
+    Порядок: аргумент → env ONEC_STORAGE_MAPS_DIR → <репозиторий>/data/storage_maps
+    (карты, зашитые в локализацию). Возвращает (модуль, maps) или (None, None)."""
     try:
         import sys as _sys
         scripts = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts")
         if scripts not in _sys.path:
             _sys.path.insert(0, scripts)
         import storage_map as _sm
+        maps_dir = maps_dir or _sm.default_maps_dir()
+        if not maps_dir or not os.path.isdir(maps_dir):
+            return None, None
         maps = _sm.load_maps(maps_dir)
         return (_sm, maps) if maps else (None, None)
     except Exception:  # noqa: BLE001 — карты не должны ронять отчёт

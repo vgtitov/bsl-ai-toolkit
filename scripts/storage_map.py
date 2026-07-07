@@ -216,8 +216,16 @@ def status(maps_dir, expected=None):
             "missing": [b for b in expected if b not in have]}
 
 
-def default_maps_dir():
-    return os.environ.get("ONEC_STORAGE_MAPS_DIR", "")
+def default_maps_dir(repo_root=None):
+    """Каталог карт: env ONEC_STORAGE_MAPS_DIR, иначе <репозиторий>/data/storage_maps,
+    если он существует (карты, зашитые в локализацию: git pull — и перевод таблиц работает
+    у всей команды без настройки)."""
+    env = os.environ.get("ONEC_STORAGE_MAPS_DIR", "")
+    if env:
+        return env
+    root = Path(repo_root) if repo_root else Path(__file__).resolve().parents[1]
+    bundled = root / "data" / "storage_maps"
+    return str(bundled) if bundled.is_dir() else ""
 
 
 def main():

@@ -97,6 +97,18 @@ def test_parse_export_csv(tmp_path):
     assert rows == [["Справочник.Сделки", "_Reference379", "Справочник.Сделки", "Основная", "12"]]
 
 
+def test_default_maps_dir_env_and_bundled(tmp_path, monkeypatch):
+    """Порядок: env ONEC_STORAGE_MAPS_DIR → <репо>/data/storage_maps (карты в локализации) → ''."""
+    m = _load()
+    monkeypatch.delenv("ONEC_STORAGE_MAPS_DIR", raising=False)
+    assert m.default_maps_dir(repo_root=str(tmp_path)) == ""  # каталога нет
+    bundled = tmp_path / "data" / "storage_maps"
+    bundled.mkdir(parents=True)
+    assert m.default_maps_dir(repo_root=str(tmp_path)) == str(bundled)
+    monkeypatch.setenv("ONEC_STORAGE_MAPS_DIR", str(tmp_path))
+    assert m.default_maps_dir(repo_root=str(tmp_path)) == str(tmp_path)  # env главнее
+
+
 def test_staleness_warning(tmp_path):
     m = _load()
     maps_dir = tmp_path / "maps"
