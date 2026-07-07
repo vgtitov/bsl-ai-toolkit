@@ -5,9 +5,13 @@
 Итог — предложения, ранжированные по вкладу в производительность (значимое первым).
 
 Примеры:
+  python scripts/zabbix_perf.py --contour kz                 # пресет: дашборды+хосты+окно+лимит ядер
   python scripts/zabbix_perf.py --dashboard 408,410 --hosts "vc-1c-*" --window 24
   python scripts/zabbix_perf.py --hosts "kz-*" --window 1 --json
   ZABBIX_URL=http://zbx.example/api_jsonrpc.php ZABBIX_TOKEN=... python scripts/zabbix_perf.py --dashboard 408
+
+Пресеты контуров — config/zabbix-contours.toml (образец zabbix-contours.example.toml,
+env ZABBIX_CONTOURS_CONFIG — свой путь). Явные аргументы главнее пресета.
 
 Аутентификация (в порядке приоритета):
   --token / env ZABBIX_TOKEN        — API-токен (создаётся в Zabbix: Пользователь → API tokens; read-only)
@@ -33,9 +37,11 @@ def main():
     p.add_argument("--token", default=os.environ.get("ZABBIX_TOKEN", ""), help="API-токен (или env ZABBIX_TOKEN)")
     p.add_argument("--user", default=os.environ.get("ZABBIX_USER", ""),
                    help="логин для user.login (пароль спросится интерактивно), если нет токена")
+    p.add_argument("--contour", default="", help="имя пресета контура из config/zabbix-contours.toml "
+                   "(дашборды+хосты+окно+лимит ядер одним словом); явные аргументы главнее")
     p.add_argument("--dashboard", default="", help="dashboardid (из URL ...dashboardid=408); несколько через запятую: 408,410")
     p.add_argument("--hosts", default="", help="имена/шаблоны хостов через запятую (напр. 'kz-*,SQL*')")
-    p.add_argument("--window", type=float, default=1.0, help="окно анализа, часов (default 1; >48ч — тренды)")
+    p.add_argument("--window", type=float, default=None, help="окно анализа, часов (default 1, у пресета 24; >48ч — тренды)")
     p.add_argument("--licensed-cores", default="", metavar="host=N,host2=M",
                    help="лимит ядер лицензии 1С по хостам (ПРОФ = 12 на рабочий сервер): контроль потолка rphost")
     p.add_argument("--maps-dir", default=os.environ.get("ONEC_STORAGE_MAPS_DIR", ""),
@@ -52,15 +58,23 @@ def main():
             except ValueError:
                 p.error(f"--licensed-cores: не число в '{part.strip()}'")
 
-    url = a.url.strip()
+    try:
+        scope = ops.resolve_zabbix_scope(
+            contour=a.contour.strip(), url=a.url.strip(), token=a.token.strip(),
+            dashboardid=a.dashboard, hosts=[h.strip() for h in a.hosts.split(",") if h.strip()] or None,
+            window_hours=a.window, licensed_cores=licensed or None, maps_dir=a.maps_dir or "")
+    except RuntimeError as e:
+        p.error(str(e))
+
+    url = scope["url"]
     if not url:
-        p.error("нет URL: --url или env ZABBIX_URL")
+        p.error("нет URL: --url, env ZABBIX_URL или url в пресете контура")
     if "api_jsonrpc.php" not in url:  # дали URL фронтенда/дашборда — привести к API
         url = url.split("/zabbix.php")[0].split("/index.php")[0].rstrip("/") + "/api_jsonrpc.php"
-    if not a.dashboard and not a.hosts:
-        p.error("нужен --dashboard и/или --hosts")
+    if not scope["dashboardid"] and not scope["hosts"]:
+        p.error("нужен --contour, --dashboard и/или --hosts")
 
-    auth = a.token.strip() or None
+    auth = scope["token"] or None
     if not auth and a.user:
         pwd = getpass.getpass(f"Пароль Zabbix для {a.user}: ")
         auth = ops._zbx_call(url, "user.login", {"username": a.user, "password": pwd})
@@ -70,11 +84,12 @@ def main():
 
     try:
         rep = ops.zabbix_perf_report(url, auth=auth,
-                                     dashboardid=a.dashboard or None,
-                                     hosts=[h.strip() for h in a.hosts.split(",") if h.strip()] or None,
-                                     window_hours=a.window,
-                                     licensed_cores_by_host=licensed or None,
-                                     maps_dir=a.maps_dir or None)
+                                     dashboardid=scope["dashboardid"] or None,
+                                     hosts=scope["hosts"] or None,
+                                     window_hours=scope["window_hours"],
+                                     licensed_cores_by_host=scope["licensed_cores"] or None,
+                                     maps_dir=scope["maps_dir"] or None,
+                                     contour=scope["contour"])
     except RuntimeError as e:
         sys.exit(f"ОШИБКА: {e}\nПодсказка: нужен read-only API-токен (Zabbix: Профиль пользователя → API tokens) "
                  f"в env ZABBIX_TOKEN, либо --user <логин>.")

@@ -967,6 +967,83 @@ def zbx_text_evidence_window(url, auth, item, time_from, time_till, _post=None):
     return {"last": last, "peak": peak}
 
 
+# --- Пресеты контуров Zabbix: «имя контура → полный охват съёма» -------------
+# Без пресета простой запрос «проанализируй контур X» вырождается в бедный охват
+# (только дашборд, короткое окно, без лимита ядер) — главный анти-паттерн методики.
+# Файл — TOML локализации (в toolkit — config/zabbix-contours.example.toml).
+
+def default_contours_config():
+    """Путь к файлу пресетов: env ZABBIX_CONTOURS_CONFIG, иначе <репо>/config/zabbix-contours.toml."""
+    p = os.environ.get("ZABBIX_CONTOURS_CONFIG", "")
+    if p:
+        return p
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(root, "config", "zabbix-contours.toml")
+
+
+def load_zabbix_contours(path=None):
+    """Все пресеты из TOML. Нет файла/tomllib — пустой dict (пресеты опциональны)."""
+    try:
+        import tomllib  # Python 3.11+
+    except ImportError:  # pragma: no cover
+        return {}
+    path = path or default_contours_config()
+    if not path or not os.path.isfile(path):
+        return {}
+    with open(path, "rb") as f:
+        return tomllib.load(f)
+
+
+def resolve_zabbix_contour(name, path=None):
+    """Пресет контура по имени → нормализованный dict: url, dashboards (строка «408,410»),
+    hosts (список), window_hours (дефолт 24 — сутки, не час), licensed_cores {хост: ядра},
+    storage_map_base, onec_profile. Нет файла/имени — RuntimeError с подсказкой."""
+    cfg = load_zabbix_contours(path)
+    if not cfg:
+        raise RuntimeError(
+            f"пресеты контуров не найдены ({path or default_contours_config()}): "
+            "заполни config/zabbix-contours.toml (образец zabbix-contours.example.toml) "
+            "или укажи env ZABBIX_CONTOURS_CONFIG")
+    c = cfg.get(name)
+    if not isinstance(c, dict):
+        low = {k.lower(): v for k, v in cfg.items() if isinstance(v, dict)}
+        c = low.get(str(name).lower())
+    if not isinstance(c, dict):
+        known = ", ".join(sorted(k for k, v in cfg.items() if isinstance(v, dict)))
+        raise RuntimeError(f"контур '{name}' не описан в пресетах; доступны: {known}")
+    hosts = c.get("hosts") or []
+    if isinstance(hosts, str):
+        hosts = [h.strip() for h in hosts.split(",") if h.strip()]
+    return {"name": str(name),
+            "url": str(c.get("url") or ""),
+            "dashboards": str(c.get("dashboards") or ""),
+            "hosts": [str(h) for h in hosts],
+            "window_hours": float(c.get("window_hours") or 24),
+            "licensed_cores": {str(h): int(n) for h, n in (c.get("licensed_cores") or {}).items()},
+            "storage_map_base": str(c.get("storage_map_base") or ""),
+            "onec_profile": str(c.get("onec_profile") or ""),
+            "notes": str(c.get("notes") or "")}
+
+
+def resolve_zabbix_scope(contour="", url="", token="", dashboardid="", hosts=None,
+                         window_hours=None, licensed_cores=None, maps_dir="", contours_path=None):
+    """Единый вход CLI и MCP: слить пресет контура с явными аргументами и env.
+    Приоритет: явный аргумент → env (url/token) → пресет. Без contour — прежнее
+    поведение (window_hours по умолчанию 1). Возвращает готовые параметры съёма
+    + служебное из пресета (onec_profile, storage_map_base) для такта синтеза."""
+    preset = resolve_zabbix_contour(contour, contours_path) if contour else {}
+    return {"contour": contour or "",
+            "url": url or os.environ.get("ZABBIX_URL", "") or preset.get("url", ""),
+            "token": token or os.environ.get("ZABBIX_TOKEN", ""),
+            "dashboardid": dashboardid or preset.get("dashboards", ""),
+            "hosts": list(hosts) if hosts else list(preset.get("hosts") or []),
+            "window_hours": float(window_hours) if window_hours else float(preset.get("window_hours") or 1.0),
+            "licensed_cores": dict(licensed_cores) if licensed_cores else dict(preset.get("licensed_cores") or {}),
+            "maps_dir": maps_dir or "",
+            "onec_profile": preset.get("onec_profile", ""),
+            "storage_map_base": preset.get("storage_map_base", "")}
+
+
 def _load_storage_maps_for_report(maps_dir):
     """Карты структуры хранения (scripts/storage_map.py) для аннотации SQL-уликов.
     Порядок: аргумент → env ONEC_STORAGE_MAPS_DIR → <репозиторий>/data/storage_maps
@@ -987,7 +1064,8 @@ def _load_storage_maps_for_report(maps_dir):
 
 
 def zabbix_perf_report(url, auth=None, dashboardid=None, hosts=None, window_hours=1,
-                       cores_by_host=None, licensed_cores_by_host=None, maps_dir=None, _post=None):
+                       cores_by_host=None, licensed_cores_by_host=None, maps_dir=None,
+                       contour="", _post=None):
     """Сквозной отчёт производительности: items (с дашборда/дашбордОВ и/или хостов) → история
     за окно → каноничные метрики по хостам → находки, ранжированные по вкладу (самое значимое
     первым) + активные проблемы Zabbix. dashboardid: один id или несколько через запятую
@@ -997,6 +1075,8 @@ def zabbix_perf_report(url, auth=None, dashboardid=None, hosts=None, window_hour
     аннотируются объектами 1С. Read-only."""
     import time as _time
     warnings, items, scope = [], [], {}
+    if contour:
+        scope["contour"] = contour  # «до/после» сравнивают ТЕМ ЖЕ охватом — имя пресета в отчёте
     if dashboardid:
         dash_names = []
         for did in str(dashboardid).split(","):
@@ -1146,6 +1226,8 @@ def render_perf_report(report):
     lines = []
     sc = report.get("scope", {})
     title = sc.get("dashboard") or ", ".join(sc.get("hosts") or []) or "Zabbix"
+    if sc.get("contour"):
+        title = f"контур {sc['contour']} — {title}"
     lines.append(f"# Производительность: {title} (окно {report.get('window_hours')}ч)")
     lines.append(f"_Элементов данных: {report.get('items_total')}, распознано: {report.get('items_classified')}_")
     findings = report.get("findings") or []
@@ -1445,26 +1527,36 @@ try:
         return zabbix_dashboard_items(url, auth=token or None, dashboardid=dashboardid)
 
     @mcp.tool()
-    def zabbix_perf_report_tool(dashboardid: str = "", hosts: list = None,
-                                window_hours: float = 1, url: str = "", token: str = "",
+    def zabbix_perf_report_tool(contour: str = "", dashboardid: str = "", hosts: list = None,
+                                window_hours: float = 0, url: str = "", token: str = "",
                                 licensed_cores: "dict | None" = None, maps_dir: str = "") -> dict:
         """ГЛАВНЫЙ инструмент анализа производительности по Zabbix: дашборд(ы) и/или хосты →
         items → история за окно (history/trend автоматически) → каноничные метрики → находки,
         РАНЖИРОВАННЫЕ по вкладу в производительность (самое значимое первым) + активные
         проблемы + текстовые улики (CALL-контексты ТЖ, топ SQL СУБД, длинные транзакции —
-        с пиком за окно). dashboardid: один id или несколько через запятую («408,410»).
-        licensed_cores: {хост: лимит ядер лицензии 1С} (ПРОФ = 12 на рабочий сервер) — контроль
-        «rphost упёрся в потолок лицензии, хотя системный CPU зелёный». maps_dir (или env
-        ONEC_STORAGE_MAPS_DIR): карты структуры хранения — таблицы в SQL-уликах переводятся
-        в объекты 1С (scripts/storage_map.py). Возвращает report + markdown. Read-only."""
-        url = url or os.environ.get("ZABBIX_URL", "")
-        token = token or os.environ.get("ZABBIX_TOKEN", "")
-        if not url:
-            return {"error": "укажи url или env ZABBIX_URL"}
-        rep = zabbix_perf_report(url, auth=token or None, dashboardid=dashboardid or None,
-                                 hosts=hosts or None, window_hours=window_hours,
-                                 licensed_cores_by_host=licensed_cores or None,
-                                 maps_dir=maps_dir or None)
+        с пиком за окно). contour: имя пресета из config/zabbix-contours.toml — «полный охват
+        контура одним словом» (дашборды+хосты+окно 24ч+лимит ядер); явные аргументы главнее.
+        dashboardid: один id или несколько через запятую («408,410»). licensed_cores:
+        {хост: лимит ядер лицензии 1С} (ПРОФ = 12 на рабочий сервер) — контроль «rphost упёрся
+        в потолок лицензии, хотя системный CPU зелёный». maps_dir (или env ONEC_STORAGE_MAPS_DIR):
+        карты структуры хранения — таблицы в SQL-уликах переводятся в объекты 1С
+        (scripts/storage_map.py). Возвращает report + markdown. Read-only."""
+        try:
+            scope = resolve_zabbix_scope(contour=contour, url=url, token=token,
+                                         dashboardid=dashboardid, hosts=hosts,
+                                         window_hours=window_hours or None,
+                                         licensed_cores=licensed_cores, maps_dir=maps_dir)
+        except RuntimeError as e:
+            return {"error": str(e)}
+        if not scope["url"]:
+            return {"error": "укажи url, env ZABBIX_URL или url в пресете контура"}
+        rep = zabbix_perf_report(scope["url"], auth=scope["token"] or None,
+                                 dashboardid=scope["dashboardid"] or None,
+                                 hosts=scope["hosts"] or None,
+                                 window_hours=scope["window_hours"],
+                                 licensed_cores_by_host=scope["licensed_cores"] or None,
+                                 maps_dir=scope["maps_dir"] or None,
+                                 contour=scope["contour"])
         rep["markdown"] = render_perf_report(rep)
         return rep
 

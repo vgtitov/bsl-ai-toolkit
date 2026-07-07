@@ -9,6 +9,8 @@
 .env.*
 !.env.example
 credentials*.json
+# локализация с именами хостов/дашбордов контуров — в свой командный репозиторий, не сюда
+config/zabbix-contours.toml
 
 # Локальное окружение
 .mcp.json
