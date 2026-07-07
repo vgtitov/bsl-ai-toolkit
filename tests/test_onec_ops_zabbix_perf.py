@@ -606,6 +606,9 @@ def test_multi_dashboard_ids_merged():
     def fake_post(url, payload, headers=None):
         meth = payload["method"]
         if meth == "dashboard.get":
+            if "dashboardids" not in payload["params"]:  # дискавери всех дашбордов
+                return {"result": [{"dashboardid": "408", "name": "D408"},
+                                   {"dashboardid": "410", "name": "D410"}], "id": 1}
             did = payload["params"]["dashboardids"][0]
             seen.append(did)
             return {"result": [{"dashboardid": did, "name": f"D{did}", "pages": [{"widgets": [
@@ -750,3 +753,45 @@ def test_licensed_cores_cap_finding():
     rep2 = m.zabbix_perf_report("http://zbx/api_jsonrpc.php", auth="T", dashboardid="9", _post=fake_post)
     assert not any(f["metric"] == "rphost_cpu_cap_pct" for f in rep2["findings"])
     assert rep2["context"]["APP"]["process_cpu_pct"] == 1150.0
+
+
+# ---------------------------------------------------------------------------
+# Дискавери дашбордов: админ добавляет дашборды молча — отчёт сам предупреждает
+# о дашбордах вне охвата (раньше это держалось на дисциплине «сперва dashboard.get»).
+# ---------------------------------------------------------------------------
+def test_report_warns_about_dashboards_outside_scope():
+    m = _load()
+
+    def fake_post(url, payload, headers=None):
+        meth = payload["method"]
+        if meth == "dashboard.get":
+            if "dashboardids" in payload["params"]:
+                return {"result": [{"dashboardid": "408", "name": "APP", "pages": []}], "id": 1}
+            return {"result": [{"dashboardid": "408", "name": "APP"},
+                               {"dashboardid": "555", "name": "НОВЫЙ СУБД"}], "id": 1}
+        return {"result": [], "id": 1}
+
+    rep = m.zabbix_perf_report("http://zbx/api_jsonrpc.php", auth="T", dashboardid="408",
+                               _post=fake_post)
+    w = " ".join(rep["warnings"])
+    assert "555" in w and "НОВЫЙ СУБД" in w
+    # охваченный дашборд в предупреждение не попадает
+    assert "вне охвата" in w and "408" not in w.split("вне охвата")[1].split(":")[1].split("555")[0]
+
+
+def test_report_no_warning_when_all_dashboards_covered():
+    m = _load()
+
+    def fake_post(url, payload, headers=None):
+        meth = payload["method"]
+        if meth == "dashboard.get":
+            if "dashboardids" in payload["params"]:
+                did = payload["params"]["dashboardids"][0]
+                return {"result": [{"dashboardid": did, "name": f"D{did}", "pages": []}], "id": 1}
+            return {"result": [{"dashboardid": "408", "name": "D408"},
+                               {"dashboardid": "410", "name": "D410"}], "id": 1}
+        return {"result": [], "id": 1}
+
+    rep = m.zabbix_perf_report("http://zbx/api_jsonrpc.php", auth="T", dashboardid="408,410",
+                               _post=fake_post)
+    assert not any("вне охвата" in w for w in rep["warnings"])

@@ -1163,6 +1163,19 @@ def zabbix_perf_report(url, auth=None, dashboardid=None, hosts=None, window_hour
             items += d["items"]
             warnings += d["warnings"]
         scope["dashboard"] = ", ".join(dash_names) or None
+        # дискавери: админы добавляют дашборды молча — предупредить о дашбордах вне охвата,
+        # чтобы новый (например, свежий дашборд СУБД) не остался незамеченным
+        try:
+            all_dash = _zbx_call(url, "dashboard.get",
+                                 {"output": ["dashboardid", "name"]}, auth, _post) or []
+            wanted = {d.strip() for d in str(dashboardid).split(",") if d.strip()}
+            extra = [f"{d['dashboardid']} «{d.get('name', '')}»" for d in all_dash
+                     if str(d.get("dashboardid")) not in wanted]
+            if extra:
+                warnings.append("дашборды вне охвата (проверь, не про этот ли контур, и дополни пресет): "
+                                + ", ".join(extra))
+        except RuntimeError as e:
+            warnings.append(f"dashboard.get (дискавери всех дашбордов): {e}")
     if hosts:
         h = zabbix_host_items(url, auth, hosts, _post=_post)
         scope["hosts"] = h["hosts"]
