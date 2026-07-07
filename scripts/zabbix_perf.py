@@ -36,8 +36,21 @@ def main():
     p.add_argument("--dashboard", default="", help="dashboardid (из URL ...dashboardid=408); несколько через запятую: 408,410")
     p.add_argument("--hosts", default="", help="имена/шаблоны хостов через запятую (напр. 'kz-*,SQL*')")
     p.add_argument("--window", type=float, default=1.0, help="окно анализа, часов (default 1; >48ч — тренды)")
+    p.add_argument("--licensed-cores", default="", metavar="host=N,host2=M",
+                   help="лимит ядер лицензии 1С по хостам (ПРОФ = 12 на рабочий сервер): контроль потолка rphost")
+    p.add_argument("--maps-dir", default=os.environ.get("ONEC_STORAGE_MAPS_DIR", ""),
+                   help="каталог карт структуры хранения (или env ONEC_STORAGE_MAPS_DIR) — расшифровка таблиц в SQL-уликах")
     p.add_argument("--json", action="store_true", help="вывести сырой JSON отчёта вместо markdown")
     a = p.parse_args()
+
+    licensed = {}
+    for part in a.licensed_cores.split(","):
+        if "=" in part:
+            h, n = part.split("=", 1)
+            try:
+                licensed[h.strip()] = int(n)
+            except ValueError:
+                p.error(f"--licensed-cores: не число в '{part.strip()}'")
 
     url = a.url.strip()
     if not url:
@@ -59,7 +72,9 @@ def main():
         rep = ops.zabbix_perf_report(url, auth=auth,
                                      dashboardid=a.dashboard or None,
                                      hosts=[h.strip() for h in a.hosts.split(",") if h.strip()] or None,
-                                     window_hours=a.window)
+                                     window_hours=a.window,
+                                     licensed_cores_by_host=licensed or None,
+                                     maps_dir=a.maps_dir or None)
     except RuntimeError as e:
         sys.exit(f"ОШИБКА: {e}\nПодсказка: нужен read-only API-токен (Zabbix: Профиль пользователя → API tokens) "
                  f"в env ZABBIX_TOKEN, либо --user <логин>.")

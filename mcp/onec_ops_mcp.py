@@ -461,6 +461,14 @@ def diagnose_metrics(metrics, cores=None):
             "Подключения PostgreSQL близки к max_connections — новые соединения получат отказ",
             "Проверить, кто держит соединения (idle in transaction?); пул соединений 1С/pgbouncer; "
             "поднимать max_connections — последним (каждый backend ест RAM)", 80)
+    if m.get("rphost_cpu_cap_pct") is not None and m["rphost_cpu_cap_pct"] > 70:
+        add("rphost_cpu_cap_pct", m["rphost_cpu_cap_pct"], ">70% лицензионного лимита",
+            "high" if m["rphost_cpu_cap_pct"] > 85 else "medium",
+            "rphost выбирает лицензионный потолок ядер (лицензия ПРОФ ограничивает рабочие процессы "
+            "сервера 1С): часть CPU сервера простаивает, а пользователи ждут",
+            "Смотреть НЕ системный CPU, а CPU rphost против лимита ядер лицензии. Лечение: "
+            "оптимизировать топ-потребителей (ТЖ CALL/DBMSSQL), выключить лишние регламентные, "
+            "перенести фон на окна; апгрейд на КОРП — последним, когда код выжат", 70)
     if m.get("disk_queue") is not None and m["disk_queue"] > 2:
         add("disk_queue", m["disk_queue"], ">2 на диск", "high",
             "Очередь к диску >2 — дисковая подсистема не справляется",
@@ -959,12 +967,32 @@ def zbx_text_evidence_window(url, auth, item, time_from, time_till, _post=None):
     return {"last": last, "peak": peak}
 
 
+def _load_storage_maps_for_report(maps_dir):
+    """Карты структуры хранения (scripts/storage_map.py) для аннотации SQL-уликов.
+    Возвращает (модуль, maps) или (None, None) — аннотация опциональна."""
+    if not maps_dir or not os.path.isdir(maps_dir):
+        return None, None
+    try:
+        import sys as _sys
+        scripts = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts")
+        if scripts not in _sys.path:
+            _sys.path.insert(0, scripts)
+        import storage_map as _sm
+        maps = _sm.load_maps(maps_dir)
+        return (_sm, maps) if maps else (None, None)
+    except Exception:  # noqa: BLE001 — карты не должны ронять отчёт
+        return None, None
+
+
 def zabbix_perf_report(url, auth=None, dashboardid=None, hosts=None, window_hours=1,
-                       cores_by_host=None, _post=None):
+                       cores_by_host=None, licensed_cores_by_host=None, maps_dir=None, _post=None):
     """Сквозной отчёт производительности: items (с дашборда/дашбордОВ и/или хостов) → история
     за окно → каноничные метрики по хостам → находки, ранжированные по вкладу (самое значимое
     первым) + активные проблемы Zabbix. dashboardid: один id или несколько через запятую
-    («408,410» — app-сервер + СУБД). Read-only."""
+    («408,410» — app-сервер + СУБД). licensed_cores_by_host: лимит ядер лицензии 1С на хост
+    (ПРОФ = 12 на рабочий сервер) — включает контроль «rphost упёрся в потолок лицензии».
+    maps_dir (или env ONEC_STORAGE_MAPS_DIR): карты структуры хранения — SQL-улики
+    аннотируются объектами 1С. Read-only."""
     import time as _time
     warnings, items, scope = [], [], {}
     if dashboardid:
@@ -1023,6 +1051,19 @@ def zabbix_perf_report(url, auth=None, dashboardid=None, hosts=None, window_hour
         else:
             unclassified.append(f"{it.get('host', '?')}: {it.get('name', '')} [{it.get('key_', '')}]")
 
+    # карты структуры хранения: перевод _InfoRg…/_Reference… из SQL-уликов в объекты 1С
+    sm, smaps = _load_storage_maps_for_report(maps_dir or os.environ.get("ONEC_STORAGE_MAPS_DIR", ""))
+    evidence_tables = []
+    if sm and (evidence_texts or evidence_peaks):
+        blobs = [t for kinds in evidence_texts.values() for t in kinds.values()]
+        blobs += [p["text"] for kinds in evidence_peaks.values() for p in kinds.values()]
+        seen_tbl = set()
+        for note in sm.tables_in_text("\n".join(blobs), smaps):
+            key = (note["table"].lower(), note["base"])
+            if key not in seen_tbl:
+                seen_tbl.add(key)
+                evidence_tables.append(note)
+
     stats = zabbix_item_stats(url, auth, [it for it, _m, _t in classified],
                               time_from=time_from, time_till=time_till, _post=_post)
 
@@ -1044,6 +1085,21 @@ def zabbix_perf_report(url, auth=None, dashboardid=None, hosts=None, window_hour
         if metric in _METRIC_CONTEXT:
             # контекст нагрузки (сессии/лицензии/CPU процесса) — текущее значение, не порог
             context.setdefault(host, {})[metric] = transform(st["last"]) if st else rep_val
+            # …но если известен лимит ядер лицензии 1С (ПРОФ = 12 на рабочий сервер) — CPU rphost
+            # сравнивается с ЛИМИТОМ, а не с числом ядер сервера: 12 из 14 ядер = системно 86%,
+            # а для 1С это все 100% доступного
+            lic = (licensed_cores_by_host or {}).get(host)
+            if metric == "process_cpu_pct" and lic:
+                cap_vals = [v / (float(lic) * 100.0) * 100.0 for v in vals]
+                cap_val = rep_val / (float(lic) * 100.0) * 100.0
+                hm = host_metrics.setdefault(host, {"snapshot": {}, "samples": {},
+                                                    "cores": (cores_by_host or {}).get(host)})
+                prev = hm["snapshot"].get("rphost_cpu_cap_pct")
+                if prev is None or cap_val > prev:
+                    hm["snapshot"]["rphost_cpu_cap_pct"] = cap_val
+                    hm["samples"]["rphost_cpu_cap_pct"] = cap_vals
+                    evidence[(host, "rphost_cpu_cap_pct")] = {"item": it.get("name"), "key": it.get("key_"),
+                                                              "samples": len(cap_vals)}
             continue
         if st and st.get("truncated"):
             warnings.append(f"{host}: история '{it.get('name')}' плотнее лимита {_HIST_LIMIT} — "
@@ -1079,6 +1135,7 @@ def zabbix_perf_report(url, auth=None, dashboardid=None, hosts=None, window_hour
             "items_inventory_ignored": ignored,
             "findings": findings, "active_problems": problems, "context": context,
             "evidence_texts": evidence_texts, "evidence_peaks": evidence_peaks,
+            "evidence_tables": evidence_tables,
             "unclassified": unclassified[:50], "warnings": warnings}
 
 
@@ -1124,6 +1181,12 @@ def render_perf_report(report):
                     import time as _time
                     ts = _time.strftime("%d.%m %H:%M", _time.localtime(int(pk["clock"]))) if pk.get("clock") else "?"
                     lines.append(f"\n**Пик за окно** ({label}): {pk['max_seconds']:g} сек @ {ts}\n```\n{pk['text']}\n```")
+    tabs = report.get("evidence_tables") or []
+    if tabs:
+        lines.append("\n## Расшифровка таблиц СУБД (карты структуры хранения)")
+        for t in tabs:
+            extra = f" [{t['purpose']}]" if t.get("purpose") and t["purpose"] != "Основная" else ""
+            lines.append(f"- `{t['table']}` = **{t['metadata']}**{extra} (карта: {t['base']})")
     probs = report.get("active_problems") or []
     if probs:
         lines.append("\n## Активные проблемы Zabbix (триггеры)")
@@ -1381,19 +1444,25 @@ try:
 
     @mcp.tool()
     def zabbix_perf_report_tool(dashboardid: str = "", hosts: list = None,
-                                window_hours: float = 1, url: str = "", token: str = "") -> dict:
+                                window_hours: float = 1, url: str = "", token: str = "",
+                                licensed_cores: "dict | None" = None, maps_dir: str = "") -> dict:
         """ГЛАВНЫЙ инструмент анализа производительности по Zabbix: дашборд(ы) и/или хосты →
         items → история за окно (history/trend автоматически) → каноничные метрики → находки,
         РАНЖИРОВАННЫЕ по вкладу в производительность (самое значимое первым) + активные
         проблемы + текстовые улики (CALL-контексты ТЖ, топ SQL СУБД, длинные транзакции —
         с пиком за окно). dashboardid: один id или несколько через запятую («408,410»).
-        Возвращает report (данные) + markdown (для человека). Read-only."""
+        licensed_cores: {хост: лимит ядер лицензии 1С} (ПРОФ = 12 на рабочий сервер) — контроль
+        «rphost упёрся в потолок лицензии, хотя системный CPU зелёный». maps_dir (или env
+        ONEC_STORAGE_MAPS_DIR): карты структуры хранения — таблицы в SQL-уликах переводятся
+        в объекты 1С (scripts/storage_map.py). Возвращает report + markdown. Read-only."""
         url = url or os.environ.get("ZABBIX_URL", "")
         token = token or os.environ.get("ZABBIX_TOKEN", "")
         if not url:
             return {"error": "укажи url или env ZABBIX_URL"}
         rep = zabbix_perf_report(url, auth=token or None, dashboardid=dashboardid or None,
-                                 hosts=hosts or None, window_hours=window_hours)
+                                 hosts=hosts or None, window_hours=window_hours,
+                                 licensed_cores_by_host=licensed_cores or None,
+                                 maps_dir=maps_dir or None)
         rep["markdown"] = render_perf_report(rep)
         return rep
 

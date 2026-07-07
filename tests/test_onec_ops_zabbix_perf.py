@@ -676,3 +676,77 @@ def test_diagnose_pg_connections_pct():
     assert by["pg_connections_pct"]["severity"] == "high"
     assert m.zbx_classify_item({"key_": "pgsql.connections.sum.total_pct",
                                 "name": "Connections sum: Total, %", "units": "%"})[0] == "pg_connections_pct"
+
+
+# ---------------------------------------------------------------------------
+# Карты структуры хранения: SQL-улики аннотируются объектами 1С (env ONEC_STORAGE_MAPS_DIR).
+# ---------------------------------------------------------------------------
+def test_evidence_tables_annotated_from_storage_maps(tmp_path, monkeypatch):
+    import importlib
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    sm = importlib.reload(importlib.import_module("storage_map"))
+    sm.import_rows([["РегистрСведений.ОчередьKafka", "_InfoRg32784",
+                     "РегистрСведений.ОчередьKafka", "Основная", ""]],
+                   base="ERP_T", maps_dir=str(tmp_path))
+    monkeypatch.setenv("ONEC_STORAGE_MAPS_DIR", str(tmp_path))
+    m = _load()
+
+    def fake_post(url, payload, headers=None):
+        meth = payload["method"]
+        if meth == "dashboard.get":
+            return {"result": [{"dashboardid": "410", "name": "db", "pages": [{"widgets": [
+                {"type": "itemhistory", "name": "w", "fields": [{"type": "4", "name": "columns.0.itemid", "value": "1"}]},
+            ]}]}], "id": 1}
+        if meth == "item.get":
+            return {"result": [{"itemid": "1", "name": "Postgres: ТОП-10 тяжелых SQL запросов по времени (CPU)",
+                                "key_": "pg.top.sql.time", "units": "", "value_type": "4",
+                                "lastvalue": "914 | 210 | 4352 | ERP | SELECT x FROM _InfoRg32784 T1",
+                                "lastclock": "1", "hosts": [{"host": "db", "name": "DB"}]}], "id": 1}
+        if meth == "history.get":
+            return {"result": [], "id": 1}
+        if meth == "problem.get":
+            return {"result": [], "id": 1}
+        raise AssertionError(meth)
+
+    rep = m.zabbix_perf_report("http://zbx/api_jsonrpc.php", auth="T", dashboardid="410", _post=fake_post)
+    tabs = {t["table"]: t["metadata"] for t in rep["evidence_tables"]}
+    assert tabs.get("_InfoRg32784") == "РегистрСведений.ОчередьKafka"
+    text = m.render_perf_report(rep)
+    assert "Расшифровка таблиц СУБД" in text and "ОчередьKafka" in text
+
+
+# ---------------------------------------------------------------------------
+# Лицензионный потолок ядер (ПРОФ = 12 на рабочий сервер): rphost может выбрать лимит,
+# когда системный CPU ещё «зелёный» (12 из 14 ядер = 86% системных, но 100% доступных 1С).
+# ---------------------------------------------------------------------------
+def test_licensed_cores_cap_finding():
+    m = _load()
+
+    def fake_post(url, payload, headers=None):
+        meth = payload["method"]
+        if meth == "dashboard.get":
+            return {"result": [{"dashboardid": "9", "name": "D", "pages": [{"widgets": [
+                {"type": "item", "name": "w", "fields": [{"type": "4", "name": "itemid.0", "value": "2"}]},
+            ]}]}], "id": 1}
+        if meth == "item.get":
+            return {"result": [{"itemid": "2", "name": "CPU процессов rphost",
+                                "key_": 'perf_counter_en["\\Process(rphost*)\\% Processor Time"]',
+                                "units": "%", "value_type": "0", "lastvalue": "1150",
+                                "lastclock": "1", "hosts": [{"host": "app", "name": "APP"}]}], "id": 1}
+        if meth == "history.get":
+            # rphost стабильно ~1150% = 11.5 ядра из 12 лицензионных
+            return {"result": [{"itemid": "2", "clock": str(1750000000 + i), "value": "1150"}
+                               for i in range(4)], "id": 1}
+        if meth == "problem.get":
+            return {"result": [], "id": 1}
+        raise AssertionError(meth)
+
+    rep = m.zabbix_perf_report("http://zbx/api_jsonrpc.php", auth="T", dashboardid="9",
+                               licensed_cores_by_host={"APP": 12}, _post=fake_post)
+    f = next(f for f in rep["findings"] if f["metric"] == "rphost_cpu_cap_pct")
+    assert f["severity"] == "high" and f["persistence"] == 1.0
+    assert "лицензионн" in f["problem"].lower() or "проф" in f["problem"].lower()
+    # без licensed_cores находки нет (контекст, как раньше)
+    rep2 = m.zabbix_perf_report("http://zbx/api_jsonrpc.php", auth="T", dashboardid="9", _post=fake_post)
+    assert not any(f["metric"] == "rphost_cpu_cap_pct" for f in rep2["findings"])
+    assert rep2["context"]["APP"]["process_cpu_pct"] == 1150.0
