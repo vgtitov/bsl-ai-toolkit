@@ -807,7 +807,7 @@ def _render_inventory_host(host, f):
         if d.get("total_bytes"):
             s += f" {d['total_bytes'] / 10 ** 9:.0f} GB"
         if d.get("used_pct") is not None:
-            s += f" (занято {d['used_pct']:g}%)"
+            s += f" (занято {d['used_pct']:.1f}%)"
         elif d.get("used_bytes") and d.get("total_bytes"):
             s += f" (занято {d['used_bytes'] / d['total_bytes'] * 100:.0f}%)"
         parts.append(s)
