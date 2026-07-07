@@ -47,6 +47,11 @@ def main():
     p.add_argument("--maps-dir", default=os.environ.get("ONEC_STORAGE_MAPS_DIR", ""),
                    help="каталог карт структуры хранения (или env ONEC_STORAGE_MAPS_DIR) — расшифровка таблиц в SQL-уликах")
     p.add_argument("--json", action="store_true", help="вывести сырой JSON отчёта вместо markdown")
+    p.add_argument("--out", default="", metavar="ФАЙЛ.json",
+                   help="сохранить сырой JSON отчёта (базовый снимок для будущего --baseline)")
+    p.add_argument("--baseline", default="", metavar="ФАЙЛ.json",
+                   help="JSON прошлого отчёта (--out): добавить сравнение «до/после» impact-строк; "
+                        "охват обязан совпадать (пресет это гарантирует)")
     a = p.parse_args()
 
     licensed = {}
@@ -93,10 +98,21 @@ def main():
     except RuntimeError as e:
         sys.exit(f"ОШИБКА: {e}\nПодсказка: нужен read-only API-токен (Zabbix: Профиль пользователя → API tokens) "
                  f"в env ZABBIX_TOKEN, либо --user <логин>.")
+    if a.out:
+        with open(a.out, "w", encoding="utf-8") as f:
+            json.dump(rep, f, ensure_ascii=False, indent=2)
+        print(f"# JSON отчёта сохранён: {a.out}", file=sys.stderr)
     if a.json:
         json.dump(rep, sys.stdout, ensure_ascii=False, indent=2)
     else:
         print(ops.render_perf_report(rep))
+    if a.baseline:
+        try:
+            with open(a.baseline, encoding="utf-8") as f:
+                base = json.load(f)
+        except (OSError, ValueError) as e:
+            sys.exit(f"ОШИБКА --baseline: {e}")
+        print("\n" + ops.render_perf_diff(ops.perf_report_diff(base, rep)))
 
 
 if __name__ == "__main__":

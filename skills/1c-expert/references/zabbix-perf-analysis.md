@@ -97,6 +97,10 @@ python scripts/zabbix_perf.py --dashboard <id[,id2]> --hosts "<маска-все
                                   счётчики, история item'ов) — превращай пробелы в заявки, не в молчание
 ```
 
+Сравнение «до/после» автоматизировано: первый прогон сохрани с `--out base.json`, после работ —
+`--contour <имя> --baseline base.json` (или MCP `zabbix_perf_diff_tool`) — решённые/новые находки и
+динамика impact считаются сами; расхождение охвата инструмент бракует (scope_mismatch).
+
 Сниппеты ТЖ и SQL не сочиняй — бери проверенные из references этого скилла (tech-journal.md,
 query-optimization.md, locks-and-deadlocks.md) и подставляй имена таблиц/окна из данных.
 

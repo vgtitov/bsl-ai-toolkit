@@ -1386,6 +1386,69 @@ def render_perf_report(report):
     return "\n".join(lines)
 
 
+# --- Сравнение «до/после» perf-отчётов (доказательство ускорения) -----------
+
+def perf_report_diff(baseline, current):
+    """Сверка двух perf-отчётов (JSON zabbix_perf_report): решённые/новые находки и динамика
+    по (host, metric). Методика: «до/после» сравнивают ТЕМ ЖЕ охватом и окном — расхождение
+    охвата попадает в scope_mismatch (такое сравнение бракуется, не интерпретируй молча)."""
+    mism = []
+    bs, cs = baseline.get("scope") or {}, current.get("scope") or {}
+    if baseline.get("window_hours") != current.get("window_hours"):
+        mism.append(f"окно: {baseline.get('window_hours')}ч → {current.get('window_hours')}ч")
+    if (bs.get("dashboard") or "") != (cs.get("dashboard") or ""):
+        mism.append(f"дашборды: {bs.get('dashboard')} → {cs.get('dashboard')}")
+    if sorted(bs.get("hosts") or []) != sorted(cs.get("hosts") or []):
+        mism.append(f"хосты: {bs.get('hosts')} → {cs.get('hosts')}")
+    if (bs.get("contour") or "") != (cs.get("contour") or ""):
+        mism.append(f"контур: {bs.get('contour')} → {cs.get('contour')}")
+
+    def _by_key(rep):
+        return {(f.get("host"), f.get("metric")): f for f in rep.get("findings") or []}
+
+    b, c = _by_key(baseline), _by_key(current)
+    resolved = [b[k] for k in b if k not in c]
+    new = [c[k] for k in c if k not in b]
+    changed = []
+    for k in b:
+        if k in c:
+            changed.append({"host": k[0], "metric": k[1], "problem": c[k].get("problem"),
+                            "value_before": b[k].get("value"), "value_after": c[k].get("value"),
+                            "impact_before": b[k].get("impact_score"),
+                            "impact_after": c[k].get("impact_score"),
+                            "persistence_before": b[k].get("persistence"),
+                            "persistence_after": c[k].get("persistence")})
+    changed.sort(key=lambda x: (x.get("impact_before") or 0), reverse=True)
+    return {"scope_mismatch": mism, "resolved": resolved, "new": new, "changed": changed}
+
+
+def render_perf_diff(diff):
+    """Дифф «до/после» → markdown: сперва брак охвата, затем решённое, динамика, новое."""
+    lines = ["# Сравнение до/после (impact-строки)"]
+    if diff.get("scope_mismatch"):
+        lines.append("\n⚠ **ОХВАТ РАЗЛИЧАЕТСЯ — сравнение некорректно** (методика: тот же охват и окно):")
+        for s in diff["scope_mismatch"]:
+            lines.append(f"- {s}")
+    if diff.get("resolved"):
+        lines.append("\n## Решённые находки (были в базовом, ушли)")
+        for f in diff["resolved"]:
+            lines.append(f"- {f.get('host')} · `{f.get('metric')}` — было {f.get('value')} (impact {f.get('impact_score')})")
+    if diff.get("changed"):
+        lines.append("\n## Динамика (по убыванию исходного impact)")
+        for ch in diff["changed"]:
+            pb = round((ch.get("persistence_before") or 0) * 100)
+            pa = round((ch.get("persistence_after") or 0) * 100)
+            lines.append(f"- {ch['host']} · `{ch['metric']}`: {ch['value_before']} → {ch['value_after']}; "
+                         f"impact {ch['impact_before']} → {ch['impact_after']}; за порогом {pb}% → {pa}% времени")
+    if diff.get("new"):
+        lines.append("\n## Новые находки (не было в базовом)")
+        for f in diff["new"]:
+            lines.append(f"- {f.get('host')} · `{f.get('metric')}` — {f.get('value')} (impact {f.get('impact_score')})")
+    if not (diff.get("resolved") or diff.get("changed") or diff.get("new")):
+        lines.append("\nНаходок нет ни в одном из отчётов.")
+    return "\n".join(lines)
+
+
 # ============================================================================
 # Prometheus — ОПЦИОНАЛЬНЫЙ адаптер (встречается реже Zabbix). Read-only PromQL.
 # Полезен, когда метрики кластера 1С отдаёт экспортер (напр. LazarenkoA/prometheus_1C_exporter),
@@ -1658,6 +1721,16 @@ try:
                                  contour=scope["contour"])
         rep["markdown"] = render_perf_report(rep)
         return rep
+
+    @mcp.tool()
+    def zabbix_perf_diff_tool(baseline: dict, current: dict) -> dict:
+        """Сравнение «до/после» двух perf-отчётов (JSON zabbix_perf_report_tool) — доказательство
+        ускорения по методике: решённые/новые находки и динамика value/impact/persistence по
+        (host, metric). Расхождение охвата или окна попадает в scope_mismatch — такое сравнение
+        бракуется. Возвращает diff + markdown. Read-only."""
+        d = perf_report_diff(baseline, current)
+        d["markdown"] = render_perf_diff(d)
+        return d
 
     @mcp.tool()
     def event_log_parse_tool(source: str, level: str = "", user: str = "",
