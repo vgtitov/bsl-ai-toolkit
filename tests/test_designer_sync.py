@@ -26,6 +26,16 @@ def test_resolve_cred_contour_and_fallback():
     assert m.resolve_cred("STORAGE", "kz", {}) == (None, None)         # не задано — без /N /P
 
 
+def test_resolve_cred_priority_storage_name_over_contour():
+    # пароли бывают разные ПО ХРАНИЛИЩАМ одного контура: первый найденный из списка ключей
+    m = _load()
+    env = {"ONEC_STORAGE_USER": "u", "ONEC_STORAGE_PASS": "base",
+           "ONEC_STORAGE_PASS_RB": "rb", "ONEC_STORAGE_PASS_ERP_RB_PROD": "erp-rb"}
+    assert m.resolve_cred("STORAGE", ["ERP_RB_PROD", "RB"], env) == ("u", "erp-rb")  # имя хранилища первично
+    assert m.resolve_cred("STORAGE", ["UT_RB_PROD", "RB"], env) == ("u", "rb")       # нет имени → контур
+    assert m.resolve_cred("STORAGE", ["ERP_KZ_PROD", "KZ"], env) == ("u", "base")    # нет обоих → общий
+
+
 def test_base_args_file_vs_server(tmp_path):
     m = _load()
     assert m.base_args(str(tmp_path)) == ["/F", str(tmp_path)]         # каталог существует → файловая

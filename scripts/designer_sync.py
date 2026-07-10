@@ -39,14 +39,17 @@ sys.path.insert(0, str(SCRIPTS_DIR))                      # detect_tools ряд�
 sys.path.insert(0, str(SCRIPTS_DIR.parent / "mcp"))       # load_dotenv_defaults
 
 
-def resolve_cred(kind: str, contour: str | None, env=None):
-    """(user, pass) для kind IB|STORAGE: логин един (ONEC_<kind>_USER),
-    пароль — ONEC_<kind>_PASS_<КОНТУР> с фолбэком на ONEC_<kind>_PASS."""
+def resolve_cred(kind: str, keys, env=None):
+    """(user, pass) для kind IB|STORAGE: логин един (ONEC_<kind>_USER); пароль — первый
+    заданный ONEC_<kind>_PASS_<КЛЮЧ> по списку ключей (имя хранилища, контур, ...),
+    фолбэк ONEC_<kind>_PASS. Пароли бывают разные и по контурам, и по хранилищам."""
     env = os.environ if env is None else env
     user = env.get(f"ONEC_{kind}_USER") or None
     password = None
-    if contour:
-        password = env.get(f"ONEC_{kind}_PASS_{contour.upper()}") or None
+    for key in ([keys] if isinstance(keys, str) else (keys or [])):
+        password = env.get(f"ONEC_{kind}_PASS_{key.upper()}") or None
+        if password:
+            break
     password = password or env.get(f"ONEC_{kind}_PASS") or None
     return user, password
 
