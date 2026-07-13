@@ -12,11 +12,16 @@ docs/superpowers/specs/2026-07-12-1c-metadata-design.md:
 """
 
 SUPPORTED: dict[str, frozenset] = {
-    # макеты табличных документов (печатные формы)
+    # макеты табличных документов (печатные формы) — Конфигуратор-XML
     "Template": frozenset({"add_column"}),
-    # отчёты: их СКД-макеты
+    # отчёты: их СКД-макеты — оба формата (.xml Конфигуратора и .dcs EDT)
     "Report": frozenset({"scd_add_field", "scd_set_query", "scd_get_query"}),
-    # реквизиты объектов
-    "Catalog": frozenset({"attribute_add"}),
-    "Document": frozenset({"attribute_add"}),
+    # реквизиты объектов — оба формата (.xml / .mdo)
+    "Catalog": frozenset({"attribute_add", "add_child"}),
+    "Document": frozenset({"attribute_add", "add_child"}),
+    # регистры: измерения/ресурсы/реквизиты — оба формата
+    "InformationRegister": frozenset({"add_child"}),
+    "AccumulationRegister": frozenset({"add_child"}),
+    # перечисления: значения — оба формата
+    "Enum": frozenset({"add_child"}),
 }
