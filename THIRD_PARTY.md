@@ -21,7 +21,7 @@ Toolkit ссылается на них в скиллах/доках; код не
 | [1c-syntax/bsl-language-server](https://github.com/1c-syntax/bsl-language-server) | проверка синтаксиса/стандартов BSL | `skills/1c-dev/references/code-standards.md` |
 | [1C-Company/v8-code-style](https://github.com/1C-Company/v8-code-style) | официальные стандарты разработки (ссылки на checks) | `code-standards.md` |
 | [alkoleft/mcp-bsl-context](https://github.com/alkoleft/mcp-bsl-context) | справка по API платформы | `README.md` |
-| [Nikolay-Shirokov/cc-1c-skills](https://github.com/Nikolay-Shirokov/cc-1c-skills) | механические операции с платформой 1С | `platform-ops.md` (MIT) |
+| [Nikolay-Shirokov/cc-1c-skills](https://github.com/Nikolay-Shirokov/cc-1c-skills) | механические операции с платформой 1С; референс подходов JSON→XML для операций над метаданными в `onec_metadata/` (код свой) | `platform-ops.md`, `onec_metadata/` (MIT) |
 
 Лицензию каждого внешнего проекта смотрите в его репозитории. Если вы включаете какой-то из них в свою сборку —
 соблюдайте его условия отдельно.

@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""1c-meta — headless CLI редактирования метаданных 1С (Конфигуратор-XML).
+
+Подкоманды соответствуют операциям onec_metadata/ops. Ошибка предусловия
+(объект не найден, дубль) — exit 2 с сообщением в stderr; файлы не меняются.
+"""
+import argparse
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from onec_metadata.formats.detect import detect_format, UnknownFormatError  # noqa: E402
+from onec_metadata.ops import OpPreconditionError  # noqa: E402
+
+
+def build_parser() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(prog="1c-meta")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    d = sub.add_parser("detect", help="определить формат дерева исходников")
+    d.add_argument("root")
+
+    t = sub.add_parser("template", help="операции с макетами печатных форм")
+    tsub = t.add_subparsers(dest="tcmd", required=True)
+    tac = tsub.add_parser("add-column")
+    tac.add_argument("file")
+    tac.add_argument("--after", required=True, help="заголовок колонки-якоря")
+    tac.add_argument("--header", required=True, help="заголовок новой колонки")
+    tac.add_argument("--parameter", required=True, help="имя параметра данных")
+
+    s = sub.add_parser("scd", help="операции со схемой компоновки данных")
+    ssub = s.add_subparsers(dest="scmd", required=True)
+    saf = ssub.add_parser("add-field")
+    saf.add_argument("file")
+    saf.add_argument("--dataset", required=True)
+    saf.add_argument("--field", required=True)
+    saf.add_argument("--data-path", required=True)
+    saf.add_argument("--title", required=True)
+    sgq = ssub.add_parser("get-query")
+    sgq.add_argument("file")
+    sgq.add_argument("--dataset", required=True)
+    ssq = ssub.add_parser("set-query")
+    ssq.add_argument("file")
+    ssq.add_argument("--dataset", required=True)
+    ssq.add_argument("--from-file", required=True)
+
+    a = sub.add_parser("attr", help="реквизиты объектов метаданных")
+    asub = a.add_subparsers(dest="acmd", required=True)
+    aa = asub.add_parser("add")
+    aa.add_argument("file")
+    aa.add_argument("--name", required=True)
+    aa.add_argument("--type", dest="type_ref", required=True)
+    aa.add_argument("--synonym", required=True)
+
+    return ap
+
+
+def main() -> None:
+    ns = build_parser().parse_args()
+    try:
+        if ns.cmd == "detect":
+            print(detect_format(Path(ns.root)).name)
+        elif ns.cmd == "template":
+            from onec_metadata.ops.template_add_column import add_column
+            add_column(Path(ns.file), ns.after, ns.header, ns.parameter)
+        elif ns.cmd == "scd":
+            from onec_metadata.ops import scd
+            if ns.scmd == "add-field":
+                scd.add_field(Path(ns.file), ns.dataset, ns.field,
+                              ns.data_path, ns.title)
+            elif ns.scmd == "get-query":
+                print(scd.get_dataset_query(Path(ns.file), ns.dataset))
+            else:
+                scd.set_dataset_query(
+                    Path(ns.file), ns.dataset,
+                    Path(ns.from_file).read_text(encoding="utf-8"))
+        elif ns.cmd == "attr":
+            from onec_metadata.ops.attribute_add import add_attribute
+            add_attribute(Path(ns.file), ns.name, ns.type_ref, ns.synonym)
+    except (OpPreconditionError, UnknownFormatError) as e:
+        print(f"Ошибка предусловия: {e}", file=sys.stderr)
+        sys.exit(2)
+
+
+if __name__ == "__main__":
+    main()
