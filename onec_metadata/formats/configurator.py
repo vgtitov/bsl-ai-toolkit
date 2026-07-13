@@ -51,13 +51,16 @@ _PARSER = etree.XMLParser(
 
 
 class Doc:
-    """XML-документ Конфигуратора: lxml-дерево + детали исходного файла."""
+    """Платформенный XML-документ (Конфигуратор ИЛИ EDT): lxml-дерево +
+    детали исходного файла (BOM, переводы строк, хвост) для точного
+    воспроизведения стиля при сохранении."""
 
     def __init__(self, tree: etree._ElementTree, decl_newline: str,
-                 trailing_newline: str):
+                 trailing_newline: str, has_bom: bool = True):
         self.tree = tree
         self.decl_newline = decl_newline        # перевод строки после <?xml?>
         self.trailing_newline = trailing_newline  # хвост файла ("" если нет)
+        self.has_bom = has_bom                  # Конфигуратор: да; EDT: нет
 
     def __getattr__(self, name):
         return getattr(self.tree, name)
@@ -65,7 +68,8 @@ class Doc:
 
 def load(path: Path) -> Doc:
     raw = path.read_bytes()
-    if raw.startswith(BOM.encode("utf-8")):
+    has_bom = raw.startswith(BOM.encode("utf-8"))
+    if has_bom:
         raw = raw[len(BOM.encode("utf-8")):]
 
     text = raw.decode("utf-8")
@@ -86,11 +90,12 @@ def load(path: Path) -> Doc:
     protected = body_text.rstrip("\r\n").replace("\r\n", "&#13;\n")
     tree = etree.ElementTree(
         etree.fromstring(protected.encode("utf-8"), _PARSER))
-    return Doc(tree, decl_newline, trailing_newline)
+    return Doc(tree, decl_newline, trailing_newline, has_bom=has_bom)
 
 
 def save(doc: Doc, path: Path) -> None:
     body = etree.tostring(doc.tree, encoding="unicode")
     body = body.replace("&#13;\n", "\r\n").replace("&#13;", "\r")
-    text = BOM + XML_DECL + doc.decl_newline + body + doc.trailing_newline
+    bom = BOM if doc.has_bom else ""
+    text = bom + XML_DECL + doc.decl_newline + body + doc.trailing_newline
     path.write_bytes(text.encode("utf-8"))
