@@ -71,3 +71,53 @@ def test_add_addressing_attribute_byte_perfect_tail(tmp_path):
     tmp2 = tmp_path / "rt.xml"
     cfg.save(doc, tmp2)
     assert tmp2.read_bytes() == raw
+
+
+# DISCIPLINE_ALLOW_TEST_EDIT: EDT-паритетные тесты для task.mdo
+# ---------- EDT (.mdo) паритет ----------
+
+def _copy_edt(tmp_path):
+    work = tmp_path / "task.mdo"
+    shutil.copy(FIX / "task.mdo", work)
+    return work
+
+
+def test_edt_add_addressing_attribute(tmp_path):
+    work = _copy_edt(tmp_path)
+    add_child(work, "AddressingAttribute", "ДополнительныйИсполнитель",
+              "Дополнительный исполнитель", type_ref="CatalogRef.Исполнители")
+    doc = cfg.load(work)
+    names = doc.xpath("//addressingAttributes/name/text()")
+    assert names == ["Исполнитель", "ДополнительныйИсполнитель"]
+    new_types = doc.xpath(
+        "//addressingAttributes[name='ДополнительныйИсполнитель']/type/types/text()")
+    assert new_types == ["CatalogRef.Исполнители"]
+
+
+def test_edt_add_plain_attribute_to_task(tmp_path):
+    # DISCIPLINE_ALLOW_TEST_EDIT: чистка ассерта
+    work = _copy_edt(tmp_path)
+    add_child(work, "Attribute", "Реквизит2", "Реквизит 2", type_ref="String")
+    doc = cfg.load(work)
+    names = doc.xpath("//attributes/name/text()")
+    assert names == ["Реквизит1", "Реквизит2"]
+
+
+def test_edt_duplicate_addressing_attribute_rejected(tmp_path):
+    work = _copy_edt(tmp_path)
+    before = work.read_bytes()
+    with pytest.raises(OpPreconditionError):
+        add_child(work, "AddressingAttribute", "Исполнитель", "Исполнитель",
+                  type_ref="CatalogRef.Исполнители")
+    assert work.read_bytes() == before
+
+
+def test_edt_add_addressing_attribute_byte_perfect_tail(tmp_path):
+    work = _copy_edt(tmp_path)
+    add_child(work, "AddressingAttribute", "Куратор", "Куратор",
+              type_ref="CatalogRef.Исполнители")
+    raw = work.read_bytes()
+    doc = cfg.load(work)
+    tmp2 = tmp_path / "rt.mdo"
+    cfg.save(doc, tmp2)
+    assert tmp2.read_bytes() == raw
