@@ -38,3 +38,14 @@ def test_template_add_column(tmp_path):
              "--parameter", "Сертификат")
     assert r2.returncode == 2  # дубль → предусловие
     assert "Ошибка предусловия" in r2.stderr
+
+
+def test_subsystem_add_content(tmp_path):
+    # DISCIPLINE_ALLOW_TEST_EDIT: CLI-тест новой подкоманды subsystem add-content
+    work = tmp_path / "subsystem.xml"
+    shutil.copy(FIXTURES / "subsystem.xml", work)
+    r = run("subsystem", "add-content", str(work), "--ref", "Document.Заказ")
+    assert r.returncode == 0, r.stderr
+    r2 = run("subsystem", "add-content", str(work), "--ref", "Document.Заказ")
+    assert r2.returncode == 2  # дубль → предусловие
+    assert "Ошибка предусловия" in r2.stderr

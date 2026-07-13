@@ -93,6 +93,27 @@ def load(path: Path) -> Doc:
     return Doc(tree, decl_newline, trailing_newline, has_bom=has_bom)
 
 
+def place_after(anchor, new) -> None:
+    """Вставить `new` сразу после `anchor` (последнего образца своего вида),
+    сохранив отступы вывода 1С.
+
+    Хвост (`.tail`) последнего ребёнка несёт ЗАКРЫВАЮЩИЙ отступ родителя — на
+    уровень меньше межэлементного. Наивный `anchor.addnext(new)` оставил бы
+    новому элементу либо этот короткий хвост, либо (для не-последнего) верный —
+    непредсказуемо. Здесь: новый получает прежний хвост anchor (встаёт как
+    последний / перед следующим собратом), а anchor — отступ ребёнка родителя
+    (`parent.text`, т.е. отступ перед первым дочерним). Так отступ корректен и
+    когда anchor был последним ребёнком, и когда за ним идёт элемент другого
+    вида; иначе платформа при выгрузке перевыровняет и даст diff-шум.
+    """
+    parent = anchor.getparent()
+    prev_tail = anchor.tail
+    anchor.addnext(new)
+    new.tail = prev_tail
+    if parent is not None and parent.text is not None:
+        anchor.tail = parent.text
+
+
 def save(doc: Doc, path: Path) -> None:
     body = etree.tostring(doc.tree, encoding="unicode")
     body = body.replace("&#13;\n", "\r\n").replace("&#13;", "\r")

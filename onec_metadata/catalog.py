@@ -27,4 +27,6 @@ SUPPORTED: dict[str, frozenset] = {
     "Enum": frozenset({"add_child"}),
     # задача: реквизиты + реквизиты адресации (AddressingAttribute) + команды
     "Task": frozenset({"add_child"}),
+    # подсистема: включение объекта в состав (командный интерфейс) — оба формата
+    "Subsystem": frozenset({"subsystem_add_content"}),
 }

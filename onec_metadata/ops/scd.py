@@ -62,7 +62,7 @@ def add_field(schema_path: Path, dataset: str, field: str, data_path: str,
         content.text = title
     list(new)[-1].tail = closing_tail
 
-    sample.addnext(new)
+    cfg.place_after(sample, new)
     cfg.save(doc, schema_path)
 
 

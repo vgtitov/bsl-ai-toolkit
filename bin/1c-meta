@@ -68,6 +68,13 @@ def build_parser() -> argparse.ArgumentParser:
     ca.add_argument("--parent",
                     help="имя табличной части — добавить элемент внутрь неё")
 
+    sb = sub.add_parser("subsystem", help="состав подсистемы (командный интерфейс)")
+    sbsub = sb.add_subparsers(dest="sbcmd", required=True)
+    sbc = sbsub.add_parser("add-content")
+    sbc.add_argument("file")
+    sbc.add_argument("--ref", required=True,
+                     help="ссылка объекта вида Тип.Имя (напр. Document.Заказ)")
+
     return ap
 
 
@@ -97,6 +104,9 @@ def main() -> None:
             from onec_metadata.ops.add_child import add_child
             add_child(Path(ns.file), ns.kind, ns.name, ns.synonym,
                       ns.type_ref, ns.parent)
+        elif ns.cmd == "subsystem":
+            from onec_metadata.ops.subsystem import add_content
+            add_content(Path(ns.file), ns.ref)
     except (OpPreconditionError, UnknownFormatError) as e:
         print(f"Ошибка предусловия: {e}", file=sys.stderr)
         sys.exit(2)

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MetaDataObject xmlns="http://v8.1c.ru/8.3/MDClasses" xmlns:v8="http://v8.1c.ru/8.1/data/core" xmlns:xr="http://v8.1c.ru/8.3/xcf/readable" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+	<!-- DISCIPLINE_ALLOW_TEST_EDIT: обезличенная фикстура Subsystem, структура Content снята с реального сервера УТ -->
+	<Subsystem uuid="d0000000-0000-0000-0000-0000000000c0">
+		<Properties>
+			<Name>ТестоваяПодсистема</Name>
+			<IncludeInCommandInterface>true</IncludeInCommandInterface>
+			<Content>
+				<xr:Item xsi:type="xr:MDObjectRef">Catalog.Справочник1</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Report.Отчет1</xr:Item>
+			</Content>
+		</Properties>
+	</Subsystem>
+</MetaDataObject>

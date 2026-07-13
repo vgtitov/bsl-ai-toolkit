@@ -107,7 +107,7 @@ def _add_configurator(path: Path, tag: str, name: str, synonym: str,
                 ".//v8:DateQualifiers", namespaces=cfg.NS):
             qual.getparent().remove(qual)
 
-    sample.addnext(new)
+    cfg.place_after(sample, new)
     cfg.save(doc, path)
 
 
@@ -156,5 +156,5 @@ def _add_edt(path: Path, tag: str, name: str, synonym: str,
                 "stringQualifiers | numberQualifiers | dateQualifiers"):
             type_els[0].remove(qual)
 
-    sample.addnext(new)
+    cfg.place_after(sample, new)
     cfg.save(doc, path)

@@ -65,7 +65,7 @@ def _add_attribute_configurator(object_xml: Path, name: str, type_ref: str,
             ".//v8:DateQualifiers", namespaces=cfg.NS):
         qual.getparent().remove(qual)
 
-    sample.addnext(new)
+    cfg.place_after(sample, new)
     cfg.save(doc, object_xml)
 
 
@@ -101,5 +101,5 @@ def _add_attribute_edt(mdo_path: Path, name: str, type_ref: str,
                               "dateQualifiers"):
         type_el.remove(qual)
 
-    sample.addnext(new)
+    cfg.place_after(sample, new)
     cfg.save(doc, mdo_path)
