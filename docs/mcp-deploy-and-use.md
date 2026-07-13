@@ -92,6 +92,10 @@ uv run --with mcp --with openpyxl --with pytest pytest -q <repo>/tests/test_onec
 | `ONEC_PUBLIC_PORT`/`ONEC_OPS_PUBLIC_PORT` | внешние порты центра | центр | дефолт 8000 / 8001 |
 | `ZABBIX_URL`/`ZABBIX_TOKEN`, `PROMETHEUS_URL` | опц. адаптеры мониторинга (read-only) | onec-ops, если используются | адаптеры выключены (инструменты вернут подсказку «задай url/env») |
 | `ONEC_LAYERS_CONFIG`, `ONEC_PROFILE` | свой конфиг слоёв/контуров и активный профиль | локализация | чистое auto-discovery слоёв |
+| `ONEC_1CV8_BIN` | путь к `1cv8.exe` на СЕРВЕРЕ 1С (apply-слой `onec_metadata`) | `bin/1c-meta` apply в тест-базу | типовой путь `…\8.3.x\bin\1cv8.exe` |
+| `ONEC_REMOTE_WORKDIR` | рабочий каталог на сервере для tar/логов (`onec_metadata`) | `bin/1c-meta` apply | по умолчанию `D:\src` |
+
+`onec_metadata` (правки метаданных): env нужны только для apply на сервер (разбор/правка XML — без них); SSH-хост — алиас в `~/.ssh/config` (аргумент `Runner`), пароль ИБ — аргументом в момент запуска, не в env. Требуются `ssh`/`scp`/`tar` на машине (Windows 10+ — из коробки).
 
 Секреты (`ONEC_BEARER_TOKEN`, `ZABBIX_TOKEN`) — только в `.env`/секрет-сторе, НИКОГДА в git/чат.
 

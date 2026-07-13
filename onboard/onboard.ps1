@@ -24,10 +24,11 @@ foreach ($c in 'git','uv','java','claude','rg') {
 
 Say "2/6 Скиллы -> ~/.claude/skills"
 New-Item -ItemType Directory -Force -Path $SkillsDst | Out-Null
-foreach ($s in '1c-dev','1c-analyst') {
-  $src = Join-Path $TeamDir "skills\$s"
-  if (Test-Path $src) { Copy-Item $src $SkillsDst -Recurse -Force; Ok "скилл $s" } else { Warn "нет $src" }
-}
+# generic: доедет всё, что лежит в skills/ (1c-dev, 1c-analyst, 1c-metadata, будущие)
+$skillDirs = Get-ChildItem -Path (Join-Path $TeamDir 'skills') -Directory -ErrorAction SilentlyContinue
+if ($skillDirs) {
+  foreach ($d in $skillDirs) { Copy-Item $d.FullName $SkillsDst -Recurse -Force; Ok "скилл $($d.Name)" }
+} else { Warn "в $TeamDir\skills нет скиллов" }
 
 Say "3/6 Каталог исходников 1С: $SrcDir"
 New-Item -ItemType Directory -Force -Path $SrcDir | Out-Null
@@ -52,6 +53,8 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
 
 Say "6/7 Переменные окружения (User)"
 [Environment]::SetEnvironmentVariable('ONEC_SRC_DIR', $SrcDir, 'User'); Ok "ONEC_SRC_DIR=$SrcDir (дефолт у каждого свой; хочешь другой — задай ONEC_SRC_DIR заранее или -SrcDir)"
+Warn "Все переменные — в .env.example (скопируй в .env и заполни). Полная таблица: docs/mcp-deploy-and-use.md."
+Warn "Для onec-metadata (bin\1c-meta, правки метаданных по SSH): опц. ONEC_1CV8_BIN, ONEC_REMOTE_WORKDIR; нужны ssh/scp/tar (Windows 10+ — из коробки)."
 # Подключение к ЦЕНТРАЛЬНОМУ onec-code (если в вашей команде он развёрнут): URL и токен выдаёт тимлид.
 Warn "Центральный onec-code (если есть) — подключение одной командой (токен у тимлида):"
 @"

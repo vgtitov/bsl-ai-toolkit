@@ -23,9 +23,13 @@ done
 
 say "2/6 Скиллы -> ~/.claude/skills"
 mkdir -p "$SKILLS_DST"
-for s in 1c-dev 1c-analyst; do
-  if [ -d "$TEAM_DIR/skills/$s" ]; then cp -R "$TEAM_DIR/skills/$s" "$SKILLS_DST/"; ok "скилл $s"; else warn "нет $TEAM_DIR/skills/$s"; fi
+# generic: доедет всё, что лежит в skills/ (1c-dev, 1c-analyst, 1c-metadata, будущие)
+found=0
+for d in "$TEAM_DIR"/skills/*/; do
+  [ -d "$d" ] || continue
+  cp -R "$d" "$SKILLS_DST/"; ok "скилл $(basename "$d")"; found=1
 done
+[ "$found" = 1 ] || warn "в $TEAM_DIR/skills/ нет скиллов"
 
 say "3/6 Каталог исходников 1С: $SRC_DIR"
 mkdir -p "$SRC_DIR"
@@ -45,6 +49,8 @@ else warn "uv не найден — switch_source пропущен (onec-code о
 
 say "6/8 Переменные окружения"
 warn "Добавь в ~/.zshrc (или ~/.bashrc): export ONEC_SRC_DIR=\"$SRC_DIR\""
+warn "Все переменные и их назначение — в .env.example (скопируй в .env и заполни под контур). Полная таблица: docs/mcp-deploy-and-use.md."
+warn "Для onec-metadata (bin/1c-meta, правки метаданных по SSH): опц. ONEC_1CV8_BIN и ONEC_REMOTE_WORKDIR; нужны ssh/scp/tar на машине."
 warn "Центральный onec-code (если развёрнут в команде) — подключение одной командой (токен у тимлида): bash scripts/set_token.sh"
 
 say "7/8 Платформа 1С и BSL-инструменты (поиск + скачивание свободных jar'ов)"
