@@ -45,3 +45,15 @@ def test_catalog_values_are_sets():
 
     for obj_type, ops in SUPPORTED.items():
         assert isinstance(ops, (set, frozenset)), obj_type
+
+
+def test_is_supported_api():
+    # DISCIPLINE_ALLOW_TEST_EDIT: потребляемый API реестра покрытия
+    from onec_metadata.catalog import is_supported
+
+    assert is_supported("Catalog", "add_child") is True
+    assert is_supported("Catalog", "role_grant_right") is False
+    assert is_supported("НеизвестныйВид", "add_child") is False
+    # set_property — сквозная операция, поддержана для любого вида
+    assert is_supported("Catalog", "set_property") is True
+    assert is_supported("Subsystem", "set_property") is True
