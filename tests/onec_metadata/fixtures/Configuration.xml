@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MetaDataObject xmlns="http://v8.1c.ru/8.3/MDClasses" xmlns:v8="http://v8.1c.ru/8.1/data/core" xmlns:xr="http://v8.1c.ru/8.3/xcf/readable" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" version="2.18">
+	<!-- DISCIPLINE_ALLOW_TEST_EDIT: обезличенная Configuration.xml для чтения версии/совместимости -->
+	<Configuration uuid="d0000000-0000-0000-0000-0000000000e0">
+		<Properties>
+			<Name>ТестоваяКонфигурация</Name>
+			<Version>1.2.3.4</Version>
+			<CompatibilityMode>Version8_3_17</CompatibilityMode>
+			<ConfigurationExtensionCompatibilityMode>Version8_3_25</ConfigurationExtensionCompatibilityMode>
+			<InterfaceCompatibilityMode>TaxiEnableVersion8_2</InterfaceCompatibilityMode>
+		</Properties>
+		<ChildObjects/>
+	</Configuration>
+</MetaDataObject>

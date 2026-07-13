@@ -9,12 +9,30 @@ zip/Compress-Archive ломают кодировку имён (боевой ур
 import filecmp
 import os
 import subprocess
+import sys
 import unicodedata
 from pathlib import Path
 
 from onec_metadata.apply.runner import Runner, designer_cmd, mask_password
 
 REMOTE_WORKDIR = os.environ.get("ONEC_REMOTE_WORKDIR", r"D:\src")
+
+
+def _audit_version(local_dir: Path, expected: dict | None) -> None:
+    """Зафиксировать версию/совместимость дампа перед применением (не фатально).
+
+    Политика «фиксировать + предупреждать»: печатаем сводку и предупреждения о
+    расхождении; блокировки нет — несовместимое отвергнет платформа при загрузке.
+    """
+    from onec_metadata import version_info
+    try:
+        audit = version_info.audit(
+            local_dir, bin_path=os.environ.get("ONEC_1CV8_BIN"),
+            expected=expected)
+    except Exception as e:  # аудит информативен и НИКОГДА не рушит применение
+        print(f"[версия применения] пропущен аудит: {e}", file=sys.stderr)
+        return
+    print(audit.report(), file=sys.stderr)
 
 
 def _wpath(*parts: str) -> str:
@@ -71,13 +89,16 @@ def dump_extension(r: Runner, ib: str, user: str, pwd: str, ext: str,
 
 
 def upload_tree(r: Runner, local_dir: Path, remote_dir: str,
-                tmp_tar: str | None = None) -> None:
+                tmp_tar: str | None = None,
+                expected_version: dict | None = None) -> None:
     """Mac → сервер: tar локально → scp → распаковка с chcp 65001.
 
+    Перед отправкой фиксирует версию/совместимость дампа (audit, не фатально).
     ConfigDumpInfo.xml исключается всегда: с ним LoadConfigFromFiles делает
     ЧАСТИЧНУЮ загрузку по его реестру хэшей, молча пропуская файлы, которых
     в реестре нет (новые объекты). Боевой урок эксплуатации.
     """
+    _audit_version(local_dir, expected_version)
     tmp_tar = tmp_tar or _wpath("_upload.tar")
     local_tar = local_dir.parent / "_upload.tar"
     subprocess.run(["tar", "--exclude", "./ConfigDumpInfo.xml",
