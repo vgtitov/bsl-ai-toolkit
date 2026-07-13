@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:Document xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" uuid="e1000000-0000-0000-0000-0000000000d1">
+  <name>ТестовыйДокумент</name>
+  <attributes uuid="a1000000-0000-0000-0000-830945325411">
+    <name>Реквизит1</name>
+    <synonym>
+      <key>ru</key>
+      <value>Реквизит 1</value>
+    </synonym>
+    <type>
+      <types>String</types>
+    </type>
+  </attributes>
+  <tabularSections uuid="c1000000-0000-0000-0000-000000000001">
+    <name>Товары</name>
+    <synonym>
+      <key>ru</key>
+      <value>Товары</value>
+    </synonym>
+    <attributes uuid="a1000000-0000-0000-0000-011321461154">
+      <name>Номенклатура</name>
+      <synonym>
+        <key>ru</key>
+        <value>Номенклатура</value>
+      </synonym>
+      <type>
+        <types>String</types>
+      </type>
+    </attributes>
+    <attributes uuid="a1000000-0000-0000-0000-875410255065">
+      <name>Количество</name>
+      <synonym>
+        <key>ru</key>
+        <value>Количество</value>
+      </synonym>
+      <type>
+        <types>Number</types>
+      </type>
+    </attributes>
+  </tabularSections>
+  <commands uuid="b1000000-0000-0000-0000-601373111901">
+    <name>Команда1</name>
+    <synonym>
+      <key>ru</key>
+      <value>Команда 1</value>
+    </synonym>
+  </commands>
+</mdclass:Document>

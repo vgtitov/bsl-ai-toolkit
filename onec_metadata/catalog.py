@@ -16,7 +16,8 @@ SUPPORTED: dict[str, frozenset] = {
     "Template": frozenset({"add_column"}),
     # отчёты: их СКД-макеты — оба формата (.xml Конфигуратора и .dcs EDT)
     "Report": frozenset({"scd_add_field", "scd_set_query", "scd_get_query"}),
-    # реквизиты объектов — оба формата (.xml / .mdo)
+    # реквизиты/ТЧ/команды объектов — оба формата (.xml / .mdo)
+    # add_child: Attribute/TabularSection/Command (+ реквизиты ТЧ через parent)
     "Catalog": frozenset({"attribute_add", "add_child"}),
     "Document": frozenset({"attribute_add", "add_child"}),
     # регистры: измерения/ресурсы/реквизиты — оба формата

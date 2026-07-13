@@ -59,11 +59,13 @@ def build_parser() -> argparse.ArgumentParser:
     ca = csub.add_parser("add")
     ca.add_argument("file")
     ca.add_argument("--kind", required=True,
-                    help="Dimension | Resource | Attribute | EnumValue")
+                    help="Attribute|Dimension|Resource|EnumValue|TabularSection|Command")
     ca.add_argument("--name", required=True)
     ca.add_argument("--synonym", required=True)
     ca.add_argument("--type", dest="type_ref",
                     help="обязателен для типизированных видов")
+    ca.add_argument("--parent",
+                    help="имя табличной части — добавить элемент внутрь неё")
 
     return ap
 
@@ -92,7 +94,8 @@ def main() -> None:
             add_attribute(Path(ns.file), ns.name, ns.type_ref, ns.synonym)
         elif ns.cmd == "child":
             from onec_metadata.ops.add_child import add_child
-            add_child(Path(ns.file), ns.kind, ns.name, ns.synonym, ns.type_ref)
+            add_child(Path(ns.file), ns.kind, ns.name, ns.synonym,
+                      ns.type_ref, ns.parent)
     except (OpPreconditionError, UnknownFormatError) as e:
         print(f"Ошибка предусловия: {e}", file=sys.stderr)
         sys.exit(2)

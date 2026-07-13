@@ -1,12 +1,16 @@
 """Generic-добавление дочернего элемента объекту метаданных.
 
-Покрывает виды: Attribute (реквизит), Dimension (измерение регистра),
-Resource (ресурс регистра), EnumValue (значение перечисления) — в обоих
-форматах исходников (Конфигуратор `*.xml` / EDT `*.mdo`).
+Виды: Attribute, Dimension, Resource (типизированные), EnumValue,
+TabularSection, Command (без типа) — в обоих форматах (Конфигуратор `*.xml`
+и EDT `*.mdo`).
 
-Паттерн тот же, что в attribute_add: deepcopy последнего элемента того же
-вида (наследует отступы/структуру, как сгенерировала бы IDE), замена
-uuid / имени / синонима / типа. Требуется элемент-образец того же вида.
+Опциональный `parent` — имя табличной части: элемент добавляется ВНУТРЬ неё
+(например реквизит табличной части), иначе — в корень объекта.
+
+Паттерн: deepcopy последнего элемента того же вида В ТОЙ ЖЕ ОБЛАСТИ (наследует
+отступы/структуру, как сгенерировала бы IDE), замена uuid/имени/синонима/типа.
+Поиск и вставка — по ПРЯМЫМ детям области (а не потомкам), чтобы корневые и
+вложенные (в ТЧ) элементы не путались.
 """
 import copy
 import uuid as uuidlib
@@ -15,44 +19,66 @@ from pathlib import Path
 from onec_metadata.formats import configurator as cfg
 from onec_metadata.ops import OpPreconditionError
 
-# вид → (тег Конфигуратора (ns md), тег EDT, элемент типизирован?)
+# вид → (тег Конфигуратора (ns md), тег EDT, типизирован?)
 KINDS = {
     "Attribute": ("Attribute", "attributes", True),
     "Dimension": ("Dimension", "dimensions", True),
     "Resource": ("Resource", "resources", True),
     "EnumValue": ("EnumValue", "enumValues", False),
+    "TabularSection": ("TabularSection", "tabularSections", False),
+    "Command": ("Command", "commands", False),
 }
 
 
 def add_child(object_path: Path, kind: str, name: str, synonym: str,
-              type_ref: str | None = None) -> None:
+              type_ref: str | None = None, parent: str | None = None) -> None:
     if kind not in KINDS:
         raise OpPreconditionError(
             f"Неизвестный вид '{kind}'. Поддержаны: {', '.join(sorted(KINDS))}")
     cfg_tag, edt_tag, typed = KINDS[kind]
     if typed and not type_ref:
         raise OpPreconditionError(f"Для вида '{kind}' обязателен type_ref")
+    tref = type_ref if typed else None
 
     if str(object_path).endswith(".mdo"):
-        _add_edt(object_path, edt_tag, name, synonym, type_ref if typed else None)
+        _add_edt(object_path, edt_tag, name, synonym, tref, parent)
     else:
-        _add_configurator(object_path, cfg_tag, name, synonym,
-                          type_ref if typed else None)
+        _add_configurator(object_path, cfg_tag, name, synonym, tref, parent)
+
+
+# ---------- Конфигуратор (*.xml) ----------
+
+def _cfg_scope(doc, parent: str | None):
+    """Элемент ChildObjects: корневой объекта или указанной табличной части."""
+    if parent is None:
+        roots = doc.xpath(
+            "//md:ChildObjects[not(ancestor::md:TabularSection)]",
+            namespaces=cfg.NS)
+        if not roots:
+            raise OpPreconditionError("У объекта нет корневого ChildObjects")
+        return roots[0]
+    ts = doc.xpath(
+        f"//md:TabularSection[md:Properties/md:Name='{parent}']/md:ChildObjects",
+        namespaces=cfg.NS)
+    if not ts:
+        raise OpPreconditionError(f"Табличная часть '{parent}' не найдена")
+    return ts[0]
 
 
 def _add_configurator(path: Path, tag: str, name: str, synonym: str,
-                      type_ref: str | None) -> None:
+                      type_ref: str | None, parent: str | None) -> None:
     doc = cfg.load(path)
+    scope = _cfg_scope(doc, parent)
 
-    names = doc.xpath(f"//md:{tag}/md:Properties/md:Name/text()",
-                      namespaces=cfg.NS)
+    names = scope.xpath(f"md:{tag}/md:Properties/md:Name/text()",
+                        namespaces=cfg.NS)
     if name in names:
         raise OpPreconditionError(f"{tag} '{name}' уже существует")
 
-    samples = doc.xpath(f"//md:{tag}", namespaces=cfg.NS)
+    samples = scope.xpath(f"md:{tag}", namespaces=cfg.NS)
     if not samples:
         raise OpPreconditionError(
-            f"У объекта нет элемента-образца {tag} (создание с нуля — отдельная операция)")
+            f"В области нет элемента-образца {tag} (создание с нуля — отдельная операция)")
     sample = samples[-1]
 
     new = copy.deepcopy(sample)
@@ -81,18 +107,31 @@ def _add_configurator(path: Path, tag: str, name: str, synonym: str,
     cfg.save(doc, path)
 
 
-def _add_edt(path: Path, tag: str, name: str, synonym: str,
-             type_ref: str | None) -> None:
-    doc = cfg.load(path)
+# ---------- EDT (*.mdo) ----------
 
-    names = doc.xpath(f"//{tag}/name/text()")
+def _edt_scope(doc, parent: str | None):
+    """Элемент-контейнер: корневой объект (mdclass:*) или табличная часть."""
+    if parent is None:
+        return doc.getroot()
+    ts = doc.xpath(f"//tabularSections[name='{parent}']")
+    if not ts:
+        raise OpPreconditionError(f"Табличная часть '{parent}' не найдена")
+    return ts[0]
+
+
+def _add_edt(path: Path, tag: str, name: str, synonym: str,
+             type_ref: str | None, parent: str | None) -> None:
+    doc = cfg.load(path)
+    scope = _edt_scope(doc, parent)
+
+    names = scope.xpath(f"{tag}/name/text()")
     if name in names:
         raise OpPreconditionError(f"{tag} '{name}' уже существует")
 
-    samples = doc.xpath(f"//{tag}")
+    samples = scope.xpath(tag)
     if not samples:
         raise OpPreconditionError(
-            f"У объекта нет элемента-образца {tag} (создание с нуля — отдельная операция)")
+            f"В области нет элемента-образца {tag} (создание с нуля — отдельная операция)")
     sample = samples[-1]
 
     new = copy.deepcopy(sample)
