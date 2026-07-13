@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:Enum xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:core="http://g5.1c.ru/v8/dt/mcore" xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" uuid="e1000000-0000-0000-0000-000000000001">
+  <name>ТестовыйEnum</name>
+  <enumValues uuid="c0000000-0000-0000-0000-386379149109">
+    <name>Значение1</name>
+    <synonym>
+      <key>ru</key>
+      <value>Значение 1</value>
+    </synonym>
+  </enumValues>
+  <enumValues uuid="c0000000-0000-0000-0000-083607640895">
+    <name>Значение2</name>
+    <synonym>
+      <key>ru</key>
+      <value>Значение 2</value>
+    </synonym>
+  </enumValues>
+</mdclass:Enum>
