@@ -12,6 +12,7 @@ from lxml import etree
 
 from onec_metadata.formats import configurator as cfg
 from onec_metadata.ops import OpPreconditionError
+from onec_metadata.validate import validate_name
 
 _KEEP = {"dataPath", "field", "title"}
 
@@ -29,6 +30,7 @@ def _dataset(doc, dataset: str):
 
 def add_field(schema_path: Path, dataset: str, field: str, data_path: str,
               title: str) -> None:
+    validate_name(field)
     doc = cfg.load(schema_path)
     ds = _dataset(doc, dataset)
 

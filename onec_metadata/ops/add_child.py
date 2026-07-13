@@ -18,6 +18,7 @@ from pathlib import Path
 
 from onec_metadata.formats import configurator as cfg
 from onec_metadata.ops import OpPreconditionError
+from onec_metadata.validate import validate_name
 
 # вид → (тег Конфигуратора (ns md), тег EDT, типизирован?)
 KINDS = {
@@ -35,6 +36,7 @@ def add_child(object_path: Path, kind: str, name: str, synonym: str,
     if kind not in KINDS:
         raise OpPreconditionError(
             f"Неизвестный вид '{kind}'. Поддержаны: {', '.join(sorted(KINDS))}")
+    validate_name(name)
     cfg_tag, edt_tag, typed = KINDS[kind]
     if typed and not type_ref:
         raise OpPreconditionError(f"Для вида '{kind}' обязателен type_ref")
