@@ -59,7 +59,8 @@ def build_parser() -> argparse.ArgumentParser:
     ca = csub.add_parser("add")
     ca.add_argument("file")
     ca.add_argument("--kind", required=True,
-                    help="Attribute|Dimension|Resource|EnumValue|TabularSection|Command")
+                    help="Attribute|Dimension|Resource|EnumValue|TabularSection|"
+                         "Command|AddressingAttribute")
     ca.add_argument("--name", required=True)
     ca.add_argument("--synonym", required=True)
     ca.add_argument("--type", dest="type_ref",

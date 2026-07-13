@@ -25,4 +25,6 @@ SUPPORTED: dict[str, frozenset] = {
     "AccumulationRegister": frozenset({"add_child"}),
     # перечисления: значения — оба формата
     "Enum": frozenset({"add_child"}),
+    # задача: реквизиты + реквизиты адресации (AddressingAttribute) + команды
+    "Task": frozenset({"add_child"}),
 }

@@ -1,8 +1,8 @@
 """Generic-добавление дочернего элемента объекту метаданных.
 
-Виды: Attribute, Dimension, Resource (типизированные), EnumValue,
-TabularSection, Command (без типа) — в обоих форматах (Конфигуратор `*.xml`
-и EDT `*.mdo`).
+Виды: Attribute, Dimension, Resource, AddressingAttribute (типизированные),
+EnumValue, TabularSection, Command (без типа) — в обоих форматах (Конфигуратор
+`*.xml` и EDT `*.mdo`).
 
 Опциональный `parent` — имя табличной части: элемент добавляется ВНУТРЬ неё
 (например реквизит табличной части), иначе — в корень объекта.
@@ -28,6 +28,8 @@ KINDS = {
     "EnumValue": ("EnumValue", "enumValues", False),
     "TabularSection": ("TabularSection", "tabularSections", False),
     "Command": ("Command", "commands", False),
+    # реквизит адресации Задачи (Task) — типизированный, как обычный реквизит
+    "AddressingAttribute": ("AddressingAttribute", "addressingAttributes", True),
 }
 
 
