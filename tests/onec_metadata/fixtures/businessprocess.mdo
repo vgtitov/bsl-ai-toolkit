@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:BusinessProcess xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:core="http://g5.1c.ru/v8/dt/mcore" xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" uuid="d0000000-0000-0000-0000-0000000000f3">
+  <!-- DISCIPLINE_ALLOW_TEST_EDIT: обезличенная EDT-фикстура BusinessProcess -->
+  <name>ТестовыйBusinessProcess</name>
+  <synonym>
+    <key>ru</key>
+    <value>Тестовый бизнес-процесс</value>
+  </synonym>
+  <attributes uuid="a0000000-0000-0000-0000-0000000000f4">
+    <name>Реквизит1</name>
+    <synonym>
+      <key>ru</key>
+      <value>Реквизит 1</value>
+    </synonym>
+    <type>
+      <types>CatalogRef.Пользователи</types>
+    </type>
+  </attributes>
+</mdclass:BusinessProcess>

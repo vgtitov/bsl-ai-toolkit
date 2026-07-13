@@ -32,6 +32,14 @@ def test_role_coverage():
     assert "role_grant_right" in SUPPORTED["Role"]
 
 
+def test_businessprocess_exchangeplan_coverage():
+    # DISCIPLINE_ALLOW_TEST_EDIT: покрытие BusinessProcess/ExchangePlan
+    from onec_metadata.catalog import SUPPORTED
+
+    assert "add_child" in SUPPORTED["BusinessProcess"]
+    assert "add_child" in SUPPORTED["ExchangePlan"]
+
+
 def test_catalog_values_are_sets():
     from onec_metadata.catalog import SUPPORTED
 

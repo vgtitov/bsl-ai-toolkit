@@ -27,6 +27,10 @@ SUPPORTED: dict[str, frozenset] = {
     "Enum": frozenset({"add_child"}),
     # задача: реквизиты + реквизиты адресации (AddressingAttribute) + команды
     "Task": frozenset({"add_child"}),
+    # бизнес-процесс и план обмена: реквизиты (add_child, проверено) — оба формата;
+    # ТЧ/команды доступны тем же generic-механизмом, но покрыты тестом только реквизиты
+    "BusinessProcess": frozenset({"add_child"}),
+    "ExchangePlan": frozenset({"add_child"}),
     # подсистема: включение объекта в состав (командный интерфейс) — оба формата
     "Subsystem": frozenset({"subsystem_add_content"}),
     # роль: выдать/установить право объекта (Rights.xml Конфигуратора)
