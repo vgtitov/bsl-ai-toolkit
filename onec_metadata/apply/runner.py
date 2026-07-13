@@ -37,6 +37,25 @@ def mask_password(cmd: str) -> str:
     return re.sub(r"/P\S+", "/P***", cmd)
 
 
+def enterprise_cmd(ib: str, user: str, pwd: str, execute_epf: str,
+                   c_param: str, log: str, bin: str | None = None) -> str:
+    """Запуск 1С:Предприятие с исполнением внешней обработки.
+
+    Обработка получает строку из /C через `ПараметрЗапуска` и обязана сама
+    сигналить успех в /Out-лог (клиентский запуск кода возврата не даёт).
+    """
+    return " ".join([
+        f'"{bin or DEFAULT_BIN}" ENTERPRISE',
+        f"/S {ib}",
+        f'/N"{user}"',
+        f"/P{pwd}",
+        f'/Execute "{execute_epf}"',
+        f'/C"{c_param}"',
+        "/DisableStartupDialogs /DisableStartupMessages",
+        f"/Out {log}",
+    ])
+
+
 def designer_cmd(ib: str, user: str, pwd: str, action: str,
                  args: list, log: str, bin: str | None = None) -> str:
     quoted = " ".join(args)
