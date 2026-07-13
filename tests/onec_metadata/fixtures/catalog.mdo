@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:Catalog xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:core="http://g5.1c.ru/v8/dt/mcore" xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" uuid="d0000000-0000-0000-0000-0000000000aa">
+  <name>ТестовыйСправочник</name>
+  <synonym>
+    <key>ru</key>
+    <value>Тестовый справочник</value>
+  </synonym>
+  <useStandardCommands>true</useStandardCommands>
+  <attributes uuid="a0000000-0000-0000-0000-0000000000a1">
+    <name>Реквизит1</name>
+    <synonym>
+      <key>ru</key>
+      <value>Реквизит 1</value>
+    </synonym>
+    <type>
+      <types>String</types>
+      <stringQualifiers>
+        <length>10</length>
+      </stringQualifiers>
+    </type>
+  </attributes>
+  <attributes uuid="a0000000-0000-0000-0000-0000000000a2">
+    <name>Реквизит2</name>
+    <synonym>
+      <key>ru</key>
+      <value>Реквизит 2</value>
+    </synonym>
+    <type>
+      <types>Boolean</types>
+    </type>
+  </attributes>
+</mdclass:Catalog>

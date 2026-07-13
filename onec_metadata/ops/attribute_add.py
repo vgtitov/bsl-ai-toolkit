@@ -1,9 +1,13 @@
-"""Добавление реквизита объекту метаданных (Конфигуратор-XML).
+"""Добавление реквизита объекту метаданных.
 
-Новый реквизит — deepcopy последнего существующего <Attribute> (наследует
-отступы и полный набор свойств, как сгенерировал бы Конфигуратор) с заменой
-uuid / Name / Synonym / Type. Объект без единого реквизита-образца в Фазе 1
-не поддерживается (создание Attribute «с нуля» — отдельная операция).
+Поддерживаются оба формата исходников (диспетчеризация по расширению файла):
+- Конфигуратор (`*.xml`): <Attribute> в ChildObjects (MDClasses);
+- EDT (`*.mdo`): блок <attributes> (mdclass).
+
+Новый реквизит — deepcopy последнего существующего (наследует отступы и
+структуру, как сгенерировала бы IDE) с заменой uuid / имени / синонима / типа.
+Объект без единого реквизита-образца не поддерживается (создание «с нуля» —
+отдельная операция).
 """
 import copy
 import uuid as uuidlib
@@ -13,8 +17,16 @@ from onec_metadata.formats import configurator as cfg
 from onec_metadata.ops import OpPreconditionError
 
 
-def add_attribute(object_xml: Path, name: str, type_ref: str,
+def add_attribute(object_path: Path, name: str, type_ref: str,
                   synonym: str) -> None:
+    if str(object_path).endswith(".mdo"):
+        _add_attribute_edt(object_path, name, type_ref, synonym)
+    else:
+        _add_attribute_configurator(object_path, name, type_ref, synonym)
+
+
+def _add_attribute_configurator(object_xml: Path, name: str, type_ref: str,
+                                synonym: str) -> None:
     doc = cfg.load(object_xml)
 
     names = doc.xpath("//md:Attribute/md:Properties/md:Name/text()",
@@ -25,7 +37,7 @@ def add_attribute(object_xml: Path, name: str, type_ref: str,
     attrs = doc.xpath("//md:Attribute", namespaces=cfg.NS)
     if not attrs:
         raise OpPreconditionError(
-            "У объекта нет реквизита-образца (создание с нуля — вне Фазы 1)")
+            "У объекта нет реквизита-образца (создание с нуля — отдельная операция)")
     sample = attrs[-1]
 
     new = copy.deepcopy(sample)
@@ -53,3 +65,39 @@ def add_attribute(object_xml: Path, name: str, type_ref: str,
 
     sample.addnext(new)
     cfg.save(doc, object_xml)
+
+
+def _add_attribute_edt(mdo_path: Path, name: str, type_ref: str,
+                       synonym: str) -> None:
+    doc = cfg.load(mdo_path)
+
+    names = doc.xpath("//attributes/name/text()")
+    if name in names:
+        raise OpPreconditionError(f"Реквизит '{name}' уже существует")
+
+    attrs = doc.xpath("//attributes")
+    if not attrs:
+        raise OpPreconditionError(
+            "У объекта нет реквизита-образца (создание с нуля — отдельная операция)")
+    sample = attrs[-1]
+
+    new = copy.deepcopy(sample)
+    new.set("uuid", str(uuidlib.uuid4()))
+
+    new.xpath("name")[0].text = name
+    for value in new.xpath("synonym/value"):
+        value.text = synonym
+
+    type_el = new.xpath("type")[0]
+    types = type_el.xpath("types")
+    if not types:
+        raise OpPreconditionError("У реквизита-образца нет type/types")
+    types[0].text = type_ref
+    for extra in types[1:]:
+        type_el.remove(extra)
+    for qual in type_el.xpath("stringQualifiers | numberQualifiers | "
+                              "dateQualifiers"):
+        type_el.remove(qual)
+
+    sample.addnext(new)
+    cfg.save(doc, mdo_path)
