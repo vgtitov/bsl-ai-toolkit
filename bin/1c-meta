@@ -75,6 +75,13 @@ def build_parser() -> argparse.ArgumentParser:
     sbc.add_argument("--ref", required=True,
                      help="ссылка объекта вида Тип.Имя (напр. Document.Заказ)")
 
+    sp = sub.add_parser("set-property",
+                        help="изменить существующее скалярное свойство объекта/реквизита")
+    sp.add_argument("file")
+    sp.add_argument("--name", required=True, help="имя свойства (тег)")
+    sp.add_argument("--value", required=True, help="новое значение")
+    sp.add_argument("--attribute", help="имя реквизита (иначе — свойство объекта)")
+
     rl = sub.add_parser("role", help="права роли (Rights.xml)")
     rlsub = rl.add_subparsers(dest="rlcmd", required=True)
     rg = rlsub.add_parser("grant")
@@ -121,6 +128,9 @@ def main() -> None:
         elif ns.cmd == "role":
             from onec_metadata.ops.role import grant_right
             grant_right(Path(ns.file), ns.ref, ns.right, ns.value == "true")
+        elif ns.cmd == "set-property":
+            from onec_metadata.ops.set_property import set_property
+            set_property(Path(ns.file), ns.name, ns.value, ns.attribute)
     except (OpPreconditionError, UnknownFormatError) as e:
         print(f"Ошибка предусловия: {e}", file=sys.stderr)
         sys.exit(2)
