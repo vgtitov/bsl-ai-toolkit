@@ -29,4 +29,6 @@ SUPPORTED: dict[str, frozenset] = {
     "Task": frozenset({"add_child"}),
     # подсистема: включение объекта в состав (командный интерфейс) — оба формата
     "Subsystem": frozenset({"subsystem_add_content"}),
+    # роль: выдать/установить право объекта (Rights.xml Конфигуратора)
+    "Role": frozenset({"role_grant_right"}),
 }

@@ -49,3 +49,15 @@ def test_subsystem_add_content(tmp_path):
     r2 = run("subsystem", "add-content", str(work), "--ref", "Document.Заказ")
     assert r2.returncode == 2  # дубль → предусловие
     assert "Ошибка предусловия" in r2.stderr
+
+
+def test_role_grant(tmp_path):
+    # DISCIPLINE_ALLOW_TEST_EDIT: CLI-тест подкоманды role grant
+    work = tmp_path / "rights.xml"
+    shutil.copy(FIXTURES / "rights.xml", work)
+    r = run("role", "grant", str(work), "--ref", "Catalog.Справочник1",
+            "--right", "Insert")
+    assert r.returncode == 0, r.stderr
+    r2 = run("role", "grant", str(work), "--ref", "ПлохаяСсылка", "--right", "Read")
+    assert r2.returncode == 2
+    assert "Ошибка предусловия" in r2.stderr

@@ -75,6 +75,17 @@ def build_parser() -> argparse.ArgumentParser:
     sbc.add_argument("--ref", required=True,
                      help="ссылка объекта вида Тип.Имя (напр. Document.Заказ)")
 
+    rl = sub.add_parser("role", help="права роли (Rights.xml)")
+    rlsub = rl.add_subparsers(dest="rlcmd", required=True)
+    rg = rlsub.add_parser("grant")
+    rg.add_argument("file", help="путь к Roles/<Роль>/Ext/Rights.xml")
+    rg.add_argument("--ref", required=True,
+                    help="ссылка объекта вида Тип.Имя (напр. Catalog.Товары)")
+    rg.add_argument("--right", required=True,
+                    help="имя права (Read/View/Insert/Update/Delete/…)")
+    rg.add_argument("--value", choices=["true", "false"], default="true",
+                    help="значение права (по умолчанию true)")
+
     return ap
 
 
@@ -107,6 +118,9 @@ def main() -> None:
         elif ns.cmd == "subsystem":
             from onec_metadata.ops.subsystem import add_content
             add_content(Path(ns.file), ns.ref)
+        elif ns.cmd == "role":
+            from onec_metadata.ops.role import grant_right
+            grant_right(Path(ns.file), ns.ref, ns.right, ns.value == "true")
     except (OpPreconditionError, UnknownFormatError) as e:
         print(f"Ошибка предусловия: {e}", file=sys.stderr)
         sys.exit(2)

@@ -25,6 +25,13 @@ def test_subsystem_coverage():
     assert "subsystem_add_content" in SUPPORTED["Subsystem"]
 
 
+def test_role_coverage():
+    # DISCIPLINE_ALLOW_TEST_EDIT: покрытие роли/прав
+    from onec_metadata.catalog import SUPPORTED
+
+    assert "role_grant_right" in SUPPORTED["Role"]
+
+
 def test_catalog_values_are_sets():
     from onec_metadata.catalog import SUPPORTED
 

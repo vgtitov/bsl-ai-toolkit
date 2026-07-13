@@ -15,20 +15,11 @@ from pathlib import Path
 
 from onec_metadata.formats import configurator as cfg
 from onec_metadata.ops import OpPreconditionError
-from onec_metadata.validate import validate_name
-
-
-def _validate_ref(object_ref: str) -> None:
-    parts = object_ref.split(".")
-    if len(parts) != 2 or not parts[0] or not parts[1]:
-        raise OpPreconditionError(
-            f"Ссылка '{object_ref}' должна быть вида 'Тип.Имя' (напр. Document.Заказ)")
-    validate_name(parts[0])  # тип объекта — идентификатор
-    validate_name(parts[1])  # имя объекта — идентификатор
+from onec_metadata.validate import validate_object_ref
 
 
 def add_content(subsystem_path: Path, object_ref: str) -> None:
-    _validate_ref(object_ref)
+    validate_object_ref(object_ref)
     if str(subsystem_path).endswith(".mdo"):
         _add_content_edt(subsystem_path, object_ref)
     else:

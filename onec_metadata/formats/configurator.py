@@ -30,6 +30,7 @@ NS = {
     "dcs": "http://v8.1c.ru/8.1/data-composition-system/schema",
     "dcscor": "http://v8.1c.ru/8.1/data-composition-system/core",
     "dcsset": "http://v8.1c.ru/8.1/data-composition-system/settings",
+    "roles": "http://v8.1c.ru/8.2/roles",
     "xsi": "http://www.w3.org/2001/XMLSchema-instance",
     "xs": "http://www.w3.org/2001/XMLSchema",
 }

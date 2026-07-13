@@ -34,3 +34,26 @@ def validate_name(name: str) -> None:
         raise OpPreconditionError(
             f"Недопустимое имя '{name}': идентификатор 1С начинается с буквы или "
             "'_' и состоит из букв, цифр и '_' (без пробелов и пунктуации)")
+
+
+def validate_object_ref(object_ref: str) -> None:
+    """Ссылка объекта вида 'Тип.Имя' (Document.Заказ): обе части — идентификаторы."""
+    parts = object_ref.split(".")
+    if len(parts) != 2 or not parts[0] or not parts[1]:
+        raise OpPreconditionError(
+            f"Ссылка '{object_ref}' должна быть вида 'Тип.Имя' (напр. Document.Заказ)")
+    validate_name(parts[0])
+    validate_name(parts[1])
+
+
+def validate_ref_path(ref: str) -> None:
+    """Ссылка на объект ИЛИ его подобъект: 'Тип.Имя' или 'Тип.Имя.Вид.Имя2'
+    (напр. Catalog.Товары.TabularSection.Состав) — каждая часть идентификатор,
+    частей не меньше двух. Права роли допускают ссылки на ТЧ/реквизиты."""
+    parts = ref.split(".")
+    if len(parts) < 2 or any(not p for p in parts):
+        raise OpPreconditionError(
+            f"Ссылка '{ref}' должна быть вида 'Тип.Имя' или 'Тип.Имя.Вид.Имя' "
+            "(напр. Catalog.Товары.TabularSection.Состав)")
+    for p in parts:
+        validate_name(p)
