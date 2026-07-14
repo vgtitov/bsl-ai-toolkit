@@ -83,6 +83,14 @@ def load_extension(r: Runner, ib: str, user: str, pwd: str, ext: str,
 
 def dump_extension(r: Runner, ib: str, user: str, pwd: str, ext: str,
                    remote_dst: str, log: str | None = None) -> None:
+    """Перевыгрузка расширения платформой → ПЛАТФОРМЕННО-КАНОНИЧЕСКОЕ дерево.
+
+    Это дерево (`after` в roundtrip_verify) и есть артефакт для коммита в git:
+    ConfigDumpInfo, порядок свойств и версии — пересчитаны платформой, а не нашей
+    правкой. Наша byte-perfect правка (`before`) годится как источник изменения,
+    но канонический результат даёт именно эта перевыгрузка (архитектурный аудит,
+    canonization). См. docs/architecture-review-2026-07.md.
+    """
     log = log or _wpath("dump.log")
     _run_designer(r, ib, user, pwd, "/DumpConfigToFiles",
                   [remote_dst, "-Extension", ext], log)
