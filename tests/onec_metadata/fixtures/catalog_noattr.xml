@@ -1,0 +1,18 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<MetaDataObject xmlns="http://v8.1c.ru/8.3/MDClasses" xmlns:v8="http://v8.1c.ru/8.1/data/core" xmlns:xr="http://v8.1c.ru/8.3/xcf/readable" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" version="2.18">
+	<!-- DISCIPLINE_ALLOW_TEST_EDIT: справочник без реквизита-образца (только Команда) для теста донора -->
+	<Catalog uuid="d0000000-0000-0000-0000-0000000000e1">
+		<Properties>
+			<Name>БезРеквизитов</Name>
+			<Comment/>
+		</Properties>
+		<ChildObjects>
+			<Command uuid="c0000000-0000-0000-0000-0000000000e1">
+				<Properties>
+					<Name>Команда1</Name>
+					<Comment/>
+				</Properties>
+			</Command>
+		</ChildObjects>
+	</Catalog>
+</MetaDataObject>

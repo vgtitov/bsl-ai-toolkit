@@ -62,7 +62,11 @@ KINDS = {
 
 
 def add_child(object_path: Path, kind: str, name: str, synonym: str,
-              type_ref: str | None = None, parent: str | None = None) -> None:
+              type_ref: str | None = None, parent: str | None = None,
+              donor: Path | None = None) -> None:
+    """Добавить дочерний элемент. Если в объекте нет элемента-образца нужного
+    вида, образец берётся из объекта-ДОНОРА `donor` (однотипного объекта той же
+    конфигурации) — так создание «с нуля» остаётся версия-корректным."""
     if kind not in KINDS:
         raise OpPreconditionError(
             f"Неизвестный вид '{kind}'. Поддержаны: {', '.join(sorted(KINDS))}")
@@ -72,10 +76,44 @@ def add_child(object_path: Path, kind: str, name: str, synonym: str,
         raise OpPreconditionError(f"Для вида '{kind}' обязателен type_ref")
     tref = type_ref if typed else None
 
-    if str(object_path).endswith(".mdo"):
-        _add_edt(object_path, edt_tag, name, synonym, tref, parent)
+    is_mdo = str(object_path).endswith(".mdo")
+    if donor is not None:
+        if str(donor).endswith(".mdo") != is_mdo:
+            raise OpPreconditionError("Формат донора должен совпадать с целевым")
+        if parent is not None:
+            raise OpPreconditionError(
+                "Донор поддержан только на корневом уровне (без --parent)")
+
+    if is_mdo:
+        _add_edt(object_path, edt_tag, name, synonym, tref, parent, donor)
     else:
-        _add_configurator(object_path, cfg_tag, name, synonym, tref, parent)
+        _add_configurator(object_path, cfg_tag, name, synonym, tref, parent, donor)
+
+
+def _cfg_donor_sample(donor_path: Path, tag: str):
+    # ТОЛЬКО корневой уровень (не внутри ТЧ) — иначе внутренние отступы образца
+    # окажутся глубже целевого корневого уровня.
+    ddoc = cfg.load(donor_path)
+    hits = ddoc.xpath(
+        f"//md:ChildObjects[not(ancestor::md:TabularSection)]/md:{tag}",
+        namespaces=cfg.NS)
+    if not hits:
+        raise OpPreconditionError(
+            f"В доноре нет корневого элемента-образца {tag}")
+    sample = hits[-1]
+    if sample.xpath(".//xr:GeneratedType", namespaces=cfg.NS):
+        raise OpPreconditionError(
+            "Донор для элементов с порождаемым типом (ТЧ) не поддержан — сделайте в IDE")
+    return sample
+
+
+def _edt_donor_sample(donor_path: Path, tag: str):
+    ddoc = cfg.load(donor_path)
+    hits = ddoc.getroot().xpath(tag)  # прямые дети корня — корневой уровень
+    if not hits:
+        raise OpPreconditionError(
+            f"В доноре нет корневого элемента-образца {tag}")
+    return hits[-1]
 
 
 # ---------- Конфигуратор (*.xml) ----------
@@ -98,7 +136,8 @@ def _cfg_scope(doc, parent: str | None):
 
 
 def _add_configurator(path: Path, tag: str, name: str, synonym: str,
-                      type_ref: str | None, parent: str | None) -> None:
+                      type_ref: str | None, parent: str | None,
+                      donor: Path | None = None) -> None:
     doc = cfg.load(path)
     scope = _cfg_scope(doc, parent)
 
@@ -108,10 +147,18 @@ def _add_configurator(path: Path, tag: str, name: str, synonym: str,
         raise OpPreconditionError(f"{tag} '{name}' уже существует")
 
     samples = scope.xpath(f"md:{tag}", namespaces=cfg.NS)
-    if not samples:
+    if samples:
+        sample, anchor = samples[-1], samples[-1]
+    elif donor is not None:
+        sample = _cfg_donor_sample(donor, tag)  # образец из другого объекта
+        kids = scope.xpath("*")
+        if not kids:
+            raise OpPreconditionError(
+                "Пустой ChildObjects — добавление первого элемента отдельная операция")
+        anchor = kids[-1]
+    else:
         raise OpPreconditionError(
-            f"В области нет элемента-образца {tag} (создание с нуля — отдельная операция)")
-    sample = samples[-1]
+            f"В области нет элемента-образца {tag} (задайте donor для создания с нуля)")
 
     new = copy.deepcopy(sample)
     old_name = (new.xpath("md:Properties/md:Name/text()",
@@ -135,7 +182,7 @@ def _add_configurator(path: Path, tag: str, name: str, synonym: str,
             namespaces=cfg.NS)
         cfg.remove_children(type_els[0], to_remove)
 
-    cfg.place_after(sample, new)
+    cfg.place_after(anchor, new)
     cfg.save(doc, path)
 
 
@@ -152,7 +199,8 @@ def _edt_scope(doc, parent: str | None):
 
 
 def _add_edt(path: Path, tag: str, name: str, synonym: str,
-             type_ref: str | None, parent: str | None) -> None:
+             type_ref: str | None, parent: str | None,
+             donor: Path | None = None) -> None:
     doc = cfg.load(path)
     scope = _edt_scope(doc, parent)
 
@@ -161,10 +209,18 @@ def _add_edt(path: Path, tag: str, name: str, synonym: str,
         raise OpPreconditionError(f"{tag} '{name}' уже существует")
 
     samples = scope.xpath(tag)
-    if not samples:
+    if samples:
+        sample, anchor = samples[-1], samples[-1]
+    elif donor is not None:
+        sample = _edt_donor_sample(donor, tag)
+        kids = scope.xpath("*")
+        if not kids:
+            raise OpPreconditionError(
+                "Пустой контейнер — добавление первого элемента отдельная операция")
+        anchor = kids[-1]
+    else:
         raise OpPreconditionError(
-            f"В области нет элемента-образца {tag} (создание с нуля — отдельная операция)")
-    sample = samples[-1]
+            f"В области нет элемента-образца {tag} (задайте donor для создания с нуля)")
 
     new = copy.deepcopy(sample)
     _regen_uuids(new)  # свежие uuid всему поддереву (вложенные элементы тоже)
@@ -182,5 +238,5 @@ def _add_edt(path: Path, tag: str, name: str, synonym: str,
             "stringQualifiers | numberQualifiers | dateQualifiers")
         cfg.remove_children(type_els[0], to_remove)
 
-    cfg.place_after(sample, new)
+    cfg.place_after(anchor, new)
     cfg.save(doc, path)
