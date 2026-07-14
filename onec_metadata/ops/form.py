@@ -84,6 +84,72 @@ def _add_attribute_configurator(form_path: Path, name: str, type_ref: str) -> No
     cfg.save(doc, form_path)
 
 
+# ---------- P4.2: элемент InputField (формат Конфигуратора) ----------
+
+# дети клона-поля, несущие семантику ОБРАЗЦА — не наследуются
+_FIELD_SEMANTIC = ("Events", "ChoiceList", "TypeRestriction")
+
+
+def add_field(form_path: Path, name: str, data_path: str, title: str | None = None) -> None:
+    """Добавить InputField в ChildItems с привязкой DataPath (P4.2).
+
+    id поля и вложенных ContextMenu/ExtendedTooltip — свежие ПОСЛЕДОВАТЕЛЬНЫЕ из
+    пространства ЭЛЕМЕНТОВ (поддерево ChildItems); реквизиты формы не затрагиваются.
+    Клон последнего InputField-образца; DataPath задаётся явно, семантика образца
+    (обработчики, списки выбора) чистится; вложенные части переименовываются
+    конвенцией Конфигуратора: <Имя>КонтекстноеМеню / <Имя>ExtendedTooltip.
+    EDT-формат (.form) для полей — P4.3, пока не поддержан."""
+    validate_name(name)
+    if str(form_path).endswith(".form"):
+        raise OpPreconditionError(
+            "add-field для EDT-формы (.form) пока не поддержан (P4.3)")
+    doc = cfg.load(form_path)
+    root = doc.getroot()
+
+    child_items = root.xpath("lf:ChildItems", namespaces=NS)
+    if not child_items:
+        raise OpPreconditionError("В форме нет блока ChildItems")
+    items = child_items[0]
+
+    if items.xpath(f"lf:*[@name='{name}']", namespaces=NS):
+        raise OpPreconditionError(f"Элемент формы '{name}' уже существует")
+
+    samples = items.xpath("lf:InputField", namespaces=NS)
+    if not samples:
+        raise OpPreconditionError(
+            "В форме нет InputField-образца (создание с нуля — отдельная операция)")
+    sample = samples[-1]
+
+    new = copy.deepcopy(sample)
+    _reid(new, _max_id_in(items) + 1)   # id в пространстве ЭЛЕМЕНТОВ формы
+    new.set("name", name)
+
+    dp = new.xpath("lf:DataPath", namespaces=NS)
+    if not dp:
+        raise OpPreconditionError("У InputField-образца нет DataPath")
+    dp[0].text = data_path
+
+    # семантика образца не наследуется
+    cfg.remove_children(
+        new, [el for tag in _FIELD_SEMANTIC
+              for el in new.xpath(f"lf:{tag}", namespaces=NS)])
+    # вложенные части — под именем нового поля (конвенция Конфигуратора)
+    for cm in new.xpath("lf:ContextMenu", namespaces=NS):
+        cm.set("name", f"{name}КонтекстноеМеню")
+    for tt in new.xpath("lf:ExtendedTooltip", namespaces=NS):
+        tt.set("name", f"{name}ExtendedTooltip")
+    if title:
+        for t in new.xpath("lf:Title", namespaces=NS):
+            cfg.remove_children(new, [t])
+        # заголовок по умолчанию платформа возьмёт из реквизита; явный Title —
+        # отдельная фаза (мультиязычные v8:item), пока не поддержан
+        raise OpPreconditionError("title пока не поддержан (мультиязычный блок — P4.3)")
+
+    last = items.xpath("lf:*", namespaces=NS)[-1]
+    cfg.place_after(last, new)
+    cfg.save(doc, form_path)
+
+
 # ---------- EDT (Form.form) ----------
 
 # дети клона-реквизита, несущие семантику ОБРАЗЦА (чужие ссылки/настройки) — удалить.
