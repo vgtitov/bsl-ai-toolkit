@@ -20,6 +20,34 @@ from onec_metadata.formats import configurator as cfg
 from onec_metadata.ops import OpPreconditionError
 from onec_metadata.validate import validate_name
 
+
+def _regen_uuids(element) -> None:
+    """Присвоить свежий uuid КАЖДОМУ элементу поддерева с атрибутом uuid.
+
+    deepcopy копирует ВСЕ вложенные идентификаторы; без регенерации новый
+    элемент дублирует uuid'ы образца (напр. вложенные реквизиты табличной части)
+    → коллизия в конфигурации.
+    """
+    for el in element.xpath("descendant-or-self::*[@uuid]"):
+        el.set("uuid", str(uuidlib.uuid4()))
+
+
+def _reidentify_cfg(new, old_name: str, new_name: str) -> None:
+    """Сделать идентификаторы нового поддерева уникальными (Конфигуратор).
+
+    Помимо uuid: у элементов, ПОРОЖДАЮЩИХ тип (табличная часть), в InternalInfo
+    есть GeneratedType с TypeId/ValueId и именем вида `Тип.Объект.Имя`. Их тоже
+    регенерируем, а имя порождаемого типа перенацеливаем на новое имя элемента.
+    """
+    _regen_uuids(new)
+    for tag in ("TypeId", "ValueId"):
+        for el in new.xpath(f".//xr:{tag}", namespaces=cfg.NS):
+            el.text = str(uuidlib.uuid4())
+    for gt in new.xpath(".//xr:GeneratedType", namespaces=cfg.NS):
+        nm = gt.get("name")
+        if nm and old_name and nm.endswith("." + old_name):
+            gt.set("name", nm[: -len(old_name)] + new_name)
+
 # вид → (тег Конфигуратора (ns md), тег EDT, типизирован?)
 KINDS = {
     "Attribute": ("Attribute", "attributes", True),
@@ -86,7 +114,9 @@ def _add_configurator(path: Path, tag: str, name: str, synonym: str,
     sample = samples[-1]
 
     new = copy.deepcopy(sample)
-    new.set("uuid", str(uuidlib.uuid4()))
+    old_name = (new.xpath("md:Properties/md:Name/text()",
+                          namespaces=cfg.NS) or [""])[0]
+    _reidentify_cfg(new, old_name, name)
     props = new.xpath("md:Properties", namespaces=cfg.NS)[0]
     props.xpath("md:Name", namespaces=cfg.NS)[0].text = name
     for content in props.xpath("md:Synonym//v8:content", namespaces=cfg.NS):
@@ -139,7 +169,7 @@ def _add_edt(path: Path, tag: str, name: str, synonym: str,
     sample = samples[-1]
 
     new = copy.deepcopy(sample)
-    new.set("uuid", str(uuidlib.uuid4()))
+    _regen_uuids(new)  # свежие uuid всему поддереву (вложенные элементы тоже)
     new.xpath("name")[0].text = name
     for value in new.xpath("synonym/value"):
         value.text = synonym
