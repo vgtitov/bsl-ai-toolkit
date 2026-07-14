@@ -13,11 +13,14 @@ from onec_metadata.ops.add_child import add_child
 FIX = Path(__file__).parent / "fixtures"
 NS = cfg.NS
 
+# DISCIPLINE_ALLOW_TEST_EDIT: добавлен ChartOfCharacteristicTypes (ПВХ)
 CASES = [
     ("businessprocess.xml", "cfg"),
     ("businessprocess.mdo", "edt"),
     ("exchangeplan.xml", "cfg"),
     ("exchangeplan.mdo", "edt"),
+    ("chartofcharacteristictypes.xml", "cfg"),
+    ("chartofcharacteristictypes.mdo", "edt"),
 ]
 
 

@@ -35,6 +35,8 @@ SUPPORTED: dict[str, frozenset] = {
     # ТЧ/команды доступны тем же generic-механизмом, но покрыты тестом только реквизиты
     "BusinessProcess": frozenset({"add_child"}),
     "ExchangePlan": frozenset({"add_child"}),
+    # план видов характеристик: реквизиты (add_child) — оба формата
+    "ChartOfCharacteristicTypes": frozenset({"add_child"}),
     # подсистема: включение объекта в состав (командный интерфейс) — оба формата
     "Subsystem": frozenset({"subsystem_add_content"}),
     # роль: выдать/установить право объекта (Rights.xml Конфигуратора)
