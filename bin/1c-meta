@@ -84,6 +84,13 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--value", required=True, help="новое значение")
     sp.add_argument("--attribute", help="имя реквизита (иначе — свойство объекта)")
 
+    fm = sub.add_parser("form", help="правка управляемых форм")
+    fmsub = fm.add_subparsers(dest="fmcmd", required=True)
+    fma = fmsub.add_parser("add-attribute")
+    fma.add_argument("file", help="путь к Forms/<Имя>/Ext/Form.xml")
+    fma.add_argument("--name", required=True, help="имя реквизита формы")
+    fma.add_argument("--type", dest="type_ref", required=True, help="тип реквизита")
+
     et = sub.add_parser("edit-type",
                         help="сменить/расширить тип существующего реквизита")
     et.add_argument("file")
@@ -146,6 +153,9 @@ def main() -> None:
         elif ns.cmd == "edit-type":
             from onec_metadata.ops.edit_type import edit_type
             edit_type(Path(ns.file), ns.attribute, ns.type_ref, ns.length)
+        elif ns.cmd == "form":
+            from onec_metadata.ops.form import add_attribute as form_add_attr
+            form_add_attr(Path(ns.file), ns.name, ns.type_ref)
     except (OpPreconditionError, UnknownFormatError) as e:
         print(f"Ошибка предусловия: {e}", file=sys.stderr)
         sys.exit(2)

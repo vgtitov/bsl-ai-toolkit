@@ -48,6 +48,8 @@ SUPPORTED: dict[str, frozenset] = {
     "Subsystem": frozenset({"subsystem_add_content"}),
     # роль: выдать/установить право объекта (Rights.xml Конфигуратора)
     "Role": frozenset({"role_grant_right"}),
+    # управляемая форма (P4): реквизит формы (id-пространство, ns logform)
+    "Form": frozenset({"form_add_attribute"}),
 }
 
 

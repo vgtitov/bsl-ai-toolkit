@@ -31,6 +31,7 @@ NS = {
     "dcscor": "http://v8.1c.ru/8.1/data-composition-system/core",
     "dcsset": "http://v8.1c.ru/8.1/data-composition-system/settings",
     "roles": "http://v8.1c.ru/8.2/roles",
+    "lf": "http://v8.1c.ru/8.3/xcf/logform",
     "xsi": "http://www.w3.org/2001/XMLSchema-instance",
     "xs": "http://www.w3.org/2001/XMLSchema",
 }
