@@ -32,6 +32,26 @@ def _regen_uuids(element) -> None:
         el.set("uuid", str(uuidlib.uuid4()))
 
 
+def _clear_cfg_semantics(new, tag: str) -> None:
+    """Очистить у КЛОНА семантически-определяющие поля образца, чтобы не тащить
+    чужие ссылки/обработчики (scope-граница: без анализа/инжекта ссылок).
+
+    - Column: `References` (ссылки на реквизиты чужих документов) → пусто;
+    - URLTemplate: `Handler` вложенных методов → пусто;
+    - Operation: `ProcedureName` → пусто.
+    Пользователь заполняет их осознанно после создания стаба.
+    """
+    if tag == "Column":
+        for refs in new.xpath("md:Properties/md:References", namespaces=cfg.NS):
+            cfg.remove_children(refs, refs.xpath("xr:Item", namespaces=cfg.NS))
+    elif tag == "URLTemplate":
+        for h in new.xpath(".//md:Handler", namespaces=cfg.NS):
+            h.text = None
+    elif tag == "Operation":
+        for pn in new.xpath("md:Properties/md:ProcedureName", namespaces=cfg.NS):
+            pn.text = None
+
+
 def _reidentify_cfg(new, old_name: str, new_name: str) -> None:
     """Сделать идентификаторы нового поддерева уникальными (Конфигуратор).
 
@@ -58,6 +78,12 @@ KINDS = {
     "Command": ("Command", "commands", False),
     # реквизит адресации Задачи (Task) — типизированный, как обычный реквизит
     "AddressingAttribute": ("AddressingAttribute", "addressingAttributes", True),
+    # без типа: графа журнала документов, шаблон URL HTTP-сервиса, операция веб-сервиса.
+    # Конфигуратор-теги проверены на реале; EDT-теги (columns/urlTemplates/operations) —
+    # конвенция, БЕЗ реального .mdo-образца (непроверено, см. COVERAGE_MAP).
+    "Column": ("Column", "columns", False),
+    "URLTemplate": ("URLTemplate", "urlTemplates", False),
+    "Operation": ("Operation", "operations", False),
 }
 
 
@@ -168,6 +194,7 @@ def _add_configurator(path: Path, tag: str, name: str, synonym: str,
     props.xpath("md:Name", namespaces=cfg.NS)[0].text = name
     for content in props.xpath("md:Synonym//v8:content", namespaces=cfg.NS):
         content.text = synonym
+    _clear_cfg_semantics(new, tag)
 
     if type_ref is not None:
         type_els = props.xpath("md:Type", namespaces=cfg.NS)

@@ -1,0 +1,29 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<MetaDataObject xmlns="http://v8.1c.ru/8.3/MDClasses" xmlns:v8="http://v8.1c.ru/8.1/data/core" xmlns:xr="http://v8.1c.ru/8.3/xcf/readable" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" version="2.18">
+	<!-- DISCIPLINE_ALLOW_TEST_EDIT: обезличенная фикстура, структура с реального УТ -->
+	<HTTPService uuid="d0000000-0000-0000-0000-0000000000d4">
+		<Properties>
+			<Name>ТестHTTPService</Name>
+			<Comment/>
+		</Properties>
+		<ChildObjects>
+			<URLTemplate uuid="70000000-0000-0000-0000-0000000000d4">
+				<Properties>
+					<Name>Шаблон1</Name>
+					<Comment/>
+					<Template>/x</Template>
+				</Properties>
+				<ChildObjects>
+					<Method uuid="b0000000-0000-0000-0000-0000000000d4">
+						<Properties>
+							<Name>GET</Name>
+							<Comment/>
+							<HTTPMethod>GET</HTTPMethod>
+							<Handler>h</Handler>
+						</Properties>
+					</Method>
+				</ChildObjects>
+			</URLTemplate>
+		</ChildObjects>
+	</HTTPService>
+</MetaDataObject>

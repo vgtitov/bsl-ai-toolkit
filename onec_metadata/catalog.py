@@ -18,8 +18,9 @@ CROSS_CUTTING: frozenset = frozenset({"set_property"})
 SUPPORTED: dict[str, frozenset] = {
     # макеты табличных документов (печатные формы) — Конфигуратор-XML
     "Template": frozenset({"add_column"}),
-    # отчёты: их СКД-макеты — оба формата (.xml Конфигуратора и .dcs EDT)
-    "Report": frozenset({"scd_add_field", "scd_set_query", "scd_get_query"}),
+    # отчёты: СКД-макеты (оба формата) + реквизиты/ТЧ как объект (add_child)
+    "Report": frozenset({"scd_add_field", "scd_set_query", "scd_get_query",
+                         "add_child"}),
     # реквизиты/ТЧ/команды объектов — оба формата (.xml / .mdo)
     # add_child: Attribute/TabularSection/Command (+ реквизиты ТЧ через parent)
     "Catalog": frozenset({"attribute_add", "add_child"}),
@@ -37,6 +38,12 @@ SUPPORTED: dict[str, frozenset] = {
     "ExchangePlan": frozenset({"add_child"}),
     # план видов характеристик: реквизиты (add_child) — оба формата
     "ChartOfCharacteristicTypes": frozenset({"add_child"}),
+    # обработка как объект: реквизиты/ТЧ/команды — как Catalog (Report — выше)
+    "DataProcessor": frozenset({"add_child"}),
+    # журнал документов: графы (Column); HTTP/веб-сервисы: шаблоны URL / операции
+    "DocumentJournal": frozenset({"add_child"}),
+    "HTTPService": frozenset({"add_child"}),
+    "WebService": frozenset({"add_child"}),
     # подсистема: включение объекта в состав (командный интерфейс) — оба формата
     "Subsystem": frozenset({"subsystem_add_content"}),
     # роль: выдать/установить право объекта (Rights.xml Конфигуратора)

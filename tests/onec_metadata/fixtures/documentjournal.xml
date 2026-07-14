@@ -1,0 +1,28 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<MetaDataObject xmlns="http://v8.1c.ru/8.3/MDClasses" xmlns:v8="http://v8.1c.ru/8.1/data/core" xmlns:xr="http://v8.1c.ru/8.3/xcf/readable" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" version="2.18">
+	<!-- DISCIPLINE_ALLOW_TEST_EDIT: обезличенная фикстура, структура с реального УТ -->
+	<DocumentJournal uuid="d0000000-0000-0000-0000-0000000000d3">
+		<Properties>
+			<Name>ТестDocumentJournal</Name>
+			<Comment/>
+		</Properties>
+		<ChildObjects>
+			<Column uuid="70000000-0000-0000-0000-0000000000d3">
+				<Properties>
+					<Name>Графа1</Name>
+					<Synonym>
+						<v8:item>
+							<v8:lang>ru</v8:lang>
+							<v8:content>Графа 1</v8:content>
+						</v8:item>
+					</Synonym>
+					<Comment/>
+					<Indexing>DontIndex</Indexing>
+					<References>
+						<xr:Item xsi:type="xr:MDObjectRef">Document.Документ1.Attribute.Реквизит1</xr:Item>
+					</References>
+				</Properties>
+			</Column>
+		</ChildObjects>
+	</DocumentJournal>
+</MetaDataObject>
