@@ -1,0 +1,4 @@
+# Фикстуры метаданных — byte-perfect эталоны (тесты проверяют BOM/LF/CRLF как есть).
+# Без -text git с core.autocrlf=true на Windows конвертирует LF→CRLF при checkout
+# и тесты стиля падают (реальный случай: schema.dcs, test_scd_edt на Work PC).
+tests/onec_metadata/fixtures/** -text
