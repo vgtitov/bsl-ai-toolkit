@@ -147,7 +147,7 @@ if DEFAULT_SCOPE not in SCOPES and DEFAULT_SCOPE not in _ALL_ROLES:
 
 
 def _roles_for_scope(scope):
-    """Роли, входящие в scope. Неизвестный scope: если совпадает с именем роли — она; иначе все роли."""
+    """Роли, входящие в scope-группу/имя роли. Для КОНКРЕТНОГО слоя роли не при чём (см. _match_roots)."""
     if scope in SCOPES:
         return SCOPES[scope]
     if scope in _ALL_ROLES:
@@ -155,9 +155,49 @@ def _roles_for_scope(scope):
     return _ALL_ROLES
 
 
+# Синонимы scope из конфига: алиас (нормализованный) → regex по имени репозитория.
+# Локализация задаёт здесь имена контуров/ядер компании ([aliases] в layers.toml) —
+# движок остаётся generic, спец-имён в коде нет.
+_ALIASES_CFG = CFG.get("aliases", {}) if isinstance(CFG.get("aliases"), dict) else {}
+
+
+def _norm(x):
+    return re.sub(r"[\[\]\s]", "", (x or "").lower())
+
+
+_ALIASES = { _norm(k): str(v) for k, v in _ALIASES_CFG.items() if isinstance(v, str) and v }
+
+
+def _match_roots(scope):
+    """Сузить scope до КОНКРЕТНОГО слоя (а не роли/группы): подстрока имени репозитория
+    или тега/ярлыка слоя; фолбэк — алиас из конфига ([aliases]: синоним → regex по репо).
+    Возвращает совпавшие корни без дублей."""
+    sn = _norm(scope)
+    if not sn:
+        return []
+    hits = [r for r in _ROOTS if sn in _norm(_repo_of(r)) or sn in _norm(_TAG_OF.get(r, ""))]
+    if hits:
+        return list(dict.fromkeys(hits))
+    rx = _ALIASES.get(sn)
+    if rx:
+        try:
+            hits = [r for r in _ROOTS if re.search(rx, _repo_of(r).lower())]
+        except re.error:
+            hits = []
+    return list(dict.fromkeys(hits))
+
+
+def _scope_known(scope):
+    return scope in SCOPES or scope in _ALL_ROLES or bool(_match_roots(scope))
+
+
 def _dirs(scope):
-    roles = _roles_for_scope(scope)
-    return [r for r in _ROOTS if _ROLE_OF.get(r) in roles]
+    """Каталоги для поиска. scope: имя scope-группы/роли (из конфига) — по ролям;
+    ИНАЧЕ конкретный слой по репо/тегу/алиасу (см. _match_roots)."""
+    if scope in SCOPES or scope in _ALL_ROLES:
+        roles = _roles_for_scope(scope)
+        return [r for r in _ROOTS if _ROLE_OF.get(r) in roles]
+    return _match_roots(scope)
 
 
 def _retag(text):
@@ -215,19 +255,25 @@ def _grep(query, dirs, timeout=180):
 
 
 def _scope_hint():
-    """Подсказка о доступных scope для описаний инструментов (что задано конфигом)."""
+    """Подсказка о доступных scope: scope-группы (из конфига) + конкретные слои (теги)."""
     names = [s for s in SCOPES if s != "all"]
-    return f" Доступные scope: {', '.join(['all', *names])}." if names else ""
+    groups = ", ".join(["all", *names])
+    layers = ", ".join(sorted({t for t in _TAG_OF.values()}))
+    return f" scope-группы: {groups}; ЛИБО конкретный слой (тег/репо/алиас): {layers}."
 
 
 @mcp.tool()
 def search_1c(query: str, scope: str = "", max_results: int = 40) -> str:
     """Поиск по РЕАЛЬНОМУ коду 1С во всех склонированных конфигурациях/расширениях.
     Используй, чтобы проверить, как устроена типовая или есть ли уже готовое в расширении, а не гадать.
-    query — текст/имя метода/объекта (регистр игнорируется). scope ограничивает слои (см. конфиг; '' = по умолчанию)."""
+    query — текст/имя метода/объекта (регистр игнорируется). scope ограничивает слои: scope-группа
+    (из конфига) ЛИБО КОНКРЕТНЫЙ слой по тегу/имени репозитория/алиасу — чтобы не фильтровать
+    вручную. '' = по умолчанию."""
     if not _ROOTS:
         return f"код не найден локально ({SRC}). Склонируй репозитории в ONEC_SRC_DIR."
     sc = scope or DEFAULT_SCOPE
+    if not _scope_known(sc):
+        return f"неизвестный scope '{sc}'.{_scope_hint()}"
     raw = _grep(query, _dirs(sc))
     if not raw:
         return f"по '{query}' ничего не найдено (scope={sc})."
@@ -239,10 +285,13 @@ def search_1c(query: str, scope: str = "", max_results: int = 40) -> str:
 @mcp.tool()
 def find_object(name: str, scope: str = "") -> str:
     """Найти объект метаданных (Документ, Справочник, Регистр, ОбщийМодуль, Перечисление и т.п.) по имени
-    или части имени. Возвращает пути в каждом слое (тег слоя). scope ограничивает слои ('' = по умолчанию)."""
+    или части имени. Возвращает пути в каждом слое (тег слоя). scope: scope-группа ЛИБО конкретный
+    слой по тегу/репо/алиасу. '' = по умолчанию."""
     if not _ROOTS:
         return f"код не найден локально ({SRC})."
     sc = scope or DEFAULT_SCOPE
+    if not _scope_known(sc):
+        return f"неизвестный scope '{sc}'.{_scope_hint()}"
     found, nl = [], name.lower()
     for base in _dirs(sc):
         base_depth = base.rstrip("/").count("/")
@@ -283,8 +332,10 @@ def read_module(path: str, start: int = 1, end: int = 250) -> str:
 @mcp.tool()
 def list_modules(scope: str = "") -> str:
     """Список общих модулей по слоям — что уже реализовано, чтобы переиспользовать, а не изобретать.
-    scope ограничивает слои (напр. только расширения, если так задано в конфиге; '' = по умолчанию)."""
+    scope: scope-группа ЛИБО конкретный слой по тегу/репо/алиасу ('' = по умолчанию)."""
     sc = scope or DEFAULT_SCOPE
+    if not _scope_known(sc):
+        return f"неизвестный scope '{sc}'.{_scope_hint()}"
     blocks = []
     for root in _dirs(sc):
         d = os.path.join(root, "CommonModules")
