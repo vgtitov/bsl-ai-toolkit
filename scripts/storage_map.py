@@ -34,6 +34,13 @@ import sys
 import time
 from pathlib import Path
 
+# Windows-консоль по умолчанию cp1251 — печать '→'/'—'/кириллицы роняет скрипт. Принудительно UTF-8.
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 STALE_DAYS = 90  # конфигурация живая: карта старше — вероятно, отстала от реструктуризаций
 
 _HEADER_HINTS = ("имя таблицы", "метаданные", "назначение", "storage", "table name")
