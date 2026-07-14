@@ -14,6 +14,13 @@
 import os, shutil, subprocess, sys
 from pathlib import Path
 
+# Windows-консоль по умолчанию cp1251 — печать '→'/'—'/кириллицы роняет скрипт. Принудительно UTF-8.
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 MARKER = "claude-no-coauthor"
 SRC = Path(__file__).resolve().parent / "git-hooks"
 
