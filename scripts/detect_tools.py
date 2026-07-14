@@ -31,7 +31,9 @@ from pathlib import Path
 # Windows-консоль по умолчанию cp1251 — печать '→'/кириллицы роняет скрипт. Принудительно UTF-8.
 for _s in (sys.stdout, sys.stderr):
     try:
-        _s.reconfigure(encoding="utf-8", errors="replace")
+        # line_buffering=True — прогресс виден сразу, а не вываливается одним куском в конце
+        # (под `uv run`/пайпом stdout иначе блочно-буферизуется и выглядит как «зависло»).
+        _s.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
     except Exception:
         pass
 
@@ -118,13 +120,15 @@ def _prune(dirnames):
 
 
 def search_roots():
-    """Лёгкие каталоги, где разумно искать jar'ы/мост (без полного обхода диска)."""
-    cands = [REPO_ROOT, REPO_ROOT.parent, TOOLS_MCP, TOOLS_BSL,
+    """Лёгкие каталоги, где разумно искать jar'ы/мост (без полного обхода диска).
+
+    НЕ включаем каталоги с кодом 1С (REPO_ROOT.parent с клонами контуров, ONEC_SRC_DIR ~10 ГБ):
+    jar'ы/мост там не лежат, а их os.walk на depth=4 раньше вешал скрипт на минуты. jar'ы качаются
+    в ~/tools (TOOLS_MCP/TOOLS_BSL) — их и проверяем напрямую (см. exact-dest в main), это мгновенно.
+    """
+    cands = [REPO_ROOT, TOOLS_MCP, TOOLS_BSL,
              HOME / "tools", HOME / ".bsl", HOME / "Downloads"]
-    src = os.environ.get("ONEC_SRC_DIR")
-    if src:
-        cands.append(Path(src))
-    for base in [REPO_ROOT.parent, HOME / "dev", Path("C:/dev") if IS_WIN else HOME]:
+    for base in [HOME / "dev", Path("C:/dev") if IS_WIN else HOME]:
         if base.is_dir():
             try:
                 for d in base.iterdir():
@@ -256,9 +260,13 @@ def main():
         pre = env_valid(name)
         if pre:
             ok(f"{name}={pre} (уже задано, оставляю)"); found.append(name); continue
-        hit = find_file([Path(spec["dest"]).name])  # точное имя ассета
-        if not hit:  # запасной поиск по обобщённой маске (любая версия)
-            hit = find_file(["mcp-bsl-context*.jar"]) if name == "BSL_PLATFORM_JAR" else find_file(["bsl-language-server*.jar"], prefer="exec")
+        dest = Path(spec["dest"])
+        if dest.exists():           # штатный путь установки (~/tools/...) — без обхода диска, мгновенно
+            hit = dest
+        else:
+            hit = find_file([dest.name])  # точное имя ассета в лёгких каталогах
+            if not hit:  # запасной поиск по обобщённой маске (любая версия)
+                hit = find_file(["mcp-bsl-context*.jar"]) if name == "BSL_PLATFORM_JAR" else find_file(["bsl-language-server*.jar"], prefer="exec")
         if hit:
             persist(name, str(hit), dry, posix_exports)
             ok(f"{name}={hit} ({spec['label']}){'  [dry-run]' if dry else ''}"); found.append(name); continue
