@@ -24,10 +24,28 @@ foreach ($c in 'git','uv','java','claude','rg') {
 
 Say "2/6 Скиллы -> ~/.claude/skills"
 New-Item -ItemType Directory -Force -Path $SkillsDst | Out-Null
-# generic: доедет всё, что лежит в skills/ (1c-dev, 1c-analyst, 1c-metadata, будущие)
+# generic: доедет всё, что лежит в skills/ (1c-dev, 1c-analyst, 1c-metadata, будущие).
+# Скилл перекладывается ЦЕЛИКОМ (удалённые upstream файлы не остаются), но references/local/
+# — слой ЛОКАЛИЗАЦИИ (docs/SKILL_LOCALIZATION.md) — сохраняется.
 $skillDirs = Get-ChildItem -Path (Join-Path $TeamDir 'skills') -Directory -ErrorAction SilentlyContinue
 if ($skillDirs) {
-  foreach ($d in $skillDirs) { Copy-Item $d.FullName $SkillsDst -Recurse -Force; Ok "скилл $($d.Name)" }
+  foreach ($d in $skillDirs) {
+    $dst = Join-Path $SkillsDst $d.Name
+    $local = Join-Path $dst 'references\local'
+    $keep = $null
+    if (Test-Path $local) {
+      $keep = Join-Path ([System.IO.Path]::GetTempPath()) ("skill-local-" + [System.Guid]::NewGuid().ToString('N'))
+      Copy-Item $local $keep -Recurse -Force
+    }
+    if (Test-Path $dst) { Remove-Item $dst -Recurse -Force }
+    Copy-Item $d.FullName $SkillsDst -Recurse -Force
+    if ($keep) {
+      New-Item -ItemType Directory -Force -Path (Join-Path $dst 'references') | Out-Null
+      Copy-Item $keep (Join-Path $dst 'references\local') -Recurse -Force
+      Remove-Item $keep -Recurse -Force
+    }
+    Ok "скилл $($d.Name)"
+  }
 } else { Warn "в $TeamDir\skills нет скиллов" }
 
 Say "3/6 Каталог исходников 1С: $SrcDir"

@@ -23,11 +23,22 @@ done
 
 say "2/6 Скиллы -> ~/.claude/skills"
 mkdir -p "$SKILLS_DST"
-# generic: доедет всё, что лежит в skills/ (1c-dev, 1c-analyst, 1c-metadata, будущие)
+# generic: доедет всё, что лежит в skills/ (1c-dev, 1c-analyst, 1c-metadata, будущие).
+# Скилл перекладывается ЦЕЛИКОМ (удалённые upstream файлы не остаются), но references/local/
+# — слой ЛОКАЛИЗАЦИИ (docs/SKILL_LOCALIZATION.md) — сохраняется.
 found=0
 for d in "$TEAM_DIR"/skills/*/; do
   [ -d "$d" ] || continue
-  cp -R "$d" "$SKILLS_DST/"; ok "скилл $(basename "$d")"; found=1
+  name="$(basename "$d")"
+  dst="$SKILLS_DST/$name"
+  if [ -d "$dst/references/local" ]; then
+    keep="$(mktemp -d)"; cp -R "$dst/references/local" "$keep/"
+    rm -rf "$dst"; cp -R "$d" "$SKILLS_DST/"
+    mkdir -p "$dst/references"; cp -R "$keep/local" "$dst/references/"; rm -rf "$keep"
+  else
+    rm -rf "$dst"; cp -R "$d" "$SKILLS_DST/"
+  fi
+  ok "скилл $name"; found=1
 done
 [ "$found" = 1 ] || warn "в $TEAM_DIR/skills/ нет скиллов"
 
