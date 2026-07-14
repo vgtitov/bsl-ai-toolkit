@@ -130,12 +130,10 @@ def _add_configurator(path: Path, tag: str, name: str, synonym: str,
         if not v8types:
             raise OpPreconditionError(f"У образца {tag} нет v8:Type")
         v8types[0].text = type_ref
-        for extra in v8types[1:]:
-            extra.getparent().remove(extra)
-        for qual in type_els[0].xpath(
-                ".//v8:StringQualifiers | .//v8:NumberQualifiers | "
-                ".//v8:DateQualifiers", namespaces=cfg.NS):
-            qual.getparent().remove(qual)
+        to_remove = list(v8types[1:]) + type_els[0].xpath(
+            "v8:StringQualifiers | v8:NumberQualifiers | v8:DateQualifiers",
+            namespaces=cfg.NS)
+        cfg.remove_children(type_els[0], to_remove)
 
     cfg.place_after(sample, new)
     cfg.save(doc, path)
@@ -180,11 +178,9 @@ def _add_edt(path: Path, tag: str, name: str, synonym: str,
             raise OpPreconditionError(f"У образца {tag} нет type/types")
         types = type_els[0].xpath("types")
         types[0].text = type_ref
-        for extra in types[1:]:
-            type_els[0].remove(extra)
-        for qual in type_els[0].xpath(
-                "stringQualifiers | numberQualifiers | dateQualifiers"):
-            type_els[0].remove(qual)
+        to_remove = list(types[1:]) + type_els[0].xpath(
+            "stringQualifiers | numberQualifiers | dateQualifiers")
+        cfg.remove_children(type_els[0], to_remove)
 
     cfg.place_after(sample, new)
     cfg.save(doc, path)

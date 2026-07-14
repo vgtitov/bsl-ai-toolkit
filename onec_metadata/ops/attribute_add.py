@@ -57,13 +57,12 @@ def _add_attribute_configurator(object_xml: Path, name: str, type_ref: str,
     if not v8types:
         raise OpPreconditionError("У реквизита-образца нет v8:Type")
     v8types[0].text = type_ref
-    for extra in v8types[1:]:  # составной тип образца → одиночный у нового
-        extra.getparent().remove(extra)
-    # квалификаторы строк/чисел образца не соответствуют новому типу — убрать
-    for qual in type_el.xpath(
-            ".//v8:StringQualifiers | .//v8:NumberQualifiers | "
-            ".//v8:DateQualifiers", namespaces=cfg.NS):
-        qual.getparent().remove(qual)
+    # составной тип образца → одиночный у нового; квалификаторы образца не
+    # соответствуют новому типу — убрать (с сохранением отступа закрывающего тега)
+    to_remove = list(v8types[1:]) + type_el.xpath(
+        "v8:StringQualifiers | v8:NumberQualifiers | v8:DateQualifiers",
+        namespaces=cfg.NS)
+    cfg.remove_children(type_el, to_remove)
 
     cfg.place_after(sample, new)
     cfg.save(doc, object_xml)
@@ -95,11 +94,9 @@ def _add_attribute_edt(mdo_path: Path, name: str, type_ref: str,
     if not types:
         raise OpPreconditionError("У реквизита-образца нет type/types")
     types[0].text = type_ref
-    for extra in types[1:]:
-        type_el.remove(extra)
-    for qual in type_el.xpath("stringQualifiers | numberQualifiers | "
-                              "dateQualifiers"):
-        type_el.remove(qual)
+    to_remove = list(types[1:]) + type_el.xpath(
+        "stringQualifiers | numberQualifiers | dateQualifiers")
+    cfg.remove_children(type_el, to_remove)
 
     cfg.place_after(sample, new)
     cfg.save(doc, mdo_path)

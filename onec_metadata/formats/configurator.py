@@ -115,6 +115,29 @@ def place_after(anchor, new) -> None:
         anchor.tail = parent.text
 
 
+def remove_children(container, to_remove) -> None:
+    """Удалить элементы `to_remove` из `container`, сохранив отступ закрывающего тега.
+
+    Хвост (`.tail`) последнего ребёнка несёт ЗАКРЫВАЮЩИЙ отступ родителя. Если
+    среди удаляемых есть последний ребёнок, новый последний должен унаследовать
+    этот закрывающий хвост — иначе он сохранит свой (межэлементный, на уровень
+    глубже) и закрывающий тег переотступится (нарушение byte-perfect). Зеркало
+    `place_after` для удаления.
+    """
+    to_remove = list(to_remove)
+    if not to_remove:
+        return
+    kids = list(container)
+    closing_tail = kids[-1].tail if kids else None
+    removing_last = bool(kids) and kids[-1] in to_remove
+    for el in to_remove:
+        container.remove(el)
+    if removing_last:
+        rest = list(container)
+        if rest and closing_tail is not None:
+            rest[-1].tail = closing_tail
+
+
 def save(doc: Doc, path: Path) -> None:
     body = etree.tostring(doc.tree, encoding="unicode")
     body = body.replace("&#13;\n", "\r\n").replace("&#13;", "\r")

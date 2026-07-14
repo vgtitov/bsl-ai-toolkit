@@ -82,6 +82,15 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--value", required=True, help="новое значение")
     sp.add_argument("--attribute", help="имя реквизита (иначе — свойство объекта)")
 
+    et = sub.add_parser("edit-type",
+                        help="сменить/расширить тип существующего реквизита")
+    et.add_argument("file")
+    et.add_argument("--attribute", required=True, help="имя реквизита")
+    et.add_argument("--type", dest="type_ref", required=True,
+                    help="новый тип (напр. cfg:CatalogRef.Товары / xs:string / String)")
+    et.add_argument("--length", type=int,
+                    help="длина строки (только для строкового типа, если квалификатор есть)")
+
     rl = sub.add_parser("role", help="права роли (Rights.xml)")
     rlsub = rl.add_subparsers(dest="rlcmd", required=True)
     rg = rlsub.add_parser("grant")
@@ -131,6 +140,9 @@ def main() -> None:
         elif ns.cmd == "set-property":
             from onec_metadata.ops.set_property import set_property
             set_property(Path(ns.file), ns.name, ns.value, ns.attribute)
+        elif ns.cmd == "edit-type":
+            from onec_metadata.ops.edit_type import edit_type
+            edit_type(Path(ns.file), ns.attribute, ns.type_ref, ns.length)
     except (OpPreconditionError, UnknownFormatError) as e:
         print(f"Ошибка предусловия: {e}", file=sys.stderr)
         sys.exit(2)
