@@ -12,18 +12,24 @@
 - **Регистры:** InformationRegister (Регистр сведений), AccumulationRegister
   (Регистр накопления) — измерения/ресурсы/реквизиты.
 - **Перечисление:** Enum (значения).
-- **Журнал документов:** DocumentJournal (графы — Column). *Конфигуратор; EDT-тег
-  `columns` — конвенция, без реального .mdo-образца (непроверено).*
+- **Журнал документов:** DocumentJournal (графы — Column). *EDT-тег `columns`
+  проверен на реальной EDT-выгрузке ERP 2.5 (2026-07-14).*
 - **Сервисы:** HTTPService (URLTemplate +вложенные Method), WebService (Operation).
-  *Конфигуратор; EDT-теги `urlTemplates`/`operations` — конвенция, непроверено.*
+  *EDT-теги `urlTemplates`/`operations` проверены на реальной EDT-выгрузке ERP 2.5.
+  NB: метод HTTP-сервиса в EDT = вложенный `<methods>` — как отдельный вид не поддержан.*
 
 **Важно (клонирование стаба):** для Column/URLTemplate/Operation семантически-
 определяющие поля образца НЕ переносятся — `References` графы, `Handler` метода,
 `ProcedureName` операции очищаются при создании (иначе клон тащил бы чужие ссылки).
 Новый элемент — чистый стаб; заполнить эти поля нужно осознанно после создания.
 - **Спец-операции:** Subsystem (состав — `subsystem add-content`), Role (права —
-  `role grant`), макет печатной формы (`template add-column`), СКД отчёта
-  (`scd add-field`/`set-query`).
+  `role grant`: Конфигуратор `Rights.xml` И EDT `Rights.rights` — формат общий,
+  проверено), макет печатной формы (`template add-column`: Конфигуратор
+  `Template.xml` И EDT `Template.mxlx` — тот же spreadsheet-XML, проверено;
+  бинарный `Template.bin` вне scope), СКД отчёта (`scd add-field`/`set-query`:
+  `.xml` и EDT `.dcs`), реквизит управляемой формы (`form add-attribute`:
+  Конфигуратор ns logform И EDT `Form.form` ns dt/form — у EDT тип в его нотации
+  `String`/`CatalogRef.Имя`).
 
 ## Класс-агностично поддержано (add_child работает, фикстуры нет — тех же семейств)
 Отсутствуют в базе-доноре УТ, поэтому без фикстуры; структура идентична

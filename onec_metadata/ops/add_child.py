@@ -79,8 +79,9 @@ KINDS = {
     # реквизит адресации Задачи (Task) — типизированный, как обычный реквизит
     "AddressingAttribute": ("AddressingAttribute", "addressingAttributes", True),
     # без типа: графа журнала документов, шаблон URL HTTP-сервиса, операция веб-сервиса.
-    # Конфигуратор-теги проверены на реале; EDT-теги (columns/urlTemplates/operations) —
-    # конвенция, БЕЗ реального .mdo-образца (непроверено, см. COVERAGE_MAP).
+    # Оба формата проверены на реале: Конфигуратор — выгрузка УТ; EDT-теги
+    # (columns/urlTemplates/operations) — EDT-выгрузка ERP 2.5, 2026-07-14.
+    # NB: метод HTTP-сервиса (дитя urlTemplates) в EDT = <methods> — как вид пока не поддержан.
     "Column": ("Column", "columns", False),
     "URLTemplate": ("URLTemplate", "urlTemplates", False),
     "Operation": ("Operation", "operations", False),

@@ -1,14 +1,17 @@
-"""Правка управляемых форм (формат Конфигуратора, ns logform).
+"""Правка управляемых форм: Конфигуратор (`Form.xml`, ns logform) и EDT
+(`Form.form`, ns g5.1c.ru/v8/dt/form). Диспетчеризация по расширению файла.
 
-Отличие от метаданных: элементы формы нумеруются ЦЕЛЫМ атрибутом `id`. Пространства
-id РАЗДЕЛЬНЫ: реквизиты формы (`<Attributes>`) и элементы (`<ChildItems>` со своими
-вложенными ContextMenu/ExtendedTooltip) нумеруются НЕЗАВИСИМО — в реальной форме
-Attribute id=1 и InputField id=1 сосуществуют. Новый элемент получает id =
-max(id в СВОЁМ пространстве) + 1; элемент с вложенными частями — несколько
-последовательных id.
+Отличие от метаданных: элементы формы нумеруются ЦЕЛЫМ `id` (Конфигуратор —
+XML-атрибут, EDT — дочерний элемент <id>). Пространства id РАЗДЕЛЬНЫ: реквизиты
+формы и элементы нумеруются НЕЗАВИСИМО — в реальной форме реквизит id=1 и элемент
+id=1 сосуществуют (проверено и на УТ-выгрузке Конфигуратора, и на EDT-выгрузке
+ERP). Новый элемент получает id = max(id в СВОЁМ пространстве) + 1.
 
-P4.1 — `add_attribute`: реквизит формы в <Attributes> (клон образца + свежий id +
-тип; MainAttribute сбрасывается — основной реквизит только один). Форма без
+P4.1 — `add_attribute`: реквизит формы (клон образца + свежий id + тип; признак
+основного реквизита сбрасывается — основной только один). EDT-нюансы: реквизиты —
+безпрефиксные блоки <attributes> прямо под корнем; тип — в EDT-нотации
+(String / CatalogRef.Имя, НЕ xs:/cfg:); клон чистится от семантики образца
+(extInfo/notDefaultUseAlwaysAttributes/квалификаторы). Форма без
 реквизита-образца — пока отдельная операция (см. spec forms-design).
 """
 import copy
@@ -39,6 +42,13 @@ def _reid(element, next_id: int) -> int:
 
 def add_attribute(form_path: Path, name: str, type_ref: str) -> None:
     validate_name(name)
+    if str(form_path).endswith(".form"):
+        _add_attribute_edt(form_path, name, type_ref)
+    else:
+        _add_attribute_configurator(form_path, name, type_ref)
+
+
+def _add_attribute_configurator(form_path: Path, name: str, type_ref: str) -> None:
     doc = cfg.load(form_path)
     root = doc.getroot()
 
@@ -71,4 +81,67 @@ def add_attribute(form_path: Path, name: str, type_ref: str) -> None:
         main.text = "false"
 
     cfg.place_after(sample, new)
+    cfg.save(doc, form_path)
+
+
+# ---------- EDT (Form.form) ----------
+
+# дети клона-реквизита, несущие семантику ОБРАЗЦА (чужие ссылки/настройки) — удалить.
+# Список эмпирический: прямые дети <attributes> в реальной EDT-выгрузке ERP 2.5 —
+# name/id/valueType/view/edit + семантические main/extInfo/
+# notDefaultUseAlwaysAttributes/columns; ничего не выдумываем сверх наблюдаемого.
+_EDT_ATTR_SEMANTIC = (
+    "main", "extInfo", "notDefaultUseAlwaysAttributes", "columns",
+)
+# квалификаторы типа образца — с новым типом не совместимы
+_EDT_QUALIFIERS = (
+    "stringQualifiers", "numberQualifiers", "dateQualifiers",
+    "binaryQualifiers",
+)
+
+
+def _add_attribute_edt(form_path: Path, name: str, type_ref: str) -> None:
+    doc = cfg.load(form_path)
+    root = doc.getroot()
+
+    # реквизиты — безпрефиксные <attributes> прямо под form:Form
+    existing = root.xpath("attributes")
+    if not existing:
+        raise OpPreconditionError(
+            "В форме нет реквизита-образца (создание с нуля — отдельная операция)")
+    if name in [a.findtext("name") for a in existing]:
+        raise OpPreconditionError(f"Реквизит формы '{name}' уже существует")
+
+    # образец: предпочесть НЕосновной реквизит с непустым valueType/types
+    sample = None
+    for cand in reversed(existing):
+        if cand.findtext("main") != "true" and cand.xpath("valueType/types"):
+            sample = cand
+            break
+    if sample is None:
+        for cand in reversed(existing):
+            if cand.xpath("valueType/types"):
+                sample = cand
+                break
+    if sample is None:
+        raise OpPreconditionError(
+            "У реквизитов-образцов формы нет valueType/types (создание с нуля — отдельная операция)")
+
+    new = copy.deepcopy(sample)
+    new.find("name").text = name
+
+    # id: max по ПРОСТРАНСТВУ реквизитов формы (прямые <id> блоков attributes) + 1
+    ids = [int(a.findtext("id")) for a in existing if (a.findtext("id") or "").lstrip("-").isdigit()]
+    new.find("id").text = str(max([i for i in ids if i > 0], default=0) + 1)
+
+    vt = new.find("valueType")
+    types = vt.findall("types")
+    types[0].text = type_ref
+    cfg.remove_children(vt, types[1:])
+    cfg.remove_children(vt, [q for tag in _EDT_QUALIFIERS for q in vt.findall(tag)])
+
+    cfg.remove_children(
+        new, [el for tag in _EDT_ATTR_SEMANTIC for el in new.findall(tag)])
+
+    cfg.place_after(existing[-1], new)
     cfg.save(doc, form_path)
