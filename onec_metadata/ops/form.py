@@ -98,11 +98,11 @@ def add_field(form_path: Path, name: str, data_path: str, title: str | None = No
     Клон последнего InputField-образца; DataPath задаётся явно, семантика образца
     (обработчики, списки выбора) чистится; вложенные части переименовываются
     конвенцией Конфигуратора: <Имя>КонтекстноеМеню / <Имя>ExtendedTooltip.
-    EDT-формат (.form) для полей — P4.3, пока не поддержан."""
+    EDT-формат (.form): визуальное поле = items xsi:type=form:FormField — см. _add_field_edt."""
     validate_name(name)
     if str(form_path).endswith(".form"):
-        raise OpPreconditionError(
-            "add-field для EDT-формы (.form) пока не поддержан (P4.3)")
+        _add_field_edt(form_path, name, data_path, title)
+        return
     doc = cfg.load(form_path)
     root = doc.getroot()
 
@@ -210,4 +210,59 @@ def _add_attribute_edt(form_path: Path, name: str, type_ref: str) -> None:
         new, [el for tag in _EDT_ATTR_SEMANTIC for el in new.findall(tag)])
 
     cfg.place_after(existing[-1], new)
+    cfg.save(doc, form_path)
+
+
+# ---------- P4.3: элемент формы EDT (items form:FormField) ----------
+
+def _reid_edt(element, next_id: int) -> int:
+    """Переприсвоить id (дочерние <id>) всему поддереву — свежие последовательные
+    в порядке документа. EDT нумерует id ДОЧЕРНИМ элементом, не атрибутом."""
+    for idel in element.xpath(".//id | ./id"):
+        idel.text = str(next_id)
+        next_id += 1
+    return next_id
+
+
+def _add_field_edt(form_path: Path, name: str, data_path: str, title: str | None) -> None:
+    if title:
+        raise OpPreconditionError("title пока не поддержан (мультиязычный блок — P4.3)")
+    doc = cfg.load(form_path)
+    root = doc.getroot()
+    xt = cfg.q("xsi", "type")
+
+    items = root.xpath("items")
+    if not items:
+        raise OpPreconditionError("В форме нет блока items")
+    if name in [i.findtext("name") for i in items]:
+        raise OpPreconditionError(f"Элемент формы '{name}' уже существует")
+
+    fields = [i for i in items
+              if (i.get(xt) or "").endswith("FormField")]
+    if not fields:
+        raise OpPreconditionError(
+            "В форме нет образца поля (items form:FormField; создание с нуля — отдельная операция)")
+    sample = fields[-1]
+
+    # пространство ЭЛЕМЕНТОВ: все <id> вне реквизитов (attributes) — отдельно от них
+    el_ids = [int(t) for t in root.xpath(".//id[not(ancestor::attributes)]/text()")
+              if t.lstrip("-").isdigit()]
+    next_id = max([i for i in el_ids if i > 0], default=0) + 1
+
+    new = copy.deepcopy(sample)
+    _reid_edt(new, next_id)                    # свежие id полю и вложенным частям
+    new.find("name").text = name
+
+    seg = new.xpath("dataPath/segments")
+    if not seg:
+        raise OpPreconditionError("У образца поля нет dataPath/segments")
+    seg[0].text = data_path
+
+    # вложенные части — под именем нового поля (конвенция)
+    for tip in new.xpath("extendedTooltip/name"):
+        tip.text = f"{name}РасширеннаяПодсказка"
+    for menu in new.xpath("contextMenu/name"):
+        menu.text = f"{name}КонтекстноеМеню"
+
+    cfg.place_after(sample, new)
     cfg.save(doc, form_path)

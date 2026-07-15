@@ -69,6 +69,10 @@
   CommonPicture, CommonTemplate, CommandGroup, StyleItem, Style, Language,
   SettingsStorage, ScheduledJob, EventSubscription, WSReference, XDTOPackage.
 
-## Формы (все объекты, у кого есть формы) — отдельный блок P4
-Управляемые формы (Form у Catalog/Document/…, CommonForm) — см.
-`docs/superpowers/specs/*-forms-*` (спека) и соответствующие операции.
+## Формы (все объекты, у кого есть формы) — блок P4
+Управляемые формы (Form у Catalog/Document/…, CommonForm). Спека — `docs/superpowers/specs/*-forms-*`.
+- **`form add-attribute`** — реквизит формы: **оба формата** (Конфигуратор `lf:`, EDT `attributes`).
+- **`form add-field`** — визуальное поле: **оба формата** ✅ 2026-07-15. Конфигуратор — `InputField` в
+  `ChildItems`; EDT — `items form:FormField` (+ `InputFieldExtInfo`), id элемента и вложенных
+  extendedTooltip/contextMenu — свежие в пространстве ЭЛЕМЕНТОВ. Привязка через DataPath.
+- Остаётся человеку/бэклог: заголовок `--title` (мультиязычный), команда/группа/колонка таблицы, форма без образца поля.
