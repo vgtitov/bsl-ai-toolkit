@@ -12,15 +12,15 @@ SNG_REPOS_ACTUALIZATION_PLAN.md в operkontur-work): listFile принимает
 - незахваченный в хранилище объект платформа НЕ даст загрузить (гейт срабатывает сам);
 - правим только модули (.bsl); метаданные/формы — человек в Конфигураторе.
 
-Учётки — env (логин един, пароли по контурам, фолбэк без суффикса):
-  ONEC_IB_USER / ONEC_IB_PASS[_<КОНТУР>]        — пользователь ИБ (/N /P)
+Учётки — env (логин един, пароль по базе, фолбэк без суффикса):
+  ONEC_IB_USER / ONEC_IB_PASS[_<КЛЮЧ>]          — пользователь ИБ (/N /P); КЛЮЧ = имя базы UPPER
   ONEC_V8_BIN                                    — путь к 1cv8(.exe); иначе авто-поиск
 .env подхватывается из CWD и корня репо (не перетирая окружение).
 
 Команды:
   dump --base <каталог|сервер\\база> --objects "ОбщийМодуль.X,Справочник.Y"
-       [--ext Имя] [--out DIR] [--contour KZ]     — точечная выгрузка (без --objects — полная)
-  load --base ... [--files "a,b" | --changed] [--ext Имя] [--out DIR] [--contour KZ]
+       [--ext Имя] [--out DIR] [--contour <КЛЮЧ>]  — точечная выгрузка (без --objects — полная)
+  load --base ... [--files "a,b" | --changed] [--ext Имя] [--out DIR] [--contour <КЛЮЧ>]
        — точечная загрузка (--changed = изменённые по git-статусу каталога выгрузки)
   status --out DIR                                — что изменено в каталоге выгрузки
 
@@ -155,7 +155,7 @@ def main(argv=None):
     common.add_argument("--base", required=True, help="каталог файловой ИБ или сервер\\база")
     common.add_argument("--out", default="designer_src", help="каталог выгрузки (по умолчанию ./designer_src)")
     common.add_argument("--ext", help="имя расширения (иначе основная конфигурация)")
-    common.add_argument("--contour", help="ключ пароля: KZ|RB|UZ|AZ|KG|AE|FRANCH|...")
+    common.add_argument("--contour", help="ключ пароля ONEC_IB_PASS_<КЛЮЧ>; КЛЮЧ = имя базы UPPER (см. bases.*.toml), напр. SLEEPMARKETRB_ERP_TEST")
     p = sub.add_parser("dump", parents=[common], help="точечная выгрузка объектов")
     p.add_argument("--objects", help="объекты через запятую в дот-нотации (пусто = полная выгрузка)")
     p = sub.add_parser("load", parents=[common], help="точечная загрузка файлов")
