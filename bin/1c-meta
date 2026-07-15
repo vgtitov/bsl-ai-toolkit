@@ -101,8 +101,9 @@ def build_parser() -> argparse.ArgumentParser:
     et.add_argument("--attribute", "--member", dest="attribute", default=None,
                     help="имя реквизита/измерения/ресурса; без него — тип самого объекта "
                          "(параметр сеанса/константа/определяемый тип)")
-    et.add_argument("--type", dest="type_ref", required=True,
-                    help="новый тип (напр. cfg:CatalogRef.Товары / xs:string / String)")
+    et.add_argument("--type", dest="type_ref", required=True, action="append",
+                    help="новый тип (напр. cfg:CatalogRef.Товары / xs:string / String); "
+                         "повторить --type несколько раз = составной тип")
     et.add_argument("--length", type=int,
                     help="длина строкового типа (строит квалификатор, если его нет)")
     et.add_argument("--precision", type=int, help="точность числа (Digits/precision)")

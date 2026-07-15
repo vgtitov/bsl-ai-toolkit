@@ -225,3 +225,54 @@ def test_type_from_scratch_number_edt(tmp_path):
     assert a.xpath("type/numberQualifiers/precision/text()") == ["10"]
     assert a.xpath("type/numberQualifiers/scale/text()") == ["3"]
     assert _roundtrips(work, tmp_path, ".mdo")
+
+
+# ---------- P4: составной тип (несколько типов в одном поле) ----------
+
+def test_composite_type_cfg(tmp_path):
+    # DISCIPLINE_ALLOW_TEST_EDIT: red — составной тип, несколько v8:Type + отступы вставки
+    work = _copy(tmp_path, "catalog.xml")
+    edit_type(work, "Реквизит1", ["cfg:CatalogRef.Товары", "cfg:CatalogRef.Услуги"])
+    doc = cfg.load(work)
+    a = doc.xpath("//md:Attribute[md:Properties/md:Name='Реквизит1']", namespaces=NS)[0]
+    assert a.xpath(".//v8:Type/text()", namespaces=NS) == ["cfg:CatalogRef.Товары", "cfg:CatalogRef.Услуги"]
+    assert a.xpath(".//v8:StringQualifiers", namespaces=NS) == []   # у составного квалификаторов нет
+    assert _roundtrips(work, tmp_path, ".xml")
+    # DISCIPLINE_ALLOW_TEST_EDIT: исправление ошибочного ассерта — считал <v8:Type> ВСЕГО файла
+    # (ловил соседний реквизит); проверяем byte-perfect отступы вставки по tail'ам ИМЕННО этого реквизита.
+    v8els = a.xpath(".//v8:Type", namespaces=NS)
+    assert len(v8els) == 2
+    ind = lambda el: (el.tail or "").split("\n")[-1]
+    lead_child, lead_close = ind(v8els[0]), ind(v8els[1])   # 6 табов / 5 табов
+    assert lead_child.startswith(lead_close) and len(lead_child) > len(lead_close)
+
+
+def test_composite_type_edt(tmp_path):
+    # DISCIPLINE_ALLOW_TEST_EDIT: red — составной тип EDT, несколько types
+    work = _copy(tmp_path, "catalog.mdo")
+    edit_type(work, "Реквизит1", ["CatalogRef.Товары", "CatalogRef.Услуги", "String"])
+    doc = cfg.load(work)
+    a = doc.xpath("//attributes[name='Реквизит1']")[0]
+    assert a.xpath("type/types/text()") == ["CatalogRef.Товары", "CatalogRef.Услуги", "String"]
+    assert _roundtrips(work, tmp_path, ".mdo")
+
+
+def test_composite_then_single_collapses_cfg(tmp_path):
+    # DISCIPLINE_ALLOW_TEST_EDIT: red — из составного обратно в одиночный
+    work = _copy(tmp_path, "catalog.xml")
+    edit_type(work, "Реквизит1", ["cfg:CatalogRef.Товары", "cfg:CatalogRef.Услуги"])
+    edit_type(work, "Реквизит1", "xs:string", length=15)
+    doc = cfg.load(work)
+    a = doc.xpath("//md:Attribute[md:Properties/md:Name='Реквизит1']", namespaces=NS)[0]
+    assert a.xpath(".//v8:Type/text()", namespaces=NS) == ["xs:string"]
+    assert a.xpath(".//v8:StringQualifiers/v8:Length/text()", namespaces=NS) == ["15"]
+    assert _roundtrips(work, tmp_path, ".xml")
+
+
+def test_composite_with_qualifier_rejected(tmp_path):
+    # DISCIPLINE_ALLOW_TEST_EDIT: red — квалификатор к составному типу — отказ
+    work = _copy(tmp_path, "catalog.xml")
+    before = work.read_bytes()
+    with pytest.raises(OpPreconditionError):
+        edit_type(work, "Реквизит1", ["xs:string", "cfg:CatalogRef.Товары"], length=10)
+    assert work.read_bytes() == before
