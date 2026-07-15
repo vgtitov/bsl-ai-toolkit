@@ -96,13 +96,17 @@ def build_parser() -> argparse.ArgumentParser:
     fmf.add_argument("--data-path", required=True, help="привязка данных, напр. Объект.Артикул")
 
     et = sub.add_parser("edit-type",
-                        help="сменить/расширить тип существующего реквизита")
+                        help="задать/сменить тип реквизита/измерения/ресурса или самого объекта")
     et.add_argument("file")
-    et.add_argument("--attribute", required=True, help="имя реквизита")
+    et.add_argument("--attribute", "--member", dest="attribute", default=None,
+                    help="имя реквизита/измерения/ресурса; без него — тип самого объекта "
+                         "(параметр сеанса/константа/определяемый тип)")
     et.add_argument("--type", dest="type_ref", required=True,
                     help="новый тип (напр. cfg:CatalogRef.Товары / xs:string / String)")
     et.add_argument("--length", type=int,
-                    help="длина строки (только для строкового типа, если квалификатор есть)")
+                    help="длина строкового типа (строит квалификатор, если его нет)")
+    et.add_argument("--precision", type=int, help="точность числа (Digits/precision)")
+    et.add_argument("--scale", type=int, help="масштаб числа (FractionDigits/scale)")
 
     rl = sub.add_parser("role", help="права роли (Rights.xml)")
     rlsub = rl.add_subparsers(dest="rlcmd", required=True)
@@ -156,7 +160,8 @@ def main() -> None:
             set_property(Path(ns.file), ns.name, ns.value, ns.attribute)
         elif ns.cmd == "edit-type":
             from onec_metadata.ops.edit_type import edit_type
-            edit_type(Path(ns.file), ns.attribute, ns.type_ref, ns.length)
+            edit_type(Path(ns.file), ns.attribute, ns.type_ref,
+                      ns.length, ns.precision, ns.scale)
         elif ns.cmd == "form":
             if ns.fmcmd == "add-attribute":
                 from onec_metadata.ops.form import add_attribute as form_add_attr
