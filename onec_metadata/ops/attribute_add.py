@@ -15,12 +15,13 @@ from pathlib import Path
 
 from onec_metadata.formats import configurator as cfg
 from onec_metadata.ops import OpPreconditionError
-from onec_metadata.validate import validate_name
+from onec_metadata.validate import validate_name, validate_type_ref
 
 
 def add_attribute(object_path: Path, name: str, type_ref: str,
                   synonym: str) -> None:
     validate_name(name)
+    validate_type_ref(type_ref)
     if str(object_path).endswith(".mdo"):
         _add_attribute_edt(object_path, name, type_ref, synonym)
     else:

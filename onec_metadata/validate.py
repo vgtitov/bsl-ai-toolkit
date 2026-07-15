@@ -36,6 +36,32 @@ def validate_name(name: str) -> None:
             "'_' и состоит из букв, цифр и '_' (без пробелов и пунктуации)")
 
 
+def validate_type_ref(type_ref: str) -> None:
+    """Ссылка ТИПА перед подстановкой: примитив (`xs:string`/`String`) или ссылочный
+    тип (`cfg:CatalogRef.Товары`/`CatalogRef.Товары`), с префиксом (`xs:`/`cfg:`/…) или без.
+    Отвергает заведомо битое: пустое, пробелы, XML-спецсимволы, пустой префикс/сегмент.
+    НЕ проверяет соответствие формату контура (это за вызывающим) — только «не мусор»."""
+    if not type_ref or not type_ref.strip():
+        raise OpPreconditionError("Тип не может быть пустым")
+    if re.search(r"\s", type_ref):
+        raise OpPreconditionError(f"Тип '{type_ref}' содержит пробел")
+    if re.search(r"""[<>&"']""", type_ref):
+        raise OpPreconditionError(f"Тип '{type_ref}' содержит недопустимый символ (<>&\"')")
+    body = type_ref
+    if ":" in type_ref:
+        prefix, _, body = type_ref.partition(":")
+        if not re.match(r"[A-Za-z][A-Za-z0-9]*\Z", prefix):
+            raise OpPreconditionError(f"Недопустимый префикс типа в '{type_ref}'")
+        if not body:
+            raise OpPreconditionError(f"Пустой тип после префикса ':' в '{type_ref}'")
+    segments = body.split(".")
+    if any(not s for s in segments):
+        raise OpPreconditionError(
+            f"Тип '{type_ref}' имеет пустой сегмент (лишняя/крайняя точка)")
+    for s in segments:
+        validate_name(s)              # каждый сегмент — идентификатор 1С
+
+
 def validate_object_ref(object_ref: str) -> None:
     """Ссылка объекта вида 'Тип.Имя' (Document.Заказ): обе части — идентификаторы."""
     parts = object_ref.split(".")

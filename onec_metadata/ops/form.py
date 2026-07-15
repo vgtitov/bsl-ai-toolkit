@@ -19,7 +19,7 @@ from pathlib import Path
 
 from onec_metadata.formats import configurator as cfg
 from onec_metadata.ops import OpPreconditionError
-from onec_metadata.validate import validate_name
+from onec_metadata.validate import validate_name, validate_type_ref
 
 NS = cfg.NS
 
@@ -42,6 +42,7 @@ def _reid(element, next_id: int) -> int:
 
 def add_attribute(form_path: Path, name: str, type_ref: str) -> None:
     validate_name(name)
+    validate_type_ref(type_ref)
     if str(form_path).endswith(".form"):
         _add_attribute_edt(form_path, name, type_ref)
     else:

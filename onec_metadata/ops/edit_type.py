@@ -21,7 +21,7 @@ from lxml import etree
 
 from onec_metadata.formats import configurator as cfg
 from onec_metadata.ops import OpPreconditionError
-from onec_metadata.validate import validate_name
+from onec_metadata.validate import validate_name, validate_type_ref
 
 
 def _is_string_type(type_ref: str) -> bool:
@@ -52,6 +52,7 @@ def edit_type(object_path: Path, member: str | None, type_ref: str,
               scale: int | None = None) -> None:
     if member is not None:
         validate_name(member)
+    validate_type_ref(type_ref)
     if length is not None and not _is_string_type(type_ref):
         raise OpPreconditionError("Параметр length применим только к строковому типу")
     if (precision is not None or scale is not None) and not _is_number_type(type_ref):

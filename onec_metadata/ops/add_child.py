@@ -18,7 +18,7 @@ from pathlib import Path
 
 from onec_metadata.formats import configurator as cfg
 from onec_metadata.ops import OpPreconditionError
-from onec_metadata.validate import validate_name
+from onec_metadata.validate import validate_name, validate_type_ref
 
 
 def _regen_uuids(element) -> None:
@@ -101,6 +101,8 @@ def add_child(object_path: Path, kind: str, name: str, synonym: str,
     cfg_tag, edt_tag, typed = KINDS[kind]
     if typed and not type_ref:
         raise OpPreconditionError(f"Для вида '{kind}' обязателен type_ref")
+    if type_ref:
+        validate_type_ref(type_ref)
     tref = type_ref if typed else None
 
     is_mdo = str(object_path).endswith(".mdo")
