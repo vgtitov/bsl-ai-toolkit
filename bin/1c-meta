@@ -84,6 +84,14 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--value", required=True, help="новое значение")
     sp.add_argument("--attribute", help="имя реквизита (иначе — свойство объекта)")
 
+    sy = sub.add_parser("set-synonym",
+                        help="сменить синоним (Наименование) существующего языка — безопасная презентация")
+    sy.add_argument("file")
+    sy.add_argument("--text", required=True, help="новый текст синонима")
+    sy.add_argument("--member", "--attribute", dest="member", default=None,
+                    help="имя реквизита/измерения/ресурса; без него — синоним самого объекта")
+    sy.add_argument("--lang", default="ru", help="код языка (по умолчанию ru)")
+
     fm = sub.add_parser("form", help="правка управляемых форм")
     fmsub = fm.add_subparsers(dest="fmcmd", required=True)
     fma = fmsub.add_parser("add-attribute")
@@ -156,6 +164,9 @@ def main() -> None:
         elif ns.cmd == "role":
             from onec_metadata.ops.role import grant_right
             grant_right(Path(ns.file), ns.ref, ns.right, ns.value == "true")
+        elif ns.cmd == "set-synonym":
+            from onec_metadata.ops.synonym import set_synonym
+            set_synonym(Path(ns.file), ns.member, ns.text, ns.lang)
         elif ns.cmd == "set-property":
             from onec_metadata.ops.set_property import set_property
             set_property(Path(ns.file), ns.name, ns.value, ns.attribute)
