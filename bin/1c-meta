@@ -44,6 +44,9 @@ def build_parser() -> argparse.ArgumentParser:
     ssq.add_argument("file")
     ssq.add_argument("--dataset", required=True)
     ssq.add_argument("--from-file", required=True)
+    sv = ssub.add_parser("validate",
+                         help="smoke-проверка целостности схемы СКД (exit 1 если поломка)")
+    sv.add_argument("file")
 
     a = sub.add_parser("attr", help="реквизиты объектов метаданных")
     asub = a.add_subparsers(dest="acmd", required=True)
@@ -146,6 +149,13 @@ def main() -> None:
                               ns.data_path, ns.title)
             elif ns.scmd == "get-query":
                 print(scd.get_dataset_query(Path(ns.file), ns.dataset))
+            elif ns.scmd == "validate":
+                issues = scd.validate_schema(Path(ns.file))
+                if issues:
+                    for s in issues:
+                        print(f"СКД: {s}", file=sys.stderr)
+                    sys.exit(1)
+                print("СКД валидна")
             else:
                 scd.set_dataset_query(
                     Path(ns.file), ns.dataset,

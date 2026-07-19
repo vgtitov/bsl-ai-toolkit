@@ -1,0 +1,40 @@
+#!/bin/sh
+# claude-no-coauthor / bsl-guard: блокирует коммит staged *.bsl с обращением к БД
+# в цикле (Запрос…Выполнить()/ПолучитьОбъект/.Ссылка. в Пока|Для). ENFORCEMENT к
+# performance.md §2. Кроссплатформенно (sh; на Windows — git-bash из состава Git).
+#
+# Ставится через core.hooksPath (scripts/install_git_hooks.py). Хук глобальный,
+# поэтому detector ищется гибко и в ЧУЖИХ репозиториях молча пропускает (exit 0),
+# чтобы не мешать. Явно указать toolkit можно env ONEC_TOOLKIT_DIR.
+
+# staged .bsl файлы (только добавленные/изменённые)
+files=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null | grep -iE '\.bsl$')
+[ -z "$files" ] && exit 0
+
+# найти bsl_guard.py: 1) ONEC_TOOLKIT_DIR  2) scripts рядом с этим хуком
+#                     3) scripts в текущем репозитории
+guard=""
+for cand in \
+  "$ONEC_TOOLKIT_DIR/scripts/bsl_guard.py" \
+  "$(dirname "$0")/../scripts/bsl_guard.py" \
+  "$(dirname "$0")/bsl_guard.py" \
+  "$(git rev-parse --show-toplevel 2>/dev/null)/scripts/bsl_guard.py"
+do
+  [ -f "$cand" ] && guard="$cand" && break
+done
+[ -z "$guard" ] && exit 0   # detector не найден — не мешаем чужим репозиториям
+
+py=python3
+command -v "$py" >/dev/null 2>&1 || py=python
+command -v "$py" >/dev/null 2>&1 || exit 0
+
+# shellcheck disable=SC2086
+echo "$files" | xargs "$py" "$guard"
+rc=$?
+if [ "$rc" -ne 0 ]; then
+  echo "" >&2
+  echo "[bsl-guard] коммит остановлен: обращение к БД в цикле (см. выше)." >&2
+  echo "  переделай пакетно; обойти разово: git commit --no-verify" >&2
+  exit 1
+fi
+exit 0
