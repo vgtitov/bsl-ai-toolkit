@@ -19,6 +19,7 @@ import socket
 import subprocess
 import sys
 import urllib.request
+from urllib.error import HTTPError
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -45,10 +46,13 @@ def plan_for_server(name: str, spec: dict, env: dict) -> dict:
     t = spec.get("type", "stdio")
     if t in ("http", "sse"):
         needs = list(env_refs(spec.get("url", "")))
-        for h in (spec.get("headers") or {}).values():
+        headers = {}
+        for k, h in (spec.get("headers") or {}).items():
             needs += env_refs(h)
+            headers[k] = resolve_env(h, env)          # заголовки (в т.ч. Authorization) для пробы /health
         return {"name": name, "type": t, "kind": t,
                 "target": resolve_env(spec.get("url", ""), env),
+                "headers": headers,
                 "needs_env": sorted(set(needs))}
     args = spec.get("args", []) or []
     file = None
@@ -75,24 +79,35 @@ def plan_for_server(name: str, spec: dict, env: dict) -> dict:
 OK, WARN, BAD = "OK", "WARN", "BAD"
 
 
-def _http_ok(url: str, timeout=6):
-    """GET <host:port>/health (для MCP-сервера); True/деталь.
+def _http_ok(url: str, headers=None, timeout=6):
+    """GET <host:port>/health (для MCP-сервера) с заголовками из .mcp.json (в т.ч. Authorization); True/деталь.
+    Сервер считается ЖИВЫМ, если он ОТВЕТИЛ по HTTP — даже 404/405: у MCP-сервера маршрута /health может
+    не быть, но сам ответ доказывает, что сервер слушает и авторизация прошла. 401/403 — авторизация НЕ
+    прошла (реальная проблема: проверь токен в заголовке). Отказ соединения/таймаут — сервер не запущен.
     localhost — МИМО прокси (иначе HTTP(S)_PROXY роутит 127.0.0.1 через прокси и даёт ложную ошибку)."""
     p = urlparse(url)
     health = f"{p.scheme}://{p.netloc}/health"
     local = (p.hostname or "") in ("127.0.0.1", "localhost", "::1")
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({})) if local \
         else urllib.request.build_opener()
+    req = urllib.request.Request(health, headers=headers or {})
     try:
-        with opener.open(health, timeout=timeout) as r:
+        with opener.open(req, timeout=timeout) as r:
             body = r.read(400).decode("utf-8", "replace")
             return True, f"HTTP {getattr(r, 'status', 200)} {body[:120]}"
+    except HTTPError as e:
+        # сервер ответил HTTP-статусом → он ЖИВ
+        if e.code in (401, 403):
+            return False, f"HTTP {e.code}: авторизация не прошла — проверь токен в заголовке .mcp.json"
+        if 400 <= e.code < 500:
+            return True, f"HTTP {e.code}: сервер отвечает (/health не реализован — норма для MCP)"
+        return False, f"HTTP {e.code}: сервер вернул ошибку"
     except Exception as e:
         # запасной вариант — просто достучаться до порта
         try:
             host = p.hostname or "127.0.0.1"; port = p.port or 80
             with socket.create_connection((host, port), timeout=3):
-                return False, f"порт {host}:{port} открыт, но /health не ответил ({type(e).__name__})"
+                return False, f"порт {host}:{port} открыт, но HTTP не ответил ({type(e).__name__})"
         except Exception:
             return False, f"недоступно ({type(e).__name__}): сервер не запущен?"
 
@@ -126,7 +141,7 @@ def check_server(plan: dict, env: dict):
             return (BAD, f"mcp {name} ({plan['kind']})", f"не задан env: {', '.join(missing)}")
         if not plan["target"]:
             return (BAD, f"mcp {name}", "пустой URL")
-        ok, detail = _http_ok(plan["target"])
+        ok, detail = _http_ok(plan["target"], plan.get("headers"))
         return (OK if ok else BAD, f"mcp {name} ({plan['kind']})", f"{plan['target']}: {detail}")
     # stdio
     if plan["command"] and not shutil.which(plan["command"]) and not Path(plan["command"]).exists():
@@ -140,6 +155,13 @@ def check_server(plan: dict, env: dict):
 
 
 def main():
+    # Windows-консоль нередко в cp1251 → печать '≥'/кириллицы падала UnicodeEncodeError. Форсим UTF-8.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
     ap = argparse.ArgumentParser(description="health-check окружения Claude Code для 1С")
     ap.add_argument("--config", help="путь к .mcp.json (по умолчанию ./.mcp.json)")
     ns = ap.parse_args()
