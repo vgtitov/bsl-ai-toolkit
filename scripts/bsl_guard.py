@@ -118,21 +118,91 @@ def _strip_comments_and_strings(text: str) -> str:
     return "".join(out)
 
 
+# Объявление и конец процедуры/функции (для межпроцедурного анализа).
+_PROC_OPEN = re.compile(
+    r"^\s*(?:Функция|Процедура|Function|Procedure)\s+([\wА-Яа-яЁё]+)", re.IGNORECASE)
+_PROC_CLOSE = re.compile(
+    r"^\s*(?:КонецФункции|КонецПроцедуры|EndFunction|EndProcedure)\b", re.IGNORECASE)
+
+
+def _module_procs(lines):
+    """Карта процедур модуля: имя → (первая_строка, последняя_строка), 1-based."""
+    procs = {}
+    current, start = None, 0
+    for lineno, line in enumerate(lines, start=1):
+        m = _PROC_OPEN.match(line)
+        if m:
+            current, start = m.group(1), lineno
+            continue
+        if current and _PROC_CLOSE.match(line):
+            procs[current] = (start, lineno)
+            current = None
+    return procs
+
+
+def _db_access_procs(lines, procs):
+    """Имена процедур, обращающихся к БД (сами или транзитивно через вызовы)."""
+    direct = set()
+    for name, (a, b) in procs.items():
+        body = "\n".join(lines[a:b - 1])  # тело без строки объявления
+        if any(rx.search(body) for _, rx, _ in _PATTERNS):
+            direct.add(name)
+    # граф вызовов: только вызовы БЕЗ точки перед именем (свой модуль)
+    call_rx = {name: re.compile(r"(?<![\wА-Яа-яЁё.])" + re.escape(name) + r"\s*\(")
+               for name in procs}
+    calls = {name: set() for name in procs}
+    for name, (a, b) in procs.items():
+        body = "\n".join(lines[a:b - 1])
+        for other in procs:
+            if other != name and call_rx[other].search(body):
+                calls[name].add(other)
+    # транзитивное замыкание
+    tainted = set(direct)
+    changed = True
+    while changed:
+        changed = False
+        for name, callees in calls.items():
+            if name not in tainted and callees & tainted:
+                tainted.add(name)
+                changed = True
+    return tainted, call_rx
+
+
 def scan_text(text: str, filename: str = "<text>") -> list:
-    """Вернуть список Finding по анти-паттернам «обращение к БД в цикле»."""
+    """Вернуть список Finding по анти-паттернам «обращение к БД в цикле».
+
+    Два прохода: прямые паттерны в теле цикла + межпроцедурный (вызов в цикле
+    функции СВОЕГО модуля, которая — сама или транзитивно — лезет в БД; боевой
+    пропуск: запрос сидел в функции, из цикла звали функцию).
+    """
     clean = _strip_comments_and_strings(text)
+    lines = clean.split("\n")
+    procs = _module_procs(lines)
+    tainted, call_rx = _db_access_procs(lines, procs)
+
     findings = []
     depth = 0  # глубина вложенности циклов ДО текущей строки
-    for lineno, line in enumerate(clean.split("\n"), start=1):
+    for lineno, line in enumerate(lines, start=1):
         opens = [m.start() for m in _LOOP_OPEN.finditer(line)]
         closes = [m.start() for m in _LOOP_CLOSE.finditer(line)]
+
+        def _eff_depth(pos):
+            return depth + sum(1 for o in opens if o < pos) \
+                         - sum(1 for c in closes if c < pos)
+
         for code, rx, msg in _PATTERNS:
             for m in rx.finditer(line):
-                pos = m.start()
-                eff = depth + sum(1 for o in opens if o < pos) \
-                            - sum(1 for c in closes if c < pos)
-                if eff >= 1:
+                if _eff_depth(m.start()) >= 1:
                     findings.append(Finding(filename, lineno, code, msg))
+        if not _PROC_OPEN.match(line):  # объявление — не вызов
+            for name in tainted:
+                for m in call_rx[name].finditer(line):
+                    if _eff_depth(m.start()) >= 1:
+                        findings.append(Finding(
+                            filename, lineno, "db-call-in-loop",
+                            f"вызов {name}() в цикле, а внутри неё — обращение "
+                            "к БД (напрямую или по цепочке вызовов) — переделай "
+                            "на ОДИН пакетный запрос до цикла"))
         depth += len(opens) - len(closes)
         if depth < 0:
             depth = 0
