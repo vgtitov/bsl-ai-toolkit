@@ -48,6 +48,15 @@ def build_parser() -> argparse.ArgumentParser:
                          help="smoke-проверка целостности схемы СКД (exit 1 если поломка)")
     sv.add_argument("file")
 
+    bg = sub.add_parser(
+        "bsl-gate", help="гейт производительности BSL (запрос-в-цикле) для дерева")
+    bgsub = bg.add_subparsers(dest="bgcmd", required=True)
+    bgc = bgsub.add_parser("check", help="exit 1, если есть находки сверх baseline")
+    bgc.add_argument("root")
+    bgb = bgsub.add_parser("baseline",
+                           help="зафиксировать текущие находки как легаси")
+    bgb.add_argument("root")
+
     a = sub.add_parser("attr", help="реквизиты объектов метаданных")
     asub = a.add_subparsers(dest="acmd", required=True)
     aa = asub.add_parser("add")
@@ -184,6 +193,19 @@ def main() -> None:
             from onec_metadata.ops.edit_type import edit_type
             edit_type(Path(ns.file), ns.attribute, ns.type_ref,
                       ns.length, ns.precision, ns.scale)
+        elif ns.cmd == "bsl-gate":
+            from onec_metadata.apply import bsl_gate
+            from onec_metadata.apply.dumpload import ApplyError
+            if ns.bgcmd == "baseline":
+                path = bsl_gate.write_baseline(Path(ns.root))
+                print(f"baseline записан: {path}")
+            else:
+                try:
+                    bsl_gate.enforce(Path(ns.root))
+                    print("bsl-gate: чисто (сверх baseline находок нет)")
+                except ApplyError as e:
+                    print(e, file=sys.stderr)
+                    sys.exit(1)
         elif ns.cmd == "form":
             if ns.fmcmd == "add-attribute":
                 from onec_metadata.ops.form import add_attribute as form_add_attr

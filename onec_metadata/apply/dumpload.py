@@ -107,9 +107,14 @@ def upload_tree(r: Runner, local_dir: Path, remote_dir: str,
     в реестре нет (новые объекты). Боевой урок эксплуатации.
     """
     _audit_version(local_dir, expected_version)
+    # Гейт производительности: не отправлять дерево с НОВЫМИ обращениями к БД
+    # в цикле (боевой урок 20.07). Легаси — через baseline, см. apply/bsl_gate.
+    from .bsl_gate import BASELINE_NAME, enforce as _bsl_enforce
+    _bsl_enforce(local_dir)
     tmp_tar = tmp_tar or _wpath("_upload.tar")
     local_tar = local_dir.parent / "_upload.tar"
     subprocess.run(["tar", "--exclude", "./ConfigDumpInfo.xml",
+                    "--exclude", "./" + BASELINE_NAME,
                     "-cf", str(local_tar), "-C", str(local_dir), "."],
                    check=True)
     subprocess.run(["scp", "-o", "BatchMode=yes", str(local_tar),
