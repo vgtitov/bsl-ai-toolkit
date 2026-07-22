@@ -50,7 +50,11 @@ claude-1c-toolkit/
 ├── mcp/
 │   ├── onec_mcp.py            # MCP чтения кода 1С (ripgrep по локальным клонам, auto-discovery слоёв)
 │   ├── bsl_ls_mcp.py         # MCP-мост над BSL Language Server (analyze -r json) — свободный, в комплекте
+│   ├── onec_ops_mcp.py       # MCP эксплуатации (ТЖ/ЖР/APDEX/Zabbix/Prometheus, read-only)
+│   ├── onec_data_mcp.py      # MCP слоя ДАННЫХ живой ИБ (read-only): OData L1-L2 + отладочный сервис ai_debug L3
 │   └── dev.mcp.json          # профиль MCP-серверов (пути через env)
+├── extensions/ai_debug/      # расширение 1С (L3) для onec-data: HTTP-сервис query/report/settings/call/health
+│   └── src/ · README.md      #   от имени пользователя, режимы user/privileged за гейтом aidbg_Настройки
 ├── config/
 │   ├── layers.example.toml   # конфиг слоёв/scope/режимов для MCP (локализация = свой файл)
 │   └── contours.example.md   # карта контуров/баз для 1c-analyst (данные локализации, не код)

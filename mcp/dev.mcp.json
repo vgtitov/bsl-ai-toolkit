@@ -38,6 +38,23 @@
         "ZABBIX_TOKEN": "${ZABBIX_TOKEN:-}",
         "PROMETHEUS_URL": "${PROMETHEUS_URL:-}"
       }
+    },
+    "onec-data": {
+      "type": "stdio",
+      "command": "uv",
+      "args": ["run", "--quiet", "${ONEC_DATA_MCP}"],
+      "env": {
+        "ONEC_DATA_BASE_URL": "${ONEC_DATA_BASE_URL:-}",
+        "ONEC_DATA_USERS": "${ONEC_DATA_USERS:-}",
+        "ONEC_DATA_DEFAULT_USER": "${ONEC_DATA_DEFAULT_USER:-}",
+        "ONEC_DATA_ODATA_PATH": "${ONEC_DATA_ODATA_PATH:-/odata/standard.odata}",
+        "ONEC_DATA_DEBUG_PATH": "${ONEC_DATA_DEBUG_PATH:-/hs/aidbg}",
+        "ONEC_DATA_MAX_ROWS": "${ONEC_DATA_MAX_ROWS:-200}",
+        "ONEC_DATA_FORBID_PRIVILEGED": "${ONEC_DATA_FORBID_PRIVILEGED:-}",
+        "ONEC_DATA_MASK_FIELDS": "${ONEC_DATA_MASK_FIELDS:-}",
+        "ONEC_DATA_MASK_OFF": "${ONEC_DATA_MASK_OFF:-}",
+        "ONEC_DATA_PRESETS": "${ONEC_DATA_PRESETS:-}"
+      }
     }
   }
 }

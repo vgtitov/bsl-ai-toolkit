@@ -18,13 +18,12 @@
 """
 from __future__ import annotations
 
-import subprocess
 import tempfile
 from pathlib import Path
 
 from onec_metadata.apply.dumpload import ApplyError
 from onec_metadata.apply.external import build_external
-from onec_metadata.apply.runner import Runner, enterprise_cmd, mask_password
+from onec_metadata.apply.runner import RunnerLike, enterprise_cmd, mask_password
 
 TEMPLATE_DIR = Path(__file__).resolve().parents[1] / "templates" / "smoke_runner"
 
@@ -32,14 +31,11 @@ _OK = "__SMOKE_OK__"
 _FAIL = "__SMOKE_FAIL__"
 
 
-def _scp_to(host: str, local: Path, remote: str) -> None:
-    p = subprocess.run(["scp", "-o", "BatchMode=yes", str(local),
-                        f"{host}:{remote}"])
-    if p.returncode != 0:
-        raise ApplyError(f"scp {local} -> {host}:{remote} failed")
+# перенос файлов идёт через r.put() (SSH→scp, локально→копирование) — работает
+# и удалённым Runner, и LocalRunner (платформа на этой машине)
 
 
-def deploy_smoke_runner(r: Runner, ib: str, user: str, pwd: str, *,
+def deploy_smoke_runner(r: RunnerLike, ib: str, user: str, pwd: str, *,
                         workdir: str) -> str:
     """Шаблон → сервер → сборка .epf платформой. Возврат: путь к .epf."""
     workdir_fs = workdir.replace("\\", "/")
@@ -53,14 +49,14 @@ def deploy_smoke_runner(r: Runner, ib: str, user: str, pwd: str, *,
             r.run("cmd /c if not exist {} mkdir {}".format(
                 remote_dir.replace('/', '\\'), remote_dir.replace('/', '\\')),
                 timeout=60)
-        _scp_to(r.host, p, f"{remote_dir}/{rel.name}")
+        r.put(p, f"{remote_dir}/{rel.name}")
     root_xml = f"{workdir}\\СмоукРаннер.xml"
     out_epf = f"{workdir}\\СмоукРаннер.epf"
     build_external(r, ib, user, pwd, root_xml=root_xml, out_epf=out_epf)
     return out_epf
 
 
-def run_smoke(r: Runner, ib: str, user: str, pwd: str, *,
+def run_smoke(r: RunnerLike, ib: str, user: str, pwd: str, *,
               scenario_text: str, epf: str, workdir: str,
               timeout: int = 900) -> str:
     """Выполнить серверный BSL-сценарий, вернуть текст отчёта.
@@ -76,7 +72,7 @@ def run_smoke(r: Runner, ib: str, user: str, pwd: str, *,
         f.write(scenario_text)
         local = Path(f.name)
     try:
-        _scp_to(r.host, local, scenario.replace("\\", "/"))
+        r.put(local, scenario.replace("\\", "/"))
     finally:
         local.unlink(missing_ok=True)
 
