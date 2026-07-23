@@ -18,6 +18,7 @@
 """
 from __future__ import annotations
 
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -29,6 +30,19 @@ TEMPLATE_DIR = Path(__file__).resolve().parents[1] / "templates" / "smoke_runner
 
 _OK = "__SMOKE_OK__"
 _FAIL = "__SMOKE_FAIL__"
+
+# Самая частая причина «зависшего» батч-прогона: раннер пишет файл, платформа спрашивает
+# подтверждение («Защита от опасных действий»), модальное окно всплывает на экране
+# ПОЛЬЗОВАТЕЛЯ и ждёт вечно. Скрипт окна не видит — снаружи это неотличимо от зависания,
+# поэтому подсказку даём прямо в тексте ошибки, а не оставляем гадать.
+_HANG_HINT = (
+    "Вероятная причина: платформа ждёт ответа в модальном окне «Защита от опасных "
+    "действий» (раннер обращается к файлам). Ключа командной строки для её отключения у "
+    "платформы нет. Снимите флаг «Защита от опасных действий» у пользователя ИБ ЛИБО "
+    "добавьте маску базы в DisableUnsafeActionProtection в <каталог 1С>/conf/conf.cfg. "
+    "Пошагово — docs/setup-actions-required.md §1. "
+    "Вторая по частоте причина: первый сеанс к клиент-серверной базе по VPN тянет кэш "
+    "конфигурации и идёт десятками минут — увеличьте timeout.")
 
 
 # перенос файлов идёт через r.put() (SSH→scp, локально→копирование) — работает
@@ -79,12 +93,19 @@ def run_smoke(r: RunnerLike, ib: str, user: str, pwd: str, *,
 
     r.remove(result)
     cmd = enterprise_cmd(ib, user, pwd, epf, f"{scenario};{result}", log)
-    r.run(cmd, timeout=timeout)
+    try:
+        r.run(cmd, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise ApplyError(f"smoke: сеанс не завершился за {timeout} с.\n{_HANG_HINT}\n"
+                         f"cmd: {mask_password(cmd)}") from None
     content = r.read_text(result, timeout=60)
 
     if _OK in content:
         return content.split(_OK, 1)[1].strip()
-    raise ApplyError(
-        "smoke: файл-результат {}: {}\ncmd: {}".format(
-            "содержит FAIL" if _FAIL in content else "отсутствует/пуст",
+    if _FAIL in content:
+        raise ApplyError("smoke: файл-результат содержит FAIL: {}\ncmd: {}".format(
             content.strip()[:2000], mask_password(cmd)))
+    raise ApplyError(
+        "smoke: файл-результат отсутствует/пуст — сценарий до записи итога не дошёл.\n"
+        f"{_HANG_HINT}\nлог сеанса: {r.read_text(log, timeout=60).strip()[:1000]}\n"
+        f"cmd: {mask_password(cmd)}")

@@ -190,3 +190,53 @@ def test_run_smoke_reads_result_via_runner(monkeypatch):
     assert "type " not in joined and "del " not in joined     # без оболочечных команд
     assert r.removed == [r"D:\wd\smoke_result.txt"]           # результат чистится до прогона
     assert "ENTERPRISE" in joined and "/Execute" in joined
+
+
+# DISCIPLINE_ALLOW_TEST_EDIT: диагностика «зависшего» прогона (боевой случай 23.07)
+
+def _smoke_runner(result_text="", raise_timeout=False):
+    class R(ShelllessRunner):
+        def put(self, local, remote, timeout=300):
+            pass
+
+        def run(self, cmd, timeout=600):
+            if raise_timeout and "ENTERPRISE" in cmd:
+                import subprocess as sp
+                raise sp.TimeoutExpired(cmd, timeout)
+            return 0, ""
+
+        def read_text(self, path, timeout=60):
+            return result_text if "smoke_result" in path else ""
+
+        def remove(self, path, timeout=60):
+            pass
+    return R()
+
+
+@pytest.mark.parametrize("kwargs", [{"raise_timeout": True}, {"result_text": ""}])
+def test_hung_run_explains_unsafe_action_dialog(kwargs):
+    """Батч-сеанс висит на модальном окне «Защита от опасных действий» — скрипт окна не
+    видит. Ошибка обязана назвать причину и куда идти, иначе это выглядит как зависание."""
+    from onec_metadata.apply import smoke
+
+    with pytest.raises(ApplyError) as e:
+        smoke.run_smoke(_smoke_runner(**kwargs), r"D:\base", "u", "p",
+                        scenario_text='Отчет = "x";', epf=r"D:\wd\Р.epf",
+                        workdir=r"D:\wd", timeout=5)
+    text = str(e.value)
+    assert "Защита от опасных действий" in text
+    assert "setup-actions-required" in text
+    assert "/P***" in text or "/P" not in text          # пароль не утёк
+
+
+def test_scenario_failure_reports_error_without_hang_hint():
+    """Сценарий отработал и честно вернул FAIL — это НЕ зависание, подсказка не к месту."""
+    from onec_metadata.apply import smoke
+
+    with pytest.raises(ApplyError) as e:
+        smoke.run_smoke(_smoke_runner(result_text="__SMOKE_FAIL__\nТаблица не найдена"),
+                        r"D:\base", "u", "p", scenario_text='Отчет = "x";',
+                        epf=r"D:\wd\Р.epf", workdir=r"D:\wd")
+    text = str(e.value)
+    assert "Таблица не найдена" in text
+    assert "Защита от опасных действий" not in text

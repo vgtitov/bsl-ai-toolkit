@@ -98,7 +98,13 @@ def _http_ok(url: str, headers=None, timeout=6):
     except HTTPError as e:
         # сервер ответил HTTP-статусом → он ЖИВ
         if e.code in (401, 403):
-            return False, f"HTTP {e.code}: авторизация не прошла — проверь токен в заголовке .mcp.json"
+            return False, (
+                f"HTTP {e.code}: авторизация не прошла — сервер жив, но токен не принят. "
+                "Если в Claude Code канал при этом работает, то токен устарел именно в ЭТОЙ "
+                "консоли: set_token пишет в пользовательские переменные, их видят только "
+                "новые процессы — перезапусти консоль или прогони set_token заново "
+                "(docs/setup-actions-required.md §4). Маршрут /health тут ни при чём: его "
+                "отсутствие доктор считает нормой")
         if 400 <= e.code < 500:
             return True, f"HTTP {e.code}: сервер отвечает (/health не реализован — норма для MCP)"
         return False, f"HTTP {e.code}: сервер вернул ошибку"
@@ -110,6 +116,30 @@ def _http_ok(url: str, headers=None, timeout=6):
                 return False, f"порт {host}:{port} открыт, но HTTP не ответил ({type(e).__name__})"
         except Exception:
             return False, f"недоступно ({type(e).__name__}): сервер не запущен?"
+
+
+def check_unsafe_action_protection():
+    """Защита от опасных действий: с ней батч-прогоны ступени 2 ВИСНУТ на модальном окне.
+
+    Проверяем только машинный способ отключения (`conf.cfg`) — снят ли флаг у конкретного
+    пользователя ИБ, снаружи базы не видно. Поэтому вердикт мягкий: WARN с инструкцией,
+    а не КРАСНЫЙ (у человека флаг может быть уже снят)."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import detect_tools
+        root = detect_tools.find_platform()
+    except Exception:
+        root = None
+    if not root:
+        return []                       # платформы нет — ступени 1–2 тут и не запускают
+    cfg = Path(root).parent / "conf" / "conf.cfg"
+    name = "1С: защита от опасных действий"
+    hint = ("батч-прогоны (ступень 2) повиснут на модальном окне, если у пользователя ИБ "
+            "не снят флаг «Защита от опасных действий». Способы — docs/setup-actions-required.md §1")
+    if cfg.is_file() and "DisableUnsafeActionProtection" in cfg.read_text(
+            encoding="utf-8-sig", errors="replace"):
+        return [(OK, name, f"отключена по маске в {cfg}")]
+    return [(WARN, name, f"в {cfg} маски нет — {hint}")]
 
 
 def check_prereqs():
@@ -169,6 +199,7 @@ def main():
     results = []
 
     results += check_prereqs()
+    results += check_unsafe_action_protection()
 
     cfg = Path(ns.config) if ns.config else Path.cwd() / ".mcp.json"
     if not cfg.exists():
