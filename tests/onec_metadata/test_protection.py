@@ -6,6 +6,9 @@
 проверка ленивая и локальная — сопоставление строки соединения с маской в файле, ноль
 подключений. Все пути тестов берутся из tmp_path: букв дисков на Linux/macOS нет.
 """
+# DISCIPLINE_ALLOW_TEST_EDIT: нужен pytest.raises для проверки прав доступа
+import pytest
+
 from onec_metadata.apply import protection as pr
 
 
@@ -45,10 +48,64 @@ def test_several_masks_separated_by_semicolon(tmp_path):
     assert pr.status_for_base("srv\\ERP", root) == pr.UNKNOWN
 
 
+# DISCIPLINE_ALLOW_TEST_EDIT: тест кодировал семантику fnmatch, а платформа считает
+# `*.*` универсальной маской «все базы» — исправлено вслед за продукт-кодом
 def test_wildcard_all_covers_everything(tmp_path):
+    """`*.*` документирована как «все базы», хотя по правилам подстановки требовала бы
+    точку в строке соединения. Обрабатываем как универсальную — иначе предполёт врал бы,
+    что база не покрыта, при снятой на всей машине защите."""
     root = _platform(tmp_path, "DisableUnsafeActionProtection=*.*\n")
-    assert pr.status_for_base("что угодно", root) == pr.UNKNOWN     # без точки не подходит
-    assert pr.status_for_base("srv-1c\\ERP.Test", root) == pr.OFF_BY_MASK
+    assert pr.status_for_base("что угодно", root) == pr.OFF_BY_MASK
+    assert pr.status_for_base("srv-1c\\ERP_Test", root) == pr.OFF_BY_MASK
+
+    star = _platform(tmp_path / "star", "DisableUnsafeActionProtection=*\n")
+    assert pr.status_for_base("srv-1c\\ERP_Test", star) == pr.OFF_BY_MASK
+
+
+def test_set_mask_is_idempotent_and_keeps_other_lines(tmp_path):
+    cfg = tmp_path / "conf.cfg"
+    cfg.write_text("SystemLanguage=RU\n", encoding="utf-8")
+
+    pr.set_mask("*Test*", cfg_path=cfg)
+    text = cfg.read_text(encoding="utf-8")
+    assert "SystemLanguage=RU" in text                      # чужие настройки не потеряны
+    assert "DisableUnsafeActionProtection=*Test*" in text
+    assert (tmp_path / "conf.cfg.toolkit-backup").is_file()  # бэкап до правки
+
+    pr.set_mask("*.*", cfg_path=cfg)                        # повторно — замена, не дубль
+    text = cfg.read_text(encoding="utf-8")
+    assert text.count("DisableUnsafeActionProtection") == 1
+    assert "DisableUnsafeActionProtection=*.*" in text
+
+
+def test_clear_mask_restores_protection(tmp_path):
+    cfg = tmp_path / "conf.cfg"
+    cfg.write_text("SystemLanguage=RU\nDisableUnsafeActionProtection=*.*\n", encoding="utf-8")
+    pr.clear_mask(cfg_path=cfg)
+    text = cfg.read_text(encoding="utf-8")
+    assert "DisableUnsafeActionProtection" not in text
+    assert "SystemLanguage=RU" in text
+
+
+def test_set_mask_creates_file_when_absent(tmp_path):
+    cfg = tmp_path / "conf.cfg"
+    pr.set_mask("*.*", cfg_path=cfg)
+    assert "DisableUnsafeActionProtection=*.*" in cfg.read_text(encoding="utf-8")
+
+
+def test_set_mask_without_rights_explains(tmp_path, monkeypatch):
+    """conf.cfg лежит в каталоге программы — без прав администратора он не пишется.
+    Сообщение обязано это назвать, а не отдать голый PermissionError."""
+    cfg = tmp_path / "conf.cfg"
+    cfg.write_text("SystemLanguage=RU\n", encoding="utf-8")
+
+    def deny(self, *a, **kw):
+        raise PermissionError(13, "Access is denied")
+
+    monkeypatch.setattr(pr.Path, "write_text", deny)
+    with pytest.raises(PermissionError) as e:
+        pr.set_mask("*.*", cfg_path=cfg)
+    assert "администратор" in str(e.value)
 
 
 def test_preflight_note_only_when_risk(tmp_path):

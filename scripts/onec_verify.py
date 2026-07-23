@@ -33,6 +33,8 @@ sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "scripts"))
 sys.path.insert(0, str(REPO / "mcp"))
 
+from onec_metadata.apply import standalone as sa  # noqa: E402  (после настройки sys.path)
+
 for _s in (sys.stdout, sys.stderr):
     try:
         _s.reconfigure(encoding="utf-8", errors="replace")
@@ -82,7 +84,85 @@ def build_parser():
                    help="файл серверного BSL; итог — в строковой переменной Отчет")
     s.add_argument("--deploy", action="store_true", help="пересобрать раннер .epf перед прогоном")
     s.add_argument("--timeout", type=int, default=900, help="таймаут сеанса, сек (умолч. 900)")
+
+    v = sub.add_parser("serve", help="автономный сервер: HTTP к ФАЙЛОВОЙ базе без веб-сервера")
+    v.add_argument("--base", required=True, help="каталог файловой ИБ")
+    v.add_argument("--port", type=int, default=sa.DEFAULT_PORT, help="порт (умолч. 8314)")
+    v.add_argument("--name", default="ib", help="имя базы в публикации")
+    v.add_argument("--address", default="localhost", help="localhost | any | IP")
+    v.add_argument("--data", help="каталог данных сервера")
+    v.add_argument("--config-out", help="куда положить YAML-конфигурацию")
+    v.add_argument("--no-odata", action="store_true", help="не публиковать OData")
+    v.add_argument("--no-http-services", action="store_true", help="не публиковать HTTP-сервисы")
+    v.add_argument("--schedule-jobs", action="store_true",
+                   help="включить регламентные задания (на копии базы обычно НЕ надо)")
+    v.add_argument("--wait", type=int, default=300, help="сколько ждать готовности, сек")
+
+    p = sub.add_parser("protection",
+                       help="защита от опасных действий: посмотреть/снять/вернуть по conf.cfg")
+    p.add_argument("--status", action="store_true", help="показать текущие маски")
+    p.add_argument("--disable", action="store_true", help="прописать маску (снять защиту)")
+    p.add_argument("--enable", action="store_true", help="убрать маску (вернуть защиту)")
+    p.add_argument("--mask", default="*.*",
+                   help="маска строк соединения; *.* — все базы машины (умолч.)")
+    p.add_argument("--base", help="проверить конкретную базу против масок")
     return ap
+
+
+def _protection(a):
+    """Защита от опасных действий — единственная машинная настройка, которую агент может
+    поправить сам. Правит conf.cfg платформы, поэтому требует прав администратора."""
+    from onec_metadata.apply import protection as pr
+
+    os.environ["ONEC_1CV8_BIN"] = resolve_bin(a.bin if hasattr(a, "bin") else None)
+    if a.disable and a.enable:
+        raise SystemExit("--disable и --enable взаимоисключающие")
+    if a.disable:
+        cfg = pr.set_mask(a.mask)
+        print(f"[ok] защита снята по маске {a.mask} в {cfg}")
+    elif a.enable:
+        cfg = pr.clear_mask()
+        print(f"[ok] защита возвращена, параметр убран из {cfg}")
+
+    cfg = pr.conf_cfg_path()
+    masks = pr.masks_from_conf(cfg)
+    print(f"conf.cfg: {cfg or 'не найден'}")
+    print("маски: " + ("; ".join(masks) if masks else "нет — защита включена"))
+    if a.base:
+        covered = pr.status_for_base(a.base) == pr.OFF_BY_MASK
+        print(f"база {a.base}: " + ("под маской, окна не будет" if covered
+                                    else "маска не покрывает"))
+
+
+def _serve(a):
+    """Автономный сервер: HTTP-доступ к файловой базе без веб-сервера и без админа.
+
+    Держит сервер в переднем плане — вызывающий запускает команду фоновой задачей,
+    работает по HTTP и гасит её. Ctrl+C завершает сервер штатно.
+    """
+    os.environ["ONEC_1CV8_BIN"] = resolve_bin(a.bin if hasattr(a, "bin") else None)
+    import tempfile
+
+    workdir = Path(a.data) if a.data else Path(tempfile.gettempdir()) / f"ibsrv-{a.port}"
+    cfg_path = Path(a.config_out) if a.config_out else workdir / "ibsrv.yaml"
+    text = sa.build_config(a.base, port=a.port, name=a.name, address=a.address,
+                           odata=not a.no_odata, http_services=not a.no_http_services,
+                           schedule_jobs=a.schedule_jobs)
+    sa.write_config(cfg_path, text)
+    print(f"[ok] конфигурация: {cfg_path}")
+    proc = sa.start(cfg_path, data_dir=workdir, port=a.port, wait=a.wait)
+    url = sa.base_url(a.port, host="localhost")
+    print(f"[ok] автономный сервер готов: {url}")
+    print(f"     веб-клиент     {url}/")
+    print(f"     OData          {url}/odata/standard.odata/")
+    print(f"     HTTP-сервисы   {url}/hs/<RootURL>/...")
+    print("     Ctrl+C или остановка задачи — завершить сервер")
+    try:
+        proc.wait()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        sa.stop(proc)
 
 
 def main(argv=None):
@@ -93,6 +173,11 @@ def main(argv=None):
         pass
 
     a = build_parser().parse_args(argv)
+
+    if a.cmd == "protection":
+        return _protection(a)
+    if a.cmd == "serve":
+        return _serve(a)
 
     os.environ["ONEC_1CV8_BIN"] = resolve_bin(a.bin)
     from designer_sync import resolve_cred
