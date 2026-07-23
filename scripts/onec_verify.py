@@ -94,6 +94,9 @@ def build_parser():
     v.add_argument("--config-out", help="куда положить YAML-конфигурацию")
     v.add_argument("--no-odata", action="store_true", help="не публиковать OData")
     v.add_argument("--no-http-services", action="store_true", help="не публиковать HTTP-сервисы")
+    v.add_argument("--service", action="append", metavar="ИМЯ[:КОРЕНЬ]", default=[],
+                   help="HTTP-сервис РАСШИРЕНИЯ, опубликовать поимённо; иначе он отдаёт 503. "
+                        "Можно повторять: --service aidbg_API:aidbg")
     v.add_argument("--schedule-jobs", action="store_true",
                    help="включить регламентные задания (на копии базы обычно НЕ надо)")
     v.add_argument("--wait", type=int, default=300, help="сколько ждать готовности, сек")
@@ -145,9 +148,13 @@ def _serve(a):
 
     workdir = Path(a.data) if a.data else Path(tempfile.gettempdir()) / f"ibsrv-{a.port}"
     cfg_path = Path(a.config_out) if a.config_out else workdir / "ibsrv.yaml"
+    services = []
+    for item in a.service:
+        srv_name, _, root = item.partition(":")
+        services.append({"name": srv_name, "root": root or srv_name})
     text = sa.build_config(a.base, port=a.port, name=a.name, address=a.address,
                            odata=not a.no_odata, http_services=not a.no_http_services,
-                           schedule_jobs=a.schedule_jobs)
+                           schedule_jobs=a.schedule_jobs, services=services)
     sa.write_config(cfg_path, text)
     print(f"[ok] конфигурация: {cfg_path}")
     proc = sa.start(cfg_path, data_dir=workdir, port=a.port, wait=a.wait)

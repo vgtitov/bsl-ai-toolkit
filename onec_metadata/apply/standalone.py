@@ -48,15 +48,23 @@ def ibsrv_bin(bin_path: str | None = None) -> str:
 def build_config(base_dir: str, *, port: int = DEFAULT_PORT, name: str = "ib",
                  address: str = "localhost", http_base: str = "/",
                  odata: bool = True, http_services: bool = True,
-                 web_services: bool = False, schedule_jobs: bool = False) -> str:
+                 web_services: bool = False, schedule_jobs: bool = False,
+                 services: list | None = None) -> str:
     """YAML-конфигурация автономного сервера.
 
     Путь к базе — в ОДИНАРНЫХ кавычках и с прямыми слэшами: разбор YAML в платформе
     обрабатывает escape-последовательности, и `\\t` в `C:\\tmp` стал бы табуляцией.
+
+    `services` — HTTP-сервисы РАСШИРЕНИЙ, которые надо опубликовать поимённо:
+    `[{"name": "aidbg_API", "root": "aidbg"}]`. Сами по себе они не публикуются ни на
+    автономном сервере, ни на веб-сервере, и обращение к неопубликованному сервису
+    отдаёт 503 (проверено на живой базе; типовые сервисы конфигурации при этом отвечают
+    404/400, то есть слой сервисов исправен и дело именно в публикации).
+    Имена свойств повторяют атрибуты дескриптора публикации `default.vrd`.
     """
     path = str(base_dir).replace("\\", "/").replace("'", "''")
-    yes = lambda flag: "yes" if flag else "no"
-    return (
+    tf = lambda flag: "true" if flag else "false"
+    cfg = (
         "server:\n"
         f"  address: {address}\n"
         f"  port: {port}\n"
@@ -66,14 +74,27 @@ def build_config(base_dir: str, *, port: int = DEFAULT_PORT, name: str = "ib",
         f"  name: {name}\n"
         "  distribute-licenses: yes\n"
         f"  schedule-jobs: {'allow' if schedule_jobs else 'deny'}\n"
-        "publish:\n"
-        f"  base: {http_base}\n"
-        f"  odata: {yes(odata)}\n"
-        "  http-services:\n"
-        f"    publish-by-default: {yes(http_services)}\n"
-        f"    publish-extensions-by-default: {yes(http_services)}\n"
-        "  web-services:\n"
-        f"    publish-by-default: {yes(web_services)}\n")
+        # Раздел публикации ОДИН и называется `http` — это список точек публикации.
+        # Двух разделов быть не должно: второй перекрывает первый, и на живой базе при
+        # добавлении сервиса расширения отваливался OData.
+        # `odata` — ОБЪЕКТ с `publish`, а не флаг: форма `odata: yes` молча не работает
+        # и отдаёт 404. Имена полей подтверждены схемой платформы и живым прогоном.
+        "http:\n"
+        f"  - base: {http_base}\n"
+        "    odata:\n"
+        f"      publish: {tf(odata)}\n"
+        "    http-services:\n"
+        f"      publish-by-default: {tf(http_services)}\n"
+        f"      publish-extensions-by-default: {tf(http_services)}\n")
+    if services:
+        cfg += "      service:\n"
+        for s in services:
+            cfg += (f"        - name: {s['name']}\n"
+                    f"          root: {s.get('root', s['name'])}\n"
+                    "          publish: true\n")
+    cfg += ("    web-services:\n"
+            f"      publish-by-default: {tf(web_services)}\n")
+    return cfg
 
 
 def write_config(path: Path, text: str) -> Path:

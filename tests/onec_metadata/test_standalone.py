@@ -20,17 +20,54 @@ def test_config_quotes_path_and_uses_forward_slashes():
     assert "\\t" not in cfg and "\\d" not in cfg      # backslash-escape'ов не осталось
 
 
+# DISCIPLINE_ALLOW_TEST_EDIT: форма ключей уточнена живым прогоном (odata это объект)
 def test_config_publishes_odata_and_http_services_by_default():
     cfg = sa.build_config("/opt/1c/bases/erp")
-    assert "odata: yes" in cfg
-    assert "publish-by-default: yes" in cfg
-    assert "publish-extensions-by-default: yes" in cfg   # HTTP-сервисы РАСШИРЕНИЙ тоже
+    assert "odata:\n      publish: true" in cfg
+    # DISCIPLINE_ALLOW_TEST_EDIT: булевы значения в схеме платформы это true/false
+    assert "publish-by-default: true" in cfg
+    assert "publish-extensions-by-default: true" in cfg   # HTTP-сервисы РАСШИРЕНИЙ тоже
 
 
+# DISCIPLINE_ALLOW_TEST_EDIT: red-фаза — секция публикации должна быть ОДНА
+# DISCIPLINE_ALLOW_TEST_EDIT: инвариант важнее имени секции — живой прогон показал, что
+# ключ odata распознаётся только под publish, а не под http
+def test_publication_section_is_single():
+    """Раздел публикации ровно один, и в нём и OData, и сервисы расширений.
+
+    Проверено на живой базе: два раздела конфликтуют, второй перекрывает первый —
+    при добавлении сервиса расширения OData отваливался в 404."""
+    # DISCIPLINE_ALLOW_TEST_EDIT: живой прогон показал, что odata это объект, а не флаг
+    cfg = sa.build_config("/base", services=[{"name": "aidbg_API", "root": "aidbg"}])
+    sections = cfg.count("\npublish:\n") + cfg.count("\nhttp:\n")
+    assert sections == 1
+    assert "name: aidbg_API" in cfg
+    # odata — ОБЪЕКТ с publish, а не флаг: форма `odata: yes` молча даёт 404
+    assert "odata:\n      publish: true" in cfg
+
+
+# DISCIPLINE_ALLOW_TEST_EDIT: red-фаза — публикация HTTP-сервисов РАСШИРЕНИЙ поимённо
+def test_extension_http_services_must_be_listed_explicitly():
+    """HTTP-сервисы расширений автономный сервер сам НЕ публикует — обращение к
+    неопубликованному сервису отдаёт 503 (проверено на живой базе: типовые сервисы
+    конфигурации при этом отвечают 404/400, то есть слой сервисов исправен).
+    Значит сервис расширения обязан попасть в конфигурацию поимённо."""
+    cfg = sa.build_config("/base", services=[{"name": "aidbg_API", "root": "aidbg"}])
+    assert "name: aidbg_API" in cfg
+    assert "root: aidbg" in cfg
+    assert "publish: true" in cfg
+
+
+def test_services_absent_when_not_requested():
+    cfg = sa.build_config("/base")
+    assert "service:" not in cfg
+
+
+# DISCIPLINE_ALLOW_TEST_EDIT: форма ключей уточнена живым прогоном
 def test_config_can_disable_publications():
     cfg = sa.build_config("/opt/1c/bases/erp", odata=False, http_services=False)
-    assert "odata: no" in cfg
-    assert "publish-extensions-by-default: no" in cfg
+    assert "odata:\n      publish: false" in cfg
+    assert "publish-extensions-by-default: false" in cfg
 
 
 def test_config_scheduled_jobs_denied_by_default():
