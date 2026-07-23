@@ -75,6 +75,43 @@ def test_run_smoke_no_result_file_raises():
                         workdir=r"D:\smoke")
 
 
+# DISCIPLINE_ALLOW_TEST_EDIT: red-фаза — файловые операции раннера обязаны быть КЛИЕНТСКИМИ
+def test_runner_does_file_io_on_client_not_on_server():
+    """Сценарий и файл-результат читает и пишет КЛИЕНТ, а не сервер.
+
+    Боевой случай 23.07: на клиент-серверной базе серверный код исполняется в rphost на
+    машине кластера, где локальных путей разработчика нет. Технологический журнал показал
+    бесконечный цикл getServerFileHost → IFolderFileHost::open — платформа пыталась
+    дотянуться до файла через файловый хост клиента. Сеанс висел вечно, без окна и без
+    единой строки в /Out. На файловой базе то же самое работает, потому что сервер и
+    клиент там одна машина, поэтому дефект и не был виден раньше."""
+    module = (smoke.TEMPLATE_DIR /
+              "СмоукРаннер/Forms/Форма/Ext/Form/Module.bsl").read_text("utf-8-sig")
+
+    # разбираем модуль на блоки по директивам компиляции
+    blocks, current = {}, None
+    for line in module.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("&"):
+            current = stripped
+            blocks.setdefault(current, [])
+        elif current:
+            blocks[current].append(stripped)
+
+    server_code = "\n".join(
+        "\n".join(body) for directive, body in blocks.items()
+        if "Сервер" in directive)
+    client_code = "\n".join(
+        "\n".join(body) for directive, body in blocks.items()
+        if "Клиент" in directive)
+
+    assert "ЧтениеТекста" not in server_code, "чтение файла ушло на сервер"
+    assert "ЗаписьТекста" not in server_code, "запись файла ушла на сервер"
+    assert "ЧтениеТекста" in client_code and "ЗаписьТекста" in client_code
+    # на сервер уходит только ТЕКСТ сценария, а не путь к файлу
+    assert "Выполнить(" in server_code
+
+
 def test_template_dir_exists_and_complete():
     files = {p.relative_to(smoke.TEMPLATE_DIR).as_posix()
              for p in smoke.TEMPLATE_DIR.rglob("*") if p.is_file()}

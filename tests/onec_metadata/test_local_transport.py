@@ -222,6 +222,40 @@ def _smoke_runner(result_text="", raise_timeout=False):
     return R()
 
 
+# DISCIPLINE_ALLOW_TEST_EDIT: red-фаза — отличать ползущий сеанс от зависшего
+def test_timeout_reports_cache_growth_as_progress(monkeypatch):
+    """Сеанс, который строит клиентский кэш конфигурации, НЕ завис — он ползёт.
+
+    Боевой разбор 23.07 по технологическому журналу: первый сеанс к удалённой
+    клиент-серверной базе по VPN тянет кэш вызовами open/read примерно по 110 мс каждый,
+    их десятки тысяч. Снаружи это неотличимо от зависания, и я сам сначала списал это на
+    модальное окно. Отличие измеримо — каталог кэша растёт."""
+    from onec_metadata.apply import smoke
+
+    sizes = iter([80 * 1024 * 1024, 96 * 1024 * 1024])
+    monkeypatch.setattr(smoke, "client_cache_bytes", lambda: next(sizes))
+
+    with pytest.raises(ApplyError) as e:
+        smoke.run_smoke(_smoke_runner(raise_timeout=True), r"srv\ERP", "u", "p",
+                        scenario_text='Отчет = "x";', epf="Р.epf",
+                        workdir="WD", timeout=5)
+    text = str(e.value)
+    assert "кэш" in text.lower()
+    assert "16" in text                      # прирост в МБ назван числом
+    assert "не завис" in text.lower()          # DISCIPLINE_ALLOW_TEST_EDIT: регистр не важен
+
+
+def test_timeout_without_cache_growth_does_not_claim_progress(monkeypatch):
+    from onec_metadata.apply import smoke
+
+    monkeypatch.setattr(smoke, "client_cache_bytes", lambda: 80 * 1024 * 1024)
+    with pytest.raises(ApplyError) as e:
+        smoke.run_smoke(_smoke_runner(raise_timeout=True), r"srv\ERP", "u", "p",
+                        scenario_text='Отчет = "x";', epf="Р.epf",
+                        workdir="WD", timeout=5)
+    assert "не завис" not in str(e.value).lower()   # DISCIPLINE_ALLOW_TEST_EDIT: регистр
+
+
 @pytest.mark.parametrize("kwargs", [{"raise_timeout": True}, {"result_text": ""}])
 def test_hung_run_explains_unsafe_action_dialog(kwargs):
     """Батч-сеанс висит на модальном окне «Защита от опасных действий» — скрипт окна не
