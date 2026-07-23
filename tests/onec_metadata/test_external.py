@@ -83,3 +83,61 @@ def test_failed_designer_raises():
     with pytest.raises(ApplyError):
         dump_cfe(FakeRunner(out="__DSGN_FAIL__"), "ib", "u", "p",
                  ext="X", out_cfe=r"D:\x.cfe")
+
+
+# ── SSH ИЛИ локально: LocalRunner / make_runner / conn_arg ────────────────────
+# DISCIPLINE_ALLOW_TEST_EDIT: тесты доработки «работает и по ssh, и без него»
+
+def test_conn_arg_server_vs_file():
+    from onec_metadata.apply.runner import conn_arg
+    assert conn_arg(r"localhost\testbase") == r"/S localhost\testbase"      # серверная
+    assert conn_arg(r"D:\bases\erp_test") == r'/F"D:\bases\erp_test"'        # файловая (диск)
+    assert conn_arg(r"\\nas\share\base") == r'/F"\\nas\share\base"'          # файловая (UNC)
+    assert conn_arg("File=/opt/1c/base") == '/F"/opt/1c/base"'              # File=… явно
+    assert conn_arg(r"/S srv\b") == r"/S srv\b"                              # готовый флаг — как есть
+
+
+def test_enterprise_cmd_uses_file_base():
+    from onec_metadata.apply.runner import enterprise_cmd
+    cmd = enterprise_cmd(r"D:\bases\erp_test", "u", "p", r"D:\r.epf",
+                         "сцен;рез", "out.log", bin=r"C:\1cv8.exe")
+    assert r'/F"D:\bases\erp_test"' in cmd and "/S " not in cmd
+    assert "ENTERPRISE" in cmd and "/Execute" in cmd
+
+
+def test_make_runner_local_vs_ssh():
+    from onec_metadata.apply.runner import LocalRunner, Runner, make_runner
+    assert isinstance(make_runner(None), LocalRunner)      # локально по умолчанию
+    assert isinstance(make_runner("local"), LocalRunner)
+    assert isinstance(make_runner(""), LocalRunner)
+    assert isinstance(make_runner("workpc"), Runner)       # host → SSH
+
+
+def test_ssh_runner_requires_host():
+    from onec_metadata.apply.runner import Runner
+    with pytest.raises(ValueError):
+        Runner("")
+
+
+def test_local_runner_runs_without_ssh(monkeypatch):
+    """LocalRunner исполняет команду на текущей машine (без ssh) — проверяем через мок."""
+    import onec_metadata.apply.runner as rn
+    seen = {}
+
+    class P:
+        returncode = 0
+        stdout = "__DSGN_OK__"
+        stderr = ""
+
+    def fake_run(args, **kw):
+        seen["args"] = args
+        seen["shell"] = kw.get("shell", False)
+        return P()
+
+    monkeypatch.setattr(rn.subprocess, "run", fake_run)
+    code, out = rn.LocalRunner().run('"1cv8" DESIGNER /S x')
+    assert code == 0 and "OK" in out
+    assert seen["shell"] is False           # без shell (нет инъекции через оболочку)
+    # ssh НЕ участвует: первый токен — не 'ssh'
+    first = seen["args"][0] if isinstance(seen["args"], list) else seen["args"].split()[0]
+    assert "ssh" not in str(first).lower()

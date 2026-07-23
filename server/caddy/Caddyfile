@@ -38,3 +38,18 @@
 		}
 	}
 }
+
+# Параллельный вход для onec-data (MCP слоя данных), та же bearer-аутентификация.
+:8002 {
+	@unauthorized not header Authorization "Bearer {$ONEC_BEARER_TOKEN}"
+
+	handle @unauthorized {
+		respond "401 Unauthorized" 401
+	}
+
+	handle {
+		reverse_proxy onec-data:8002 {
+			flush_interval -1
+		}
+	}
+}

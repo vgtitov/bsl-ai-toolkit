@@ -12,10 +12,13 @@ from onec_metadata.apply.dumpload import ApplyError
 
 
 class FakeRunner:
+    # DISCIPLINE_ALLOW_TEST_EDIT: перенос файлов теперь через r.put() (SSH/локально),
+    # а не через пропатченный subprocess — FakeRunner получает свой put()
     host = "fake-host"
 
     def __init__(self, result_text="__SMOKE_OK__\nотчёт: всё хорошо"):
         self.commands = []
+        self.puts = []
         self.result_text = result_text
 
     def run(self, cmd, timeout=600):
@@ -24,14 +27,8 @@ class FakeRunner:
             return 0, self.result_text
         return 0, "EXIT=0"
 
-
-@pytest.fixture(autouse=True)
-def no_scp(monkeypatch):
-    calls = []
-    monkeypatch.setattr(smoke.subprocess, "run",
-                        lambda *a, **k: calls.append(a) or
-                        type("P", (), {"returncode": 0})())
-    return calls
+    def put(self, local, remote, timeout=300):
+        self.puts.append((str(local), remote))
 
 
 def test_run_smoke_ok_returns_report(tmp_path):

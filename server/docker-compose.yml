@@ -45,14 +45,42 @@ services:
       PROMETHEUS_URL: "${PROMETHEUS_URL:-}"
     restart: unless-stopped
 
+  onec-data:
+    # MCP слоя ДАННЫХ 1С (read-only: OData + отладочный сервис ai_debug от имени пользователя).
+    # Секреты учёток 1С — ТОЛЬКО здесь (файл ONEC_DATA_USERS монтируется read-only). Контекст сборки — корень репо.
+    build:
+      context: ..
+      dockerfile: server/Dockerfile.data
+    image: claude-1c-toolkit/onec-data:latest
+    expose:
+      - "8002"            # только внутренняя сеть compose, наружу — через proxy
+    volumes:
+      # Файл учёток исследуемых пользователей {alias:{login,password}} — read-only, org-specific (Team-слой).
+      - "${ONEC_DATA_USERS:-../config/users.example.json}:/app/users.json:ro"
+    environment:
+      MCP_TRANSPORT: sse
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: "8002"
+      ONEC_DATA_BASE_URL: "${ONEC_DATA_BASE_URL:?задай ONEC_DATA_BASE_URL в .env — адрес публикации тест-ИБ}"
+      ONEC_DATA_USERS: /app/users.json
+      ONEC_DATA_DEFAULT_USER: "${ONEC_DATA_DEFAULT_USER:-}"
+      ONEC_DATA_MAX_ROWS: "${ONEC_DATA_MAX_ROWS:-200}"
+      # прод-профиль центра: привилегированный режим по умолчанию ЗАПРЕЩЁН на клиенте
+      ONEC_DATA_FORBID_PRIVILEGED: "${ONEC_DATA_FORBID_PRIVILEGED:-1}"
+      ONEC_DATA_MASK_FIELDS: "${ONEC_DATA_MASK_FIELDS:-}"
+      ONEC_DATA_PRESETS: "${ONEC_DATA_PRESETS:-}"
+    restart: unless-stopped
+
   proxy:
     image: caddy:2-alpine
     depends_on:
       - onec-code
       - onec-ops
+      - onec-data
     ports:
       - "${ONEC_PUBLIC_PORT:-8000}:8000"
       - "${ONEC_OPS_PUBLIC_PORT:-8001}:8001"
+      - "${ONEC_DATA_PUBLIC_PORT:-8002}:8002"
     volumes:
       - "./caddy/Caddyfile:/etc/caddy/Caddyfile:ro"
     environment:

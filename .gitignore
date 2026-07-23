@@ -15,6 +15,9 @@ config/zabbix-contours.toml
 # Локальное окружение
 .mcp.json
 src/
+# ...но исходники расширений toolkit (напр. extensions/ai_debug/src) — это КОД, он отслеживается
+!extensions/**/src/
+!extensions/**/src/**
 mcp-server.log
 *.log
 

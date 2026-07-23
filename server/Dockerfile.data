@@ -1,0 +1,19 @@
+# Центральный MCP слоя ДАННЫХ 1С (onec-data) как HTTP-сервис (для команды).
+# Read-only: OData (метаданные/чтение/вирт. таблицы) + отладочный сервис ai_debug
+# (запрос/отчёт/настройки/вызов от имени пользователя). Секреты учёток 1С живут ТОЛЬКО
+# здесь (env/смонтированный файл ONEC_DATA_USERS), наружу — за bearer через Caddy.
+FROM python:3.12-slim
+
+RUN pip install --no-cache-dir "mcp>=1.2"
+
+WORKDIR /app
+COPY mcp/onec_data_mcp.py /app/onec_data_mcp.py
+
+ENV MCP_TRANSPORT=sse \
+    MCP_HOST=0.0.0.0 \
+    MCP_PORT=8002 \
+    ONEC_DATA_ODATA_PATH=/odata/standard.odata \
+    ONEC_DATA_DEBUG_PATH=/hs/aidbg
+
+EXPOSE 8002
+CMD ["python", "/app/onec_data_mcp.py"]
