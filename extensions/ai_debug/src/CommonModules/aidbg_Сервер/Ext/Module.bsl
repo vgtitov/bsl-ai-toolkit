@@ -1,4 +1,4 @@
-// aidbg_Сервер - логика слоя данных ai_debug (read-only). Контракт HTTP и клиент:
+﻿// aidbg_Сервер - логика слоя данных ai_debug (read-only). Контракт HTTP и клиент:
 // mcp/onec_data_mcp.py (MCP onec-data); архитектура: docs/data-access-architecture.md.
 //
 // Гарантии безопасности (ревью обязано их проверять при любой правке):
