@@ -14,21 +14,33 @@ from onec_metadata.apply.dumpload import ApplyError
 class FakeRunner:
     # DISCIPLINE_ALLOW_TEST_EDIT: перенос файлов теперь через r.put() (SSH/локально),
     # а не через пропатченный subprocess — FakeRunner получает свой put()
+    # DISCIPLINE_ALLOW_TEST_EDIT: протокол раннера расширен файловыми операциями
+    # (read_text/makedirs/remove) — двойник обязан их реализовать
     host = "fake-host"
+    shell = True
 
     def __init__(self, result_text="__SMOKE_OK__\nотчёт: всё хорошо"):
         self.commands = []
         self.puts = []
+        self.dirs = []
+        self.removed = []
         self.result_text = result_text
 
     def run(self, cmd, timeout=600):
         self.commands.append(cmd)
-        if "type" in cmd and "smoke_result" in cmd:
-            return 0, self.result_text
         return 0, "EXIT=0"
 
     def put(self, local, remote, timeout=300):
         self.puts.append((str(local), remote))
+
+    def read_text(self, path, timeout=60):
+        return self.result_text if "smoke_result" in path else ""
+
+    def makedirs(self, path, timeout=60):
+        self.dirs.append(path)
+
+    def remove(self, path, timeout=60):
+        self.removed.append(path)
 
 
 def test_run_smoke_ok_returns_report(tmp_path):

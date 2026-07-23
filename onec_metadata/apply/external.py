@@ -52,3 +52,35 @@ def load_cfe(r: Runner, ib: str, user: str, pwd: str, *, cfe: str,
                   [cfe, "-Extension", ext], log)
     _run_designer(r, ib, user, pwd, "/UpdateDBCfg",
                   ["-Extension", ext], log)
+
+
+# Контексты синтакс-контроля: модули расширения компилируются под каждый из них.
+# Серверное расширение (HTTP-сервисы, общие модули) обязано проходить весь набор —
+# ошибка «метод недоступен в контексте клиента» ловится только так.
+CHECK_MODES = ("-ThinClient", "-WebClient", "-Server", "-ExternalConnection",
+               "-ThickClientManagedApplication", "-DistributiveModules",
+               "-IncorrectReferences", "-ConfigLogIntegrity")
+
+
+def check_config(r: Runner, ib: str, user: str, pwd: str, *,
+                 ext: str | None = None, modes: tuple | None = None,
+                 log: str | None = None) -> None:
+    """Синтакс-контроль платформой (ступень 1 лестницы тестирования).
+
+    Это ЕДИНСТВЕННАЯ проверка, которую не заменяют BSL LS и статика: платформа
+    компилирует модули во всех контекстах и видит несуществующие методы/типы,
+    недоступные в контексте вызовы и битые ссылки метаданных.
+    `ext=None` — основная конфигурация, иначе расширение по имени.
+    """
+    log = log or _wpath("check_config.log")
+    args = list(modes or CHECK_MODES)
+    if ext:
+        args += ["-Extension", ext]
+    _run_designer(r, ib, user, pwd, "/CheckConfig", args, log)
+
+
+def delete_extension(r: Runner, ib: str, user: str, pwd: str, *, ext: str,
+                     log: str | None = None) -> None:
+    """Удалить расширение из ИБ — убрать за собой после проверки в чужой базе."""
+    log = log or _wpath("ext_delete.log")
+    _run_designer(r, ib, user, pwd, "/DeleteCfg", ["-Extension", ext], log)

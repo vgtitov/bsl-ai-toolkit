@@ -44,8 +44,7 @@ class ApplyError(Exception):
 
 
 def _read_log(r: Runner, log: str) -> str:
-    _, logtxt = r.run(f"chcp 65001 >nul & type {log}", timeout=60)
-    return logtxt
+    return r.read_text(log, timeout=60)
 
 
 _OK = "__DSGN_OK__"
@@ -55,13 +54,22 @@ _FAIL = "__DSGN_FAIL__"
 def _run_designer(r: Runner, ib: str, user: str, pwd: str, action: str,
                   args: list, log: str, timeout: int = 900) -> None:
     cmd = designer_cmd(ib, user, pwd, action, args, log)
-    # `if errorlevel 1` вычисляется В МОМЕНТ исполнения (это команда, а не
-    # переменная), поэтому корректно ловит код возврата DESIGNER. Инлайновый
-    # `%errorlevel%` раскрылся бы cmd'ом ДО запуска exe и всегда давал 0.
-    gate = f" & if errorlevel 1 (echo {_FAIL}) else (echo {_OK})"
-    code, out = r.run(cmd + gate, timeout=timeout)
+    if getattr(r, "shell", True):
+        # SSH: на том конце cmd.exe. `if errorlevel 1` вычисляется В МОМЕНТ
+        # исполнения (это команда, а не переменная), поэтому корректно ловит код
+        # возврата DESIGNER. Инлайновый `%errorlevel%` раскрылся бы cmd'ом ДО
+        # запуска exe и всегда давал 0.
+        gate = f" & if errorlevel 1 (echo {_FAIL}) else (echo {_OK})"
+        code, out = r.run(cmd + gate, timeout=timeout)
+        ok_run = (_OK in out) and (_FAIL not in out)
+    else:
+        # Локально оболочки нет: гейт-строка ушла бы АРГУМЕНТАМИ в 1cv8.exe (и
+        # маркер не появился бы никогда → вечный ложный FAIL). Код возврата
+        # процесса доступен напрямую — он и есть вердикт.
+        code, out = r.run(cmd, timeout=timeout)
+        ok_run = (code == 0)
     logtxt = _read_log(r, log)
-    ok = (_OK in out) and (_FAIL not in out) and ("Ошибк" not in logtxt) and \
+    ok = ok_run and ("Ошибк" not in logtxt) and \
          ("недостаточно прав" not in logtxt.lower())
     if not ok:
         raise ApplyError(

@@ -39,20 +39,21 @@ def deploy_smoke_runner(r: RunnerLike, ib: str, user: str, pwd: str, *,
                         workdir: str) -> str:
     """Шаблон → сервер → сборка .epf платформой. Возврат: путь к .epf."""
     workdir_fs = workdir.replace("\\", "/")
-    r.run(f"cmd /c if not exist {workdir} mkdir {workdir}", timeout=60)
+    r.makedirs(workdir)
     for p in sorted(TEMPLATE_DIR.rglob("*")):
         if not p.is_file():
             continue
         rel = p.relative_to(TEMPLATE_DIR)
         remote_dir = "/".join([workdir_fs, *rel.parts[:-1]])
         if rel.parts[:-1]:
-            r.run("cmd /c if not exist {} mkdir {}".format(
-                remote_dir.replace('/', '\\'), remote_dir.replace('/', '\\')),
-                timeout=60)
+            r.makedirs(remote_dir)
         r.put(p, f"{remote_dir}/{rel.name}")
     root_xml = f"{workdir}\\СмоукРаннер.xml"
     out_epf = f"{workdir}\\СмоукРаннер.epf"
-    build_external(r, ib, user, pwd, root_xml=root_xml, out_epf=out_epf)
+    # лог сборки — В workdir, а не в дефолтный ONEC_REMOTE_WORKDIR (D:\src):
+    # на машине разработчика такого каталога обычно нет, и диагностика терялась
+    build_external(r, ib, user, pwd, root_xml=root_xml, out_epf=out_epf,
+                   log=f"{workdir}\\external_build.log")
     return out_epf
 
 
@@ -76,10 +77,10 @@ def run_smoke(r: RunnerLike, ib: str, user: str, pwd: str, *,
     finally:
         local.unlink(missing_ok=True)
 
-    r.run(f"cmd /c del {result} 2>nul & echo.>nul", timeout=60)
+    r.remove(result)
     cmd = enterprise_cmd(ib, user, pwd, epf, f"{scenario};{result}", log)
     r.run(cmd, timeout=timeout)
-    _, content = r.run(f"cmd /c chcp 65001 >nul & type {result}", timeout=60)
+    content = r.read_text(result, timeout=60)
 
     if _OK in content:
         return content.split(_OK, 1)[1].strip()
