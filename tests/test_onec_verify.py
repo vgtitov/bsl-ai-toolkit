@@ -12,30 +12,41 @@ import pytest
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
 
+# DISCIPLINE_ALLOW_TEST_EDIT: общая константа вместо литералов с диском D:
+# Строка соединения серверной базы — не путь, к ФС и к дискам отношения не имеет.
+# Реальные каталоги в тестах берём ТОЛЬКО из tmp_path: диска D: на машине может не быть,
+# как и вообще букв дисков (Linux/macOS).
+SERVER_BASE = "srv-1c\\ERP_Test"
+BIN_STUB = "1cv8-stub"           # значение env: resolve_bin его только возвращает, не проверяет
+
 
 def _load(monkeypatch):
-    monkeypatch.setenv("ONEC_1CV8_BIN", r"C:\1cv8.exe")   # без авто-поиска платформы
+    monkeypatch.setenv("ONEC_1CV8_BIN", BIN_STUB)   # без авто-поиска платформы
     sys.path.insert(0, str(SCRIPTS_DIR))
     return importlib.reload(importlib.import_module("onec_verify"))
 
 
 def test_resolve_bin_priority(monkeypatch):
     m = _load(monkeypatch)
-    assert m.resolve_bin(r"D:\явный\1cv8.exe") == r"D:\явный\1cv8.exe"   # аргумент важнее env
-    assert m.resolve_bin() == r"C:\1cv8.exe"                              # затем env
+    assert m.resolve_bin("1cv8-explicit") == "1cv8-explicit"   # аргумент важнее env
+    assert m.resolve_bin() == BIN_STUB                              # затем env
 
 
+# DISCIPLINE_ALLOW_TEST_EDIT: маркер вместо литерала D:\src (диска может не быть)
 def test_default_workdir_local_is_not_server_path(monkeypatch):
-    """Локально нельзя брать серверный D:\\src — его на машине разработчика нет."""
+    """Серверный рабочий каталог локально брать нельзя — его на машине разработчика нет
+    (у сервера это обычно D:\\src, но диска D: у разработчика может не быть вовсе)."""
     m = _load(monkeypatch)
-    monkeypatch.setenv("ONEC_REMOTE_WORKDIR", r"D:\src")
-    assert m.default_workdir("srv-1c").startswith(r"D:\src")
+    remote = "SRV_WORKDIR_MARKER"
+    monkeypatch.setenv("ONEC_REMOTE_WORKDIR", remote)
+    assert m.default_workdir("srv-1c").startswith(remote)   # с --host — путь сервера
     local = m.default_workdir(None)
-    assert not local.startswith(r"D:\src")
+    assert remote not in local
     assert Path(local).parent.is_dir()          # родитель существует (временный каталог)
 
 
-def test_check_uses_local_runner_without_host(monkeypatch):
+# DISCIPLINE_ALLOW_TEST_EDIT: убираю привязку к диску D: и реальный вызов ssh из теста
+def test_check_uses_local_runner_without_host(monkeypatch, tmp_path):
     m = _load(monkeypatch)
     seen = {}
 
@@ -48,26 +59,29 @@ def test_check_uses_local_runner_without_host(monkeypatch):
     monkeypatch.setattr(ext, "check_config", fake_check)
     monkeypatch.setenv("ONEC_IB_USER", "ivanov")
     monkeypatch.setenv("ONEC_IB_PASS_ERP_TEST", "secret")
-    m.main(["check", "--base", r"srv\ERP_Test", "--ext", "ai_debug",
-            "--contour", "ERP_TEST"])
+    m.main(["check", "--base", SERVER_BASE, "--ext", "ai_debug",
+            "--contour", "ERP_TEST", "--workdir", str(tmp_path / "wd")])
 
     assert isinstance(seen["runner"], LocalRunner)        # без --host — эта машина
-    assert seen["ib"] == r"srv\ERP_Test"
+    assert seen["ib"] == SERVER_BASE
     assert seen["ext"] == "ai_debug"
     assert "check_config.log" in seen["log"]
 
 
-def test_check_with_host_uses_ssh_runner(monkeypatch):
+def test_check_with_host_uses_ssh_runner(monkeypatch, tmp_path):
+    """С --host берётся SSH-раннер. Сам ssh при этом НЕ вызывается: подготовка каталога
+    на сервере замокана — тест не должен зависеть ни от ssh, ни от сети."""
     m = _load(monkeypatch)
     seen = {}
 
     import onec_metadata.apply.external as ext
     from onec_metadata.apply.runner import Runner
 
+    monkeypatch.setattr(Runner, "makedirs", lambda self, path, timeout=60: None)
     monkeypatch.setattr(ext, "check_config",
                         lambda r, *args, **kw: seen.update(runner=r))
-    m.main(["check", "--base", r"srv\ERP", "--host", "onec-srv",
-            "--workdir", r"D:\src\wd"])
+    m.main(["check", "--base", SERVER_BASE, "--host", "onec-srv",
+            "--workdir", str(tmp_path / "wd")])
     assert isinstance(seen["runner"], Runner) and seen["runner"].host == "onec-srv"
 
 
@@ -105,7 +119,7 @@ def test_smoke_deploy_builds_runner_first(monkeypatch, tmp_path):
     import onec_metadata.apply.smoke as smoke_mod
 
     monkeypatch.setattr(smoke_mod, "deploy_smoke_runner",
-                        lambda *a, **kw: (order.append("deploy"), r"D:\wd\СмоукРаннер.epf")[1])
+                        lambda *a, **kw: (order.append("deploy"), "epf-stub")[1])
     monkeypatch.setattr(smoke_mod, "run_smoke",
                         lambda *a, **kw: (order.append("run"), "ок")[1])
     scen = tmp_path / "s.bsl"

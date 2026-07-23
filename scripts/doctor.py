@@ -118,28 +118,43 @@ def _http_ok(url: str, headers=None, timeout=6):
             return False, f"недоступно ({type(e).__name__}): сервер не запущен?"
 
 
-def check_unsafe_action_protection():
+def check_unsafe_action_protection(base: str | None = None):
     """Защита от опасных действий: с ней батч-прогоны ступени 2 ВИСНУТ на модальном окне.
 
-    Проверяем только машинный способ отключения (`conf.cfg`) — снят ли флаг у конкретного
-    пользователя ИБ, снаружи базы не видно. Поэтому вердикт мягкий: WARN с инструкцией,
-    а не КРАСНЫЙ (у человека флаг может быть уже снят)."""
+    ПОДКЛЮЧЕНИЙ НЕ ДЕЛАЕТ — только читает маски `conf.cfg`. Опрашивать сеансом каждую базу
+    контура (их бывают десятки, по VPN — минуты на базу) дороже, чем ловимая проблема,
+    поэтому проверка конкретной базы ленивая: она делается в момент обращения к ней
+    (`apply.smoke`), а здесь — по желанию, через `--base`.
+
+    Снят ли флаг у конкретного ПОЛЬЗОВАТЕЛЯ ИБ, снаружи базы не видно, поэтому вердикт
+    мягкий: WARN с инструкцией, а не КРАСНЫЙ."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     try:
-        sys.path.insert(0, str(Path(__file__).resolve().parent))
         import detect_tools
+        from onec_metadata.apply import protection
         root = detect_tools.find_platform()
-    except Exception:
-        root = None
+    except Exception as e:
+        return [(WARN, "1С: защита от опасных действий", f"не смог проверить ({type(e).__name__})")]
     if not root:
         return []                       # платформы нет — ступени 1–2 тут и не запускают
-    cfg = Path(root).parent / "conf" / "conf.cfg"
+
     name = "1С: защита от опасных действий"
     hint = ("батч-прогоны (ступень 2) повиснут на модальном окне, если у пользователя ИБ "
-            "не снят флаг «Защита от опасных действий». Способы — docs/setup-actions-required.md §1")
-    if cfg.is_file() and "DisableUnsafeActionProtection" in cfg.read_text(
-            encoding="utf-8-sig", errors="replace"):
-        return [(OK, name, f"отключена по маске в {cfg}")]
-    return [(WARN, name, f"в {cfg} маски нет — {hint}")]
+            "не снят флаг. Способы — docs/setup-actions-required.md §1")
+    cfg = protection.conf_cfg_path(root)
+    masks = protection.masks_from_conf(cfg)
+    res = []
+    if masks:
+        res.append((OK, name, f"маски в {cfg}: {'; '.join(masks)}"))
+    else:
+        res.append((WARN, name, f"масок в conf.cfg нет — {hint}"))
+    if base:
+        covered = protection.status_for_base(base, root) == protection.OFF_BY_MASK
+        res.append((OK if covered else WARN, f"{name}: база {base}",
+                    "под маской — окна не будет" if covered
+                    else f"маска не покрывает — {hint}"))
+    return res
 
 
 def check_prereqs():
@@ -194,12 +209,15 @@ def main():
 
     ap = argparse.ArgumentParser(description="health-check окружения Claude Code для 1С")
     ap.add_argument("--config", help="путь к .mcp.json (по умолчанию ./.mcp.json)")
+    ap.add_argument("--base", help="строка соединения КОНКРЕТНОЙ базы — проверить её маску "
+                                   "защиты от опасных действий (подключение не выполняется; "
+                                   "по всем базам контура доктор не ходит намеренно)")
     ns = ap.parse_args()
     env = dict(os.environ)
     results = []
 
     results += check_prereqs()
-    results += check_unsafe_action_protection()
+    results += check_unsafe_action_protection(ns.base)
 
     cfg = Path(ns.config) if ns.config else Path.cwd() / ".mcp.json"
     if not cfg.exists():

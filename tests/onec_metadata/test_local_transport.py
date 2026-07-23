@@ -16,6 +16,15 @@ import pytest
 from onec_metadata.apply.dumpload import ApplyError, _run_designer
 from onec_metadata.apply.runner import LocalRunner
 
+# DISCIPLINE_ALLOW_TEST_EDIT: символические имена вместо литералов с буквой диска
+# Ниже — ЧИСТО СИМВОЛИЧЕСКИЕ значения: раннеры в этих тестах подменены, к файловой
+# системе обращения нет. Буквы дисков не используем: диска D: может не быть, а на
+# Linux/macOS их нет вовсе. Реальные каталоги берутся только из tmp_path.
+BASE = "srv-1c\\ERP_Test"        # строка соединения серверной базы
+WORKDIR = "WORKDIR"              # каталог-заглушка
+CFE = "ext.cfe"
+LOG = "designer.log"
+
 
 class ShelllessRunner:
     """Двойник LocalRunner: команда исполняется без оболочки, вердикт — по коду возврата."""
@@ -129,7 +138,7 @@ def test_called_process_error_does_not_leak_password(monkeypatch):
 
 def test_run_designer_local_verdict_by_returncode():
     r = ShelllessRunner(code=0)
-    _run_designer(r, r"D:\base", "u", "p", "/DumpCfg", [r"D:\x.cfe"], r"D:\d.log")
+    _run_designer(r, BASE, "u", "p", "/DumpCfg", [CFE], LOG)
     cmd = r.commands[0]
     # оболочечного гейта в локальной команде быть не должно — он уехал бы в 1cv8.exe
     assert "if errorlevel" not in cmd and "__DSGN_OK__" not in cmd
@@ -138,28 +147,28 @@ def test_run_designer_local_verdict_by_returncode():
 
 def test_run_designer_local_nonzero_code_raises():
     with pytest.raises(ApplyError):
-        _run_designer(ShelllessRunner(code=1), r"D:\base", "u", "p",
-                      "/DumpCfg", [r"D:\x.cfe"], r"D:\d.log")
+        _run_designer(ShelllessRunner(code=1), BASE, "u", "p",
+                      "/DumpCfg", [CFE], LOG)
 
 
 def test_run_designer_local_error_in_log_raises():
     """Код 0, но в логе платформы «Ошибка» — это провал (лог главнее кода)."""
     with pytest.raises(ApplyError):
         _run_designer(ShelllessRunner(code=0, log_text="Ошибка синтаксиса в модуле"),
-                      r"D:\base", "u", "p", "/DumpCfg", [r"D:\x.cfe"], r"D:\d.log")
+                      BASE, "u", "p", "/DumpCfg", [CFE], LOG)
 
 
 def test_run_designer_ssh_keeps_shell_gate():
     """SSH-ветка не тронута: гейт по errorlevel остаётся (регресс сервера)."""
     r = ShellRunner(code=0)
-    _run_designer(r, r"srv\base", "u", "p", "/DumpCfg", [r"D:\x.cfe"], r"D:\d.log")
+    _run_designer(r, BASE, "u", "p", "/DumpCfg", [CFE], LOG)
     assert "if errorlevel 1" in r.commands[0]
 
 
 def test_run_designer_ssh_fail_marker_raises():
     with pytest.raises(ApplyError):
-        _run_designer(ShellRunner(code=1), r"srv\base", "u", "p",
-                      "/DumpCfg", [r"D:\x.cfe"], r"D:\d.log")
+        _run_designer(ShellRunner(code=1), BASE, "u", "p",
+                      "/DumpCfg", [CFE], LOG)
 
 
 # ── smoke: чтение результата и уборка — методами раннера, не `type`/`del` ─────
@@ -183,12 +192,12 @@ def test_run_smoke_reads_result_via_runner(monkeypatch):
             self.removed.append(path)
 
     r = R()
-    report = smoke.run_smoke(r, r"D:\base", "u", "p", scenario_text='Отчет = "x";',
-                             epf=r"D:\wd\СмоукРаннер.epf", workdir=r"D:\wd")
+    report = smoke.run_smoke(r, BASE, "u", "p", scenario_text='Отчет = "x";',
+                             epf=WORKDIR + "\\СмоукРаннер.epf", workdir=WORKDIR)
     assert "строк в регистре: 17" in report
     joined = "\n".join(r.commands)
     assert "type " not in joined and "del " not in joined     # без оболочечных команд
-    assert r.removed == [r"D:\wd\smoke_result.txt"]           # результат чистится до прогона
+    assert r.removed == [WORKDIR + "\\smoke_result.txt"]           # результат чистится до прогона
     assert "ENTERPRISE" in joined and "/Execute" in joined
 
 
@@ -220,9 +229,9 @@ def test_hung_run_explains_unsafe_action_dialog(kwargs):
     from onec_metadata.apply import smoke
 
     with pytest.raises(ApplyError) as e:
-        smoke.run_smoke(_smoke_runner(**kwargs), r"D:\base", "u", "p",
-                        scenario_text='Отчет = "x";', epf=r"D:\wd\Р.epf",
-                        workdir=r"D:\wd", timeout=5)
+        smoke.run_smoke(_smoke_runner(**kwargs), BASE, "u", "p",
+                        scenario_text='Отчет = "x";', epf=WORKDIR + "\\Р.epf",
+                        workdir=WORKDIR, timeout=5)
     text = str(e.value)
     assert "Защита от опасных действий" in text
     assert "setup-actions-required" in text
@@ -235,8 +244,8 @@ def test_scenario_failure_reports_error_without_hang_hint():
 
     with pytest.raises(ApplyError) as e:
         smoke.run_smoke(_smoke_runner(result_text="__SMOKE_FAIL__\nТаблица не найдена"),
-                        r"D:\base", "u", "p", scenario_text='Отчет = "x";',
-                        epf=r"D:\wd\Р.epf", workdir=r"D:\wd")
+                        BASE, "u", "p", scenario_text='Отчет = "x";',
+                        epf=WORKDIR + "\\Р.epf", workdir=WORKDIR)
     text = str(e.value)
     assert "Таблица не найдена" in text
     assert "Защита от опасных действий" not in text

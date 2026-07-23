@@ -19,11 +19,13 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
 from onec_metadata.apply.dumpload import ApplyError
 from onec_metadata.apply.external import build_external
+from onec_metadata.apply.protection import preflight_note
 from onec_metadata.apply.runner import RunnerLike, enterprise_cmd, mask_password
 
 TEMPLATE_DIR = Path(__file__).resolve().parents[1] / "templates" / "smoke_runner"
@@ -90,6 +92,12 @@ def run_smoke(r: RunnerLike, ib: str, user: str, pwd: str, *,
         r.put(local, scenario.replace("\\", "/"))
     finally:
         local.unlink(missing_ok=True)
+
+    # предполёт по КОНКРЕТНОЙ базе: локально, без подключения (баз в контуре бывают
+    # десятки — опрашивать их все сеансами дороже проблемы, которую это ловит)
+    note = preflight_note(ib)
+    if note:
+        print(note, file=sys.stderr)
 
     r.remove(result)
     cmd = enterprise_cmd(ib, user, pwd, epf, f"{scenario};{result}", log)
