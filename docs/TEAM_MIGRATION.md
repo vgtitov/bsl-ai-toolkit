@@ -32,8 +32,20 @@
 3. В форке `claude-1c-team` внести правки из раздела выше, прогнать `sync-core` из публичного toolkit, убедиться, что
    `onec_metadata/**` и `core/skills/**` доехали.
 4. Прогнать тесты форка (если есть), затем `git push` в корпоративный GitLab, поставить тег-релиз.
-5. Пересобрать общий Docker-MCP (если он поднят на Work PC или Server PC) с новыми тегами образов
-   (`bsl-ai-toolkit/onec-*`): `docker compose -f server/docker-compose.yml up -d --build`. Ночью простой допустим.
+5. Пересобрать общий Docker-MCP (образы переименованы в `bsl-ai-toolkit/onec-*`). Он поднят на удалённом хосте за
+   docker context (на Work PC это context `corp` = `ssh://corp-docker`), доступен с Work PC при включённом VPN.
+   Готовый скрипт делает всё одной командой (обновит клон из публичного GitHub, проверит доступ, пересоберёт, покажет итог):
+   ```powershell
+   .\server\rebuild-central.ps1 -Context corp -RepoDir C:\dev\tvg\rp\claude-1c-toolkit
+   ```
+   Клиентам менять ничего не нужно — URL прежний, сменились только теги образов. Ночью простой допустим.
+
+## Чек-лист задач (кратко)
+- [ ] Work PC: `git pull` клона toolkit (публичный GitHub, без корп-авторизации) → проверить, что есть `core/`, `build.ps1`.
+- [ ] Work PC: проверить PowerShell (`build.ps1 claude`, `onboard.ps1` в тест-каталоге) — синтаксис и сборка. (build.ps1 уже проверен: OK.)
+- [ ] Team-форк: правки sync-скриптов (`skills/`→`core/skills/`, вендоринг `onec_metadata/**`+`bin/1c-meta`, дефолт-URL `bsl-ai-toolkit`), прогнать вендоринг, `git push` в корп-GitLab (нужно интерактивное окно авторизации), тег-релиз.
+- [ ] Docker-MCP: `server\rebuild-central.ps1` при включённом VPN.
+- [ ] Оповестить команду (текст в конце этого файла).
 
 ## Что сказать команде
 Коротко: toolkit теперь называется bsl-ai-toolkit и работает не только с Claude, но и с Cursor, Copilot и другими.
