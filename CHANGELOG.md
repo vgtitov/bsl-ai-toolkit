@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-07-24
+
+### Fixed
+- **Центральный `docker compose` не поднимался без тест-ИБ.** Сервис `onec-data` в v2.0.0 стал обязательным
+  (`ONEC_DATA_BASE_URL:?` + `proxy depends_on onec-data`), из-за чего `compose up` падал везде, где слой данных не
+  провизинен (центр на хосте, Work PC). Теперь `onec-data` — **opt-in через compose-профиль** `data`: дефолтный
+  `compose up` поднимает `onec-code`/`onec-ops`/`proxy` (как раньше), а слой данных включается явно
+  `docker compose --profile data up -d` при заданных `ONEC_DATA_*`. `ONEC_DATA_BASE_URL` смягчён с `:?` на `:-`,
+  зависимость `proxy → onec-data` убрана (иначе compose поднимал бы сервис вопреки профилю).
+
 ## [2.0.0] - 2026-07-24
 
 ### Changed

@@ -48,6 +48,9 @@ services:
   onec-data:
     # MCP слоя ДАННЫХ 1С (read-only: OData + отладочный сервис ai_debug от имени пользователя).
     # Секреты учёток 1С — ТОЛЬКО здесь (файл ONEC_DATA_USERS монтируется read-only). Контекст сборки — корень репо.
+    # OPT-IN: слой данных требует опубликованной тест-ИБ (см. docs). По умолчанию НЕ поднимается, чтобы дефолтный
+    # `compose up` работал без ONEC_DATA_BASE_URL. Включить: docker compose --profile data up -d (+ ONEC_DATA_* в .env).
+    profiles: ["data"]
     build:
       context: ..
       dockerfile: server/Dockerfile.data
@@ -61,7 +64,7 @@ services:
       MCP_TRANSPORT: sse
       MCP_HOST: 0.0.0.0
       MCP_PORT: "8002"
-      ONEC_DATA_BASE_URL: "${ONEC_DATA_BASE_URL:?задай ONEC_DATA_BASE_URL в .env — адрес публикации тест-ИБ}"
+      ONEC_DATA_BASE_URL: "${ONEC_DATA_BASE_URL:-}"
       ONEC_DATA_USERS: /app/users.json
       ONEC_DATA_DEFAULT_USER: "${ONEC_DATA_DEFAULT_USER:-}"
       ONEC_DATA_MAX_ROWS: "${ONEC_DATA_MAX_ROWS:-200}"
@@ -76,7 +79,7 @@ services:
     depends_on:
       - onec-code
       - onec-ops
-      - onec-data
+      # onec-data — opt-in (profile "data"); не в depends_on, иначе compose поднимет его вопреки профилю
     ports:
       - "${ONEC_PUBLIC_PORT:-8000}:8000"
       - "${ONEC_OPS_PUBLIC_PORT:-8001}:8001"
