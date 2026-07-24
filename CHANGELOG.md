@@ -20,6 +20,18 @@
   пользователем, честный RLS, маскирование ПДн, privileged за fail-closed-гейтом); локальный runner-EPF без SSH.
 - OSS-обвязка: `CONTRIBUTING`, `CODE_OF_CONDUCT`, `SECURITY`, шаблоны Issue/PR, бейджи в README, CI (GitHub Actions),
   MIT `LICENSE`.
+- Документация: `docs/CONCEPT.md` (методология, артефакты ЧТЗ/тех-проект, связь с курсами), `docs/TOOLS.md` (каталог
+  инструментов), `docs/AGENT_SETUP.md` (настройка руками агента), `docs/ACCESS_SETUP.md` (доступ к LLM под санкциями),
+  `docs/RELEASING.md` (процесс релизов), `docs/TEAM_MIGRATION.md` (миграция командного форка).
+- Кросс-платформенность: `build.ps1` (Windows-паритет `build.sh`), матрица ОС в README; `onboard.ps1` под новую структуру.
+- Релизы: workflow `release.yml` (тег `vX.Y.Z` → GitHub Release + исходник расширения `ai_debug`); политика версий в `RELEASING.md`.
+
+### Fixed
+- CI: тесты падали в чистом окружении (`ModuleNotFoundError: lxml`) — в прогон добавлены зависимости движка
+  `lxml`/`openpyxl`/`xlrd`, запуск изолирован (`--no-project`).
+
+### Removed
+- Устаревший личный `HANDOFF.md` из корня; служебная папка `docs/superpowers/` (спека перенесена в `docs/design/`).
 
 ### Существовало ранее (сводно)
 - Движок правки метаданных `onec_metadata` (Конфигуратор-XML + EDT `.mdo`/`.dcs`, byte-perfect, round-trip verify,

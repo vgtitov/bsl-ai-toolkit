@@ -19,4 +19,5 @@ jobs:
         uses: astral-sh/setup-uv@v5
 
       - name: Run tests
-        run: uv run --with mcp --with pytest pytest tests/ -q
+        # Зависимости движка/тестов: lxml (правки XML метаданных), openpyxl/xlrd (storage_map), mcp, pytest.
+        run: uv run --no-project --with mcp --with pytest --with lxml --with openpyxl --with xlrd pytest tests/ -q

@@ -1,0 +1,35 @@
+name: release
+
+# Создаёт GitHub Release при пуше тега вида vX.Y.Z.
+# В релиз кладём исходник расширения ai_debug (импортируется в 1C:EDT).
+# Бинарный ai_debug.cfe собирается на машине с платформой 1С и прикладывается вручную (см. docs/RELEASING.md) —
+# в CI платформы 1С нет, собрать .cfe здесь нельзя.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Package ai_debug extension source
+        run: |
+          mkdir -p dist
+          cd extensions/ai_debug && zip -r ../../dist/ai_debug-src.zip src README.md
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" dist/ai_debug-src.zip \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$TAG" \
+            --notes "Изменения — в CHANGELOG.md. В архиве ai_debug-src.zip — исходник расширения (импорт в 1C:EDT). Собранный ai_debug.cfe прикладывается вручную с машины, где есть платформа 1С (см. docs/RELEASING.md)."
