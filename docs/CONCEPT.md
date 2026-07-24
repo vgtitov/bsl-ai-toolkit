@@ -85,3 +85,5 @@ APDEX, Zabbix, а не только написание кода.
 - Аналитику — `core/skills/1c-analyst` (ЧТЗ, INVEST, карта контуров).
 - Эксплуатации — `core/skills/1c-expert` / `1c-dba` / `1c-admin-devops`.
 - Всё разом руками агента — `docs/AGENT_SETUP.md`. Каталог инструментов — `docs/TOOLS.md`.
+
+Подробное сопоставление подходов с курсов (SDD, Memory Bank, Kiro, субагенты, Shotgun) с нашими документами — `docs/METHODOLOGY_MAP.md`.
