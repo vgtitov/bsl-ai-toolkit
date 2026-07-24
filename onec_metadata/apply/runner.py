@@ -20,16 +20,46 @@ import os
 import re
 import shlex
 import subprocess
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Protocol
+
+
+@contextmanager
+def _masked(cmd: str, timeout: int):
+    """Не дать паролю ИБ утечь через исключение subprocess.
+
+    `TimeoutExpired`/`CalledProcessError` кладут в текст ПОЛНУЮ командную строку, а
+    в ней `/P<пароль>` — и она попадает в трейсбек, лог CI, вывод агента. Боевой
+    случай 23.07: таймаут ENTERPRISE-сеанса напечатал пароль в консоль.
+    """
+    try:
+        yield
+    except subprocess.TimeoutExpired as e:
+        raise subprocess.TimeoutExpired(mask_password(cmd), timeout) from None
+    except subprocess.CalledProcessError as e:
+        raise subprocess.CalledProcessError(
+            e.returncode, mask_password(cmd)) from None
 
 
 class RunnerLike(Protocol):
     """Структурный тип раннера: и SSH-`Runner`, и `LocalRunner` (и тестовые двойники).
-    Позволяет apply.* не зависеть от способа запуска (по ssh / локально)."""
+    Позволяет apply.* не зависеть от способа запуска (по ssh / локально).
+
+    `shell` — есть ли на том конце командная оболочка. У SSH-раннера сеанс открывает
+    cmd.exe сервера, поэтому допустимы `&`, `type`, `if errorlevel`. LocalRunner
+    исполняет команду через CreateProcess БЕЗ оболочки (сознательно: нет инъекции),
+    поэтому оболочечный синтаксис туда передавать нельзя — вызывающий код обязан
+    выбирать ветку по `shell`, а файловые операции делать методами ниже.
+    """
     host: str
+    shell: bool
 
     def run(self, cmd: str, timeout: int = ...) -> tuple[int, str]: ...
     def put(self, local, remote: str, timeout: int = ...) -> None: ...
+    def read_text(self, path: str, timeout: int = ...) -> str: ...
+    def makedirs(self, path: str, timeout: int = ...) -> None: ...
+    def remove(self, path: str, timeout: int = ...) -> None: ...
 
 # Путь к 1cv8.exe. Настраивается через env ONEC_1CV8_BIN или аргумент bin=... командных
 # функций. Дефолт — типовой путь; конкретную версию платформы задаёт организация.
@@ -43,6 +73,7 @@ class Runner:
     конкретного клиента нет). Команда выполняется на удалённом сервере 1С."""
 
     host = ""
+    shell = True                      # на том конце cmd.exe сервера
 
     def __init__(self, host: str):
         if not host:
@@ -50,9 +81,10 @@ class Runner:
         self.host = host
 
     def run(self, cmd: str, timeout: int = 600):
-        p = subprocess.run(
-            ["ssh", "-o", "BatchMode=yes", self.host, cmd],
-            capture_output=True, text=True, timeout=timeout)
+        with _masked(cmd, timeout):
+            p = subprocess.run(
+                ["ssh", "-o", "BatchMode=yes", self.host, cmd],
+                capture_output=True, text=True, timeout=timeout)
         return p.returncode, (p.stdout + p.stderr)
 
     def put(self, local, remote: str, timeout: int = 300):
@@ -64,6 +96,19 @@ class Runner:
             raise RuntimeError("scp %s -> %s:%s не удался: %s"
                                % (local, self.host, remote, p.stderr.strip()))
 
+    def read_text(self, path: str, timeout: int = 60) -> str:
+        """Прочитать текстовый файл НА СЕРВЕРЕ. chcp 65001 — иначе кириллица в
+        логах платформы приходит битой (боевой урок)."""
+        _, out = self.run(f"chcp 65001 >nul & type {path}", timeout=timeout)
+        return out
+
+    def makedirs(self, path: str, timeout: int = 60) -> None:
+        p = path.replace("/", "\\")
+        self.run(f"cmd /c if not exist {p} mkdir {p}", timeout=timeout)
+
+    def remove(self, path: str, timeout: int = 60) -> None:
+        self.run(f"cmd /c del {path} 2>nul & echo.>nul", timeout=timeout)
+
 
 class LocalRunner:
     """Локальный раннер — та же команда выполняется на ТЕКУЩЕЙ машине (платформа 1С
@@ -74,10 +119,12 @@ class LocalRunner:
     (для тестов/редких кейсов) — `shlex.split`."""
 
     host = ""
+    shell = False                     # CreateProcess без оболочки: `&`/`type` не сработают
 
     def run(self, cmd: str, timeout: int = 600):
         args = cmd if os.name == "nt" else shlex.split(cmd)
-        p = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+        with _masked(cmd, timeout):
+            p = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
         return p.returncode, (p.stdout + (p.stderr or ""))
 
     def put(self, local, remote: str, timeout: int = 300):
@@ -86,6 +133,27 @@ class LocalRunner:
         dst = remote.replace("/", os.sep)
         os.makedirs(os.path.dirname(dst) or ".", exist_ok=True)
         shutil.copyfile(str(local), dst)
+
+    def read_text(self, path: str, timeout: int = 60) -> str:
+        """Прочитать файл напрямую — оболочка не нужна. Отсутствующий файл = пусто
+        (то же, что `type` несуществующего на сервере: диагностика в вызывающем коде).
+        Логи платформы бывают и UTF-8, и cp1251 — пробуем по очереди."""
+        p = Path(path.replace("/", os.sep))
+        if not p.is_file():
+            return ""
+        raw = p.read_bytes()
+        for enc in ("utf-8-sig", "cp1251"):
+            try:
+                return raw.decode(enc)
+            except UnicodeDecodeError:
+                continue
+        return raw.decode("utf-8", errors="replace")
+
+    def makedirs(self, path: str, timeout: int = 60) -> None:
+        os.makedirs(path.replace("/", os.sep), exist_ok=True)
+
+    def remove(self, path: str, timeout: int = 60) -> None:
+        Path(path.replace("/", os.sep)).unlink(missing_ok=True)
 
 
 def make_runner(host: str | None = None):

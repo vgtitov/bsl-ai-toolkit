@@ -11,6 +11,54 @@ doctor = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(doctor)
 
 
+# DISCIPLINE_ALLOW_TEST_EDIT: новые тесты — защита от опасных действий и текст по 401
+# ---------- защита от опасных действий (виснут батч-прогоны ступени 2) ----------
+
+def _platform(monkeypatch, tmp_path, conf_text=None):
+    """Подсунуть doctor'у каталог «установленной платформы» с conf.cfg или без него."""
+    root = tmp_path / "1cv8" / "8.3.27.2214"
+    root.mkdir(parents=True)
+    if conf_text is not None:
+        conf = tmp_path / "1cv8" / "conf"
+        conf.mkdir()
+        (conf / "conf.cfg").write_text(conf_text, encoding="utf-8")
+
+    import sys
+    import types
+    fake = types.ModuleType("detect_tools")
+    fake.find_platform = lambda: root
+    monkeypatch.setitem(sys.modules, "detect_tools", fake)
+
+
+def test_unsafe_protection_warns_without_mask(monkeypatch, tmp_path):
+    _platform(monkeypatch, tmp_path, conf_text="SystemLanguage=RU\n")
+    res = doctor.check_unsafe_action_protection()
+    assert len(res) == 1
+    status, name, detail = res[0]
+    assert status == doctor.WARN                       # мягко: флаг мог быть снят у пользователя
+    assert "setup-actions-required" in detail          # человеку сказано, куда идти
+
+
+def test_unsafe_protection_ok_with_mask(monkeypatch, tmp_path):
+    _platform(monkeypatch, tmp_path,
+              conf_text="SystemLanguage=RU\nDisableUnsafeActionProtection=*Test*\n")
+    assert doctor.check_unsafe_action_protection()[0][0] == doctor.OK
+
+
+def test_unsafe_protection_warns_when_conf_missing(monkeypatch, tmp_path):
+    _platform(monkeypatch, tmp_path, conf_text=None)   # conf.cfg вообще нет
+    assert doctor.check_unsafe_action_protection()[0][0] == doctor.WARN
+
+
+def test_unsafe_protection_silent_without_platform(monkeypatch):
+    import sys
+    import types
+    fake = types.ModuleType("detect_tools")
+    fake.find_platform = lambda: None
+    monkeypatch.setitem(sys.modules, "detect_tools", fake)
+    assert doctor.check_unsafe_action_protection() == []   # платформы нет — вопрос не стоит
+
+
 # ---------- resolve_env ----------
 
 def test_resolve_plain():

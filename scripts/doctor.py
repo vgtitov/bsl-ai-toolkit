@@ -98,7 +98,13 @@ def _http_ok(url: str, headers=None, timeout=6):
     except HTTPError as e:
         # сервер ответил HTTP-статусом → он ЖИВ
         if e.code in (401, 403):
-            return False, f"HTTP {e.code}: авторизация не прошла — проверь токен в заголовке .mcp.json"
+            return False, (
+                f"HTTP {e.code}: авторизация не прошла — сервер жив, но токен не принят. "
+                "Если в Claude Code канал при этом работает, то токен устарел именно в ЭТОЙ "
+                "консоли: set_token пишет в пользовательские переменные, их видят только "
+                "новые процессы — перезапусти консоль или прогони set_token заново "
+                "(docs/setup-actions-required.md §4). Маршрут /health тут ни при чём: его "
+                "отсутствие доктор считает нормой")
         if 400 <= e.code < 500:
             return True, f"HTTP {e.code}: сервер отвечает (/health не реализован — норма для MCP)"
         return False, f"HTTP {e.code}: сервер вернул ошибку"
@@ -110,6 +116,45 @@ def _http_ok(url: str, headers=None, timeout=6):
                 return False, f"порт {host}:{port} открыт, но HTTP не ответил ({type(e).__name__})"
         except Exception:
             return False, f"недоступно ({type(e).__name__}): сервер не запущен?"
+
+
+def check_unsafe_action_protection(base: str | None = None):
+    """Защита от опасных действий: с ней батч-прогоны ступени 2 ВИСНУТ на модальном окне.
+
+    ПОДКЛЮЧЕНИЙ НЕ ДЕЛАЕТ — только читает маски `conf.cfg`. Опрашивать сеансом каждую базу
+    контура (их бывают десятки, по VPN — минуты на базу) дороже, чем ловимая проблема,
+    поэтому проверка конкретной базы ленивая: она делается в момент обращения к ней
+    (`apply.smoke`), а здесь — по желанию, через `--base`.
+
+    Снят ли флаг у конкретного ПОЛЬЗОВАТЕЛЯ ИБ, снаружи базы не видно, поэтому вердикт
+    мягкий: WARN с инструкцией, а не КРАСНЫЙ."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    try:
+        import detect_tools
+        from onec_metadata.apply import protection
+        root = detect_tools.find_platform()
+    except Exception as e:
+        return [(WARN, "1С: защита от опасных действий", f"не смог проверить ({type(e).__name__})")]
+    if not root:
+        return []                       # платформы нет — ступени 1–2 тут и не запускают
+
+    name = "1С: защита от опасных действий"
+    hint = ("батч-прогоны (ступень 2) повиснут на модальном окне, если у пользователя ИБ "
+            "не снят флаг. Способы — docs/setup-actions-required.md §1")
+    cfg = protection.conf_cfg_path(root)
+    masks = protection.masks_from_conf(cfg)
+    res = []
+    if masks:
+        res.append((OK, name, f"маски в {cfg}: {'; '.join(masks)}"))
+    else:
+        res.append((WARN, name, f"масок в conf.cfg нет — {hint}"))
+    if base:
+        covered = protection.status_for_base(base, root) == protection.OFF_BY_MASK
+        res.append((OK if covered else WARN, f"{name}: база {base}",
+                    "под маской — окна не будет" if covered
+                    else f"маска не покрывает — {hint}"))
+    return res
 
 
 def check_prereqs():
@@ -164,11 +209,15 @@ def main():
 
     ap = argparse.ArgumentParser(description="health-check окружения Claude Code для 1С")
     ap.add_argument("--config", help="путь к .mcp.json (по умолчанию ./.mcp.json)")
+    ap.add_argument("--base", help="строка соединения КОНКРЕТНОЙ базы — проверить её маску "
+                                   "защиты от опасных действий (подключение не выполняется; "
+                                   "по всем базам контура доктор не ходит намеренно)")
     ns = ap.parse_args()
     env = dict(os.environ)
     results = []
 
     results += check_prereqs()
+    results += check_unsafe_action_protection(ns.base)
 
     cfg = Path(ns.config) if ns.config else Path.cwd() / ".mcp.json"
     if not cfg.exists():

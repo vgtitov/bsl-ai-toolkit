@@ -76,6 +76,37 @@ def test_load_cfe_cmd():
     assert all("-Extension МоёРасширение" in c for c in update)
 
 
+# DISCIPLINE_ALLOW_TEST_EDIT: новые тесты — синтакс-контроль и снятие расширения
+
+def test_check_config_extension_cmd():
+    from onec_metadata.apply.external import CHECK_MODES, check_config
+
+    r = FakeRunner()
+    check_config(r, r"localhost\testbase", "u", "p", ext="ai_debug")
+    cmd = r.calls[0]
+    assert "/CheckConfig" in cmd
+    assert "-Extension ai_debug" in cmd
+    # модули должны проверяться во ВСЕХ контекстах, иначе серверные ошибки не всплывут
+    for mode in CHECK_MODES:
+        assert mode in cmd
+
+
+def test_check_config_base_configuration_has_no_extension_flag():
+    from onec_metadata.apply.external import check_config
+
+    r = FakeRunner()
+    check_config(r, r"localhost\testbase", "u", "p")
+    assert "-Extension" not in r.calls[0]
+
+
+def test_delete_extension_cmd():
+    from onec_metadata.apply.external import delete_extension
+
+    r = FakeRunner()
+    delete_extension(r, r"localhost\testbase", "u", "p", ext="ai_debug")
+    assert "/DeleteCfg" in r.calls[0] and "-Extension ai_debug" in r.calls[0]
+
+
 def test_failed_designer_raises():
     from onec_metadata.apply.dumpload import ApplyError
     from onec_metadata.apply.external import dump_cfe

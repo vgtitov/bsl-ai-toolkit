@@ -14,21 +14,33 @@ from onec_metadata.apply.dumpload import ApplyError
 class FakeRunner:
     # DISCIPLINE_ALLOW_TEST_EDIT: перенос файлов теперь через r.put() (SSH/локально),
     # а не через пропатченный subprocess — FakeRunner получает свой put()
+    # DISCIPLINE_ALLOW_TEST_EDIT: протокол раннера расширен файловыми операциями
+    # (read_text/makedirs/remove) — двойник обязан их реализовать
     host = "fake-host"
+    shell = True
 
     def __init__(self, result_text="__SMOKE_OK__\nотчёт: всё хорошо"):
         self.commands = []
         self.puts = []
+        self.dirs = []
+        self.removed = []
         self.result_text = result_text
 
     def run(self, cmd, timeout=600):
         self.commands.append(cmd)
-        if "type" in cmd and "smoke_result" in cmd:
-            return 0, self.result_text
         return 0, "EXIT=0"
 
     def put(self, local, remote, timeout=300):
         self.puts.append((str(local), remote))
+
+    def read_text(self, path, timeout=60):
+        return self.result_text if "smoke_result" in path else ""
+
+    def makedirs(self, path, timeout=60):
+        self.dirs.append(path)
+
+    def remove(self, path, timeout=60):
+        self.removed.append(path)
 
 
 def test_run_smoke_ok_returns_report(tmp_path):
@@ -61,6 +73,43 @@ def test_run_smoke_no_result_file_raises():
                         scenario_text="Отчет = \"x\";",
                         epf=r"D:\smoke\СмоукРаннер.epf",
                         workdir=r"D:\smoke")
+
+
+# DISCIPLINE_ALLOW_TEST_EDIT: red-фаза — файловые операции раннера обязаны быть КЛИЕНТСКИМИ
+def test_runner_does_file_io_on_client_not_on_server():
+    """Сценарий и файл-результат читает и пишет КЛИЕНТ, а не сервер.
+
+    Боевой случай 23.07: на клиент-серверной базе серверный код исполняется в rphost на
+    машине кластера, где локальных путей разработчика нет. Технологический журнал показал
+    бесконечный цикл getServerFileHost → IFolderFileHost::open — платформа пыталась
+    дотянуться до файла через файловый хост клиента. Сеанс висел вечно, без окна и без
+    единой строки в /Out. На файловой базе то же самое работает, потому что сервер и
+    клиент там одна машина, поэтому дефект и не был виден раньше."""
+    module = (smoke.TEMPLATE_DIR /
+              "СмоукРаннер/Forms/Форма/Ext/Form/Module.bsl").read_text("utf-8-sig")
+
+    # разбираем модуль на блоки по директивам компиляции
+    blocks, current = {}, None
+    for line in module.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("&"):
+            current = stripped
+            blocks.setdefault(current, [])
+        elif current:
+            blocks[current].append(stripped)
+
+    server_code = "\n".join(
+        "\n".join(body) for directive, body in blocks.items()
+        if "Сервер" in directive)
+    client_code = "\n".join(
+        "\n".join(body) for directive, body in blocks.items()
+        if "Клиент" in directive)
+
+    assert "ЧтениеТекста" not in server_code, "чтение файла ушло на сервер"
+    assert "ЗаписьТекста" not in server_code, "запись файла ушла на сервер"
+    assert "ЧтениеТекста" in client_code and "ЗаписьТекста" in client_code
+    # на сервер уходит только ТЕКСТ сценария, а не путь к файлу
+    assert "Выполнить(" in server_code
 
 
 def test_template_dir_exists_and_complete():
