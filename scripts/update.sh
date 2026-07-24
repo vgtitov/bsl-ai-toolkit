@@ -10,7 +10,7 @@ git -C "$REPO_ROOT" pull --ff-only
 
 echo "[2/3] скиллы пакета -> ~/.claude/skills"
 mkdir -p "$SKILLS_DST"
-for d in "$REPO_ROOT"/skills/*/; do
+for d in "$REPO_ROOT"/core/skills/*/; do
   [ -d "$d" ] || continue
   s="$(basename "$d")"
   rm -rf "${SKILLS_DST:?}/$s"     # чистим, чтобы удалённые файлы не оставались

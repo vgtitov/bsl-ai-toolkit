@@ -27,7 +27,7 @@ New-Item -ItemType Directory -Force -Path $SkillsDst | Out-Null
 # generic: доедет всё, что лежит в skills/ (1c-dev, 1c-analyst, 1c-metadata, будущие).
 # Скилл перекладывается ЦЕЛИКОМ (удалённые upstream файлы не остаются), но references/local/
 # — слой ЛОКАЛИЗАЦИИ (docs/SKILL_LOCALIZATION.md) — сохраняется.
-$skillDirs = Get-ChildItem -Path (Join-Path $TeamDir 'skills') -Directory -ErrorAction SilentlyContinue
+$skillDirs = Get-ChildItem -Path (Join-Path $TeamDir 'core\skills') -Directory -ErrorAction SilentlyContinue
 if ($skillDirs) {
   foreach ($d in $skillDirs) {
     $dst = Join-Path $SkillsDst $d.Name
@@ -46,7 +46,7 @@ if ($skillDirs) {
     }
     Ok "скилл $($d.Name)"
   }
-} else { Warn "в $TeamDir\skills нет скиллов" }
+} else { Warn "в $TeamDir\core\skills нет скиллов" }
 
 Say "3/6 Каталог исходников 1С: $SrcDir"
 New-Item -ItemType Directory -Force -Path $SrcDir | Out-Null
@@ -58,8 +58,9 @@ Ok "onec_mcp.py -> $SrcDir"
 $legacyEngine = Join-Path $SrcDir 'erp_mcp.py'   # ренейм erp->onec: убрать старый движок (иначе путается с onec_mcp.py)
 if (Test-Path $legacyEngine) { Remove-Item $legacyEngine -Force; Ok "удалён легаси erp_mcp.py" }
 
-Say "5/7 Профиль .mcp.json и CLAUDE.md -> $WorkDir"
-Copy-Item (Join-Path $TeamDir 'mcp\dev.mcp.json') (Join-Path $WorkDir '.mcp.json') -Force
+Say "5/7 Сборка из core/ + профиль .mcp.json, CLAUDE.md, AGENTS.md -> $WorkDir"
+Copy-Item (Join-Path $TeamDir '.mcp.json') (Join-Path $WorkDir '.mcp.json') -Force
+Copy-Item (Join-Path $TeamDir 'AGENTS.md') (Join-Path $WorkDir 'AGENTS.md') -Force -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $TeamDir 'CLAUDE.md') (Join-Path $WorkDir 'CLAUDE.md') -Force
 Ok "разложены профиль и правила"
 # Источник onec-code: local по умолчанию; central — если задан ONEC_MCP_URL и центр доступен (подключение — set_token, см. ниже).
@@ -94,8 +95,8 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
 
 Say "Готово. Ручные шаги"
 @"
-[ ] Проставь версии под свою конфигурацию в CLAUDE.md (платформа, режим совместимости, БСП, библиотеки).
-[ ] Заполни skills/1c-dev/references/conventions-template.md под свой проект (слои, префикс, точки расширения).
+[ ] Проставь версии под свою конфигурацию в core/skills/1c-dev/references/conventions-template.md (общие правила — в core/AGENTS.md).
+[ ] Заполни core/skills/1c-dev/references/conventions-template.md под свой проект (слои, префикс, точки расширения).
 [ ] BSL-инструменты: detect_tools уже нашёл/скачал платформу/jar'ы и прописал env. Что помечено [нет] — доложи и повтори uv run scripts\detect_tools.py (мост BSL_LS_MCP берётся из репо mcp\bsl_ls_mcp.py).
 [ ] Git-идентичность площадки и токен push — см. docs/git.md.
 [ ] Перезапусти Claude Code в $WorkDir -> подтверди MCP-серверы.

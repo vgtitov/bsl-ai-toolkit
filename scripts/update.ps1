@@ -10,7 +10,7 @@ if ($LASTEXITCODE -ne 0) { throw "git pull не прошёл" }
 
 Write-Host "[2/3] скиллы пакета -> ~/.claude/skills"
 New-Item -ItemType Directory -Force -Path $SkillsDst | Out-Null
-Get-ChildItem -Directory (Join-Path $RepoRoot 'skills') | ForEach-Object {
+Get-ChildItem -Directory (Join-Path $RepoRoot 'core\skills') | ForEach-Object {
   $to = Join-Path $SkillsDst $_.Name
   if (Test-Path $to) { Remove-Item $to -Recurse -Force }   # чистим, чтобы удалённые файлы не оставались
   Copy-Item $_.FullName $SkillsDst -Recurse -Force

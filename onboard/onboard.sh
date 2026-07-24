@@ -27,20 +27,20 @@ mkdir -p "$SKILLS_DST"
 # Скилл перекладывается ЦЕЛИКОМ (удалённые upstream файлы не остаются), но references/local/
 # — слой ЛОКАЛИЗАЦИИ (docs/SKILL_LOCALIZATION.md) — сохраняется.
 found=0
-for d in "$TEAM_DIR"/skills/*/; do
+for d in "$TEAM_DIR"/core/skills/*/; do
   [ -d "$d" ] || continue
   name="$(basename "$d")"
   dst="$SKILLS_DST/$name"
   if [ -d "$dst/references/local" ]; then
     keep="$(mktemp -d)"; cp -R "$dst/references/local" "$keep/"
-    rm -rf "$dst"; cp -R "$d" "$SKILLS_DST/"
+    rm -rf "$dst"; cp -R "${d%/}" "$SKILLS_DST/"
     mkdir -p "$dst/references"; cp -R "$keep/local" "$dst/references/"; rm -rf "$keep"
   else
-    rm -rf "$dst"; cp -R "$d" "$SKILLS_DST/"
+    rm -rf "$dst"; cp -R "${d%/}" "$SKILLS_DST/"
   fi
   ok "скилл $name"; found=1
 done
-[ "$found" = 1 ] || warn "в $TEAM_DIR/skills/ нет скиллов"
+[ "$found" = 1 ] || warn "в $TEAM_DIR/core/skills/ нет скиллов"
 
 say "3/6 Каталог исходников 1С: $SRC_DIR"
 mkdir -p "$SRC_DIR"
@@ -50,9 +50,12 @@ say "4/6 Деплой MCP чтения кода"
 cp "$TEAM_DIR/mcp/onec_mcp.py" "$SRC_DIR/onec_mcp.py"; ok "onec_mcp.py -> $SRC_DIR"
 if [ -f "$SRC_DIR/erp_mcp.py" ]; then rm -f "$SRC_DIR/erp_mcp.py"; ok "удалён легаси erp_mcp.py"; fi
 
-say "5/7 Профиль .mcp.json и CLAUDE.md -> $WORKDIR"
-cp "$TEAM_DIR/mcp/dev.mcp.json" "$WORKDIR/.mcp.json"
-cp "$TEAM_DIR/CLAUDE.md" "$WORKDIR/CLAUDE.md"; ok "профиль + правила"
+say "5/7 Сборка конфигов из core/ + профиль .mcp.json, CLAUDE.md, AGENTS.md -> $WORKDIR"
+sh "$TEAM_DIR/build.sh" claude >/dev/null 2>&1 || warn "build.sh пропущен (проверь вручную)"
+cp "$TEAM_DIR/.mcp.json" "$WORKDIR/.mcp.json"
+cp "$TEAM_DIR/CLAUDE.md" "$WORKDIR/CLAUDE.md"
+cp "$TEAM_DIR/AGENTS.md" "$WORKDIR/AGENTS.md" 2>/dev/null || true
+ok "профиль + правила (AGENTS.md + CLAUDE.md, сгенерированы из core/)"
 # Источник onec-code: local по умолчанию; central — если задан ONEC_MCP_URL и центр доступен (подключение — set_token, ниже).
 if command -v uv >/dev/null 2>&1; then
   uv run "$TEAM_DIR/scripts/switch_source.py" --mode "${ONEC_MCP_MODE:-auto}" --workdir "$WORKDIR" && ok "switch_source (${ONEC_MCP_MODE:-auto})" || warn "switch_source пропущен"
@@ -76,8 +79,8 @@ else warn "uv не найден — поставь хук вручную: python
 
 say "Готово. Ручные шаги"
 cat <<EOF
-[ ] Проставь версии под свою конфигурацию в CLAUDE.md.
-[ ] Заполни skills/1c-dev/references/conventions-template.md под свой проект.
+[ ] Проставь версии под свою конфигурацию в core/skills/1c-dev/references/conventions-template.md (общие правила — в core/AGENTS.md).
+[ ] Заполни core/skills/1c-dev/references/conventions-template.md под свой проект.
 [ ] BSL-инструменты: detect_tools уже нашёл/скачал платформу/jar'ы и прописал env. Что [нет] — доложи и повтори uv run scripts/detect_tools.py (мост BSL_LS_MCP — из репо mcp/bsl_ls_mcp.py).
 [ ] Git-идентичность площадки и токен push — см. docs/git.md.
 [ ] Перезапусти Claude Code в $WORKDIR -> подтверди MCP.
