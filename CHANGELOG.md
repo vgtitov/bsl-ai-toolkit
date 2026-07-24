@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-07-24
+
 ### Changed
 - **Переименование `claude-1c-toolkit` → `bsl-ai-toolkit`** и переход на **AI-агностик** архитектуру: правила больше
   не привязаны к Claude Code. Единый источник `core/` (`AGENTS.md` + `skills/` + `mcp/servers.json`), из него
