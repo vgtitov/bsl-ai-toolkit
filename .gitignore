@@ -13,7 +13,8 @@ credentials*.json
 config/zabbix-contours.toml
 
 # Локальное окружение
-.mcp.json
+# .mcp.json — генерируется из core/mcp/servers.json (только env-плейсхолдеры, без секретов) и КОММИТИТСЯ,
+# чтобы репозиторий работал сразу после клона (правь core/ → пересобирай sh build.sh).
 src/
 # ...но исходники расширений toolkit (напр. extensions/ai_debug/src) — это КОД, он отслеживается
 !extensions/**/src/

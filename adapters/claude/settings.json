@@ -1,0 +1,19 @@
+{
+  "//": "Пример авто-проверки BSL. Хук PostToolUse срабатывает после каждой правки *.bsl:",
+  "//1": "  scripts/bsl_guard.py — детектор «запрос в цикле» (pure-Python, exit 1 при находке),",
+  "//2": "  агент видит анти-паттерн сразу и чинит без траты токенов на ручной запуск.",
+  "//3": "Для полной диагностики BSL используйте MCP bsl-ls (в .mcp.json). matcher ограничивает хук инструментами правки.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"$CLAUDE_FILE_PATHS\"; case \"$f\" in *.bsl) python3 scripts/bsl_guard.py \"$f\" 2>/dev/null || echo \"[bsl_guard] возможен запрос в цикле в $f — проверь\" ;; esac"
+          }
+        ]
+      }
+    ]
+  }
+}
