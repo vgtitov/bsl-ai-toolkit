@@ -59,7 +59,10 @@ $legacyEngine = Join-Path $SrcDir 'erp_mcp.py'   # ренейм erp->onec: уб�
 if (Test-Path $legacyEngine) { Remove-Item $legacyEngine -Force; Ok "удалён легаси erp_mcp.py" }
 
 Say "5/7 Сборка из core/ + профиль .mcp.json, CLAUDE.md, AGENTS.md -> $WorkDir"
-Copy-Item (Join-Path $TeamDir '.mcp.json') (Join-Path $WorkDir '.mcp.json') -Force
+# .mcp.json генерируется из core/mcp/servers.json (для Claude — идентичная копия); в корне репо он не коммитится (локальный).
+& (Join-Path $TeamDir 'build.ps1') claude 2>$null | Out-Null
+$mcpSrc = if (Test-Path (Join-Path $TeamDir '.mcp.json')) { Join-Path $TeamDir '.mcp.json' } else { Join-Path $TeamDir 'core\mcp\servers.json' }
+Copy-Item $mcpSrc (Join-Path $WorkDir '.mcp.json') -Force
 Copy-Item (Join-Path $TeamDir 'AGENTS.md') (Join-Path $WorkDir 'AGENTS.md') -Force -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $TeamDir 'CLAUDE.md') (Join-Path $WorkDir 'CLAUDE.md') -Force
 Ok "разложены профиль и правила"

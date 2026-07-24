@@ -8,7 +8,7 @@ services:
     build:
       context: ..
       dockerfile: server/Dockerfile
-    image: claude-1c-toolkit/onec-code:latest
+    image: bsl-ai-toolkit/onec-code:latest
     expose:
       - "8000"            # только внутренняя сеть compose, на хост не публикуется
     volumes:
@@ -29,7 +29,7 @@ services:
     build:
       context: ..
       dockerfile: server/Dockerfile.ops
-    image: claude-1c-toolkit/onec-ops:latest
+    image: bsl-ai-toolkit/onec-ops:latest
     expose:
       - "8001"            # только внутренняя сеть compose, на хост не публикуется (наружу — через proxy)
     volumes:
@@ -51,7 +51,7 @@ services:
     build:
       context: ..
       dockerfile: server/Dockerfile.data
-    image: claude-1c-toolkit/onec-data:latest
+    image: bsl-ai-toolkit/onec-data:latest
     expose:
       - "8002"            # только внутренняя сеть compose, наружу — через proxy
     volumes:
