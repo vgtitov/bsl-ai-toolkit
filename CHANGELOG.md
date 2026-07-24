@@ -23,6 +23,7 @@
 - Документация: `docs/CONCEPT.md` (методология, артефакты ЧТЗ/тех-проект, связь с курсами), `docs/TOOLS.md` (каталог
   инструментов), `docs/AGENT_SETUP.md` (настройка руками агента), `docs/ACCESS_SETUP.md` (доступ к LLM под санкциями),
   `docs/RELEASING.md` (процесс релизов), `docs/TEAM_MIGRATION.md` (миграция командного форка).
+- Интеграция с 1C:EDT: `docs/EDT_SETUP.md` — опциональный MCP-плагин EDT (живой доступ к рабочему пространству), установка/подключение. Агенты Kiro и Roo Code добавлены в матрицу адаптеров.
 - Кросс-платформенность: `build.ps1` (Windows-паритет `build.sh`), матрица ОС в README; `onboard.ps1` под новую структуру.
 - Релизы: workflow `release.yml` (тег `vX.Y.Z` → GitHub Release + исходник расширения `ai_debug`); политика версий в `RELEASING.md`.
 

@@ -13,6 +13,12 @@
 | **cline** | `.clinerules/` | `cline_mcp_settings.json` | ⚙️ через rulesync |
 | **windsurf** | `.windsurf/rules/*.md` | `~/.codeium/windsurf/mcp_config.json` | ⚙️ ручной адаптер |
 | **aider** | `CONVENTIONS.md` + `.aider.conf.yml` (`read: AGENTS.md`) | — | ⚙️ ручной адаптер |
+| **kiro** | Steering-доки (`.kiro/steering/*.md`) | MCP из коробки (`.kiro` / Preferences) | ⚙️ ручной адаптер (правила → steering) |
+| **roo (Roo Code)** | Custom rules / `.roo` | MCP-настройки Roo | ⚙️ ручной адаптер |
+
+Kiro (агентская IDE со встроенным Spec-Driven подходом) и Roo Code читают правила из своих rules/steering-файлов и
+поддерживают MCP — значит наш `AGENTS.md` (как steering/правила) плюс профиль MCP подключаются к ним так же, как к
+остальным. Любой агент, который умеет читать правила и MCP, работает с toolkit; Claude Code — эталон.
 
 Три оси переносимости: **AGENTS.md** (правила) + **SKILL.md** (навыки) + **MCP** (инструменты).
 Claude Code НЕ читает AGENTS.md нативно → связка через `@AGENTS.md` в `CLAUDE.md`.
