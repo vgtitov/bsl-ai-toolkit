@@ -1,7 +1,7 @@
 # Team-локализация (org-слой поверх toolkit) — шаблон/runbook
 
 Как развернуть toolkit В КОМАНДЕ под конкретную организацию, **не дублируя ядро**: Team-репозиторий —
-тонкий слой, который ПОДТЯГИВАЕТ `claude-1c-toolkit` из GitHub и добавляет только org-специфичное
+тонкий слой, который ПОДТЯГИВАЕТ `bsl-ai-toolkit` из GitHub и добавляет только org-специфичное
 (конфиги контуров, пути, секреты). Ядро (скиллы, MCP, server-стек) — НЕ копировать.
 
 > Где живёт Team-репо: на **корпоративном** Git (напр. внутренний GitLab), НЕ на публичном GitHub —
@@ -10,7 +10,7 @@
 ## Структура Team-репо (минимум)
 ```
 <org>-1c-toolkit-team/
-├── toolkit/                      # git submodule → https://github.com/<owner>/claude-1c-toolkit (ядро, pin по тегу)
+├── toolkit/                      # git submodule → https://github.com/<owner>/bsl-ai-toolkit (ядро, pin по тегу)
 ├── config/
 │   ├── layers.<org>.toml         # слои/контуры ОРГАНИЗАЦИИ (какие репо = конфигурация, какие = расширения)
 │   └── contours.<org>.md         # карта баз/контуров (ORG-ДАННЫЕ — только здесь, не в ядро)
@@ -23,7 +23,7 @@
 ## Шаги (runbook для Claude/инженера — выполнять НА корп-стороне)
 1. **Создать Team-репо** на корп-Git. Подключить ядро как submodule (pin по тегу/релизу, обновлять осознанно):
    ```bash
-   git submodule add https://github.com/<owner>/claude-1c-toolkit toolkit
+   git submodule add https://github.com/<owner>/bsl-ai-toolkit toolkit
    git -C toolkit checkout <tag>          # зафиксировать версию ядра
    ```
 2. **Заполнить org-конфиги** (это и есть «адаптация под организацию»):
@@ -61,7 +61,7 @@
 | URL мониторинга (Zabbix/Prometheus) | `server/.env` | да |
 
 ## Принцип обновления
-Улучшения/фиксы — **в ядро** `claude-1c-toolkit` (PR на GitHub), затем в Team `git submodule update --remote` +
+Улучшения/фиксы — **в ядро** `bsl-ai-toolkit` (PR на GitHub), затем в Team `git submodule update --remote` +
 смена тега. Никогда не форкать ядро под org-правки — только слой поверх. Так Team всегда получает свежее ядро,
 а org-специфика остаётся изолированной.
 

@@ -19,7 +19,7 @@
   наружу. `.env.example` (ONEC_SRC_DIR / ONEC_BEARER_TOKEN / ONEC_PUBLIC_PORT / ONEC_LAYERS_CONFIG / ONEC_PROFILE). Обкатано вживую.
 - **Тесты:** `tests/test_onec_mcp.py` (6) + `tests/test_layers_config.py` (5) — **11 passed**. Ручной smoke HTTP — `tests/smoke_http_client.py` (шлёт bearer, если задан).
 - **Доки:** README (позиционирование + адаптация = конфиги/данные/слой), CLAUDE.md, docs/example.md, docs/docker.md, LICENSE (MIT), onboard.ps1/sh.
-- **Git:** remote `origin` = `https://github.com/vgtitov/claude-1c-toolkit.git` (private), `main` с upstream-трекингом,
+- **Git:** remote `origin` = `https://github.com/vgtitov/bsl-ai-toolkit.git` (private), `main` с upstream-трекингом,
   CI зелёный на каждом пуше. Аутентификация в Windows Credential Manager (нужен scope `workflow` у PAT).
   ⚠ **История переписана 2026-06-21** (`git filter-repo` — обезличивание, force-push): все SHA до этой даты сменились,
   старые ссылки на коммиты недействительны. Ориентир — текущий `main` (CI зелёный), не прежние SHA.
@@ -44,11 +44,11 @@
 5. **Пилот** (владелец + 1–2 разработчика) → правки → раскатка на команду.
 
 ## Как продолжить в новом сеансе
-Скажи ассистенту: «продолжаем развивать `claude-1c-toolkit` (личный продукт), пуш в мой GitHub; потом локализация под
+Скажи ассистенту: «продолжаем развивать `bsl-ai-toolkit` (личный продукт), пуш в мой GitHub; потом локализация под
 организацию». Ассистент: читает этот HANDOFF, берёт следующий пункт плана.
 Локализация под конкретную организацию ведётся ОТДЕЛЬНО (в её репозитории/контуре), фирменное — только туда, не в toolkit.
 
 ## Карта репозиториев
-- **`claude-1c-toolkit`** (этот) — личный продукт, → GitHub `vgtitov` (private). Источник ядра методологии.
+- **`bsl-ai-toolkit`** (этот) — личный продукт, → GitHub `vgtitov` (private). Источник ядра методологии.
 - **`claude-1c-team`** (имя условное) — локализация под организацию, → её корп-GitLab (downstream-репозиторий). Фирменные специфики.
   Политика синхронизации — в его `docs/SYNC_POLICY.md`.

@@ -31,7 +31,7 @@
 - 4.4 🔨 Синтакс-контроль на живой платформе + round-trip в тест-базу — ТОЛЬКО Work PC (хвост)
 
 ## 5. Интеграция toolkit ✅
-- 5.1 ✅ `mcp/dev.mcp.json`: сервер `onec-data` (stdio) + env-плейсхолдеры
+- 5.1 ✅ `core/mcp/servers.json`: сервер `onec-data` (stdio) + env-плейсхолдеры
 - 5.2 ✅ `server/docker-compose.yml` + `server/Dockerfile.data` + Caddy :8002: центральный режим за bearer; секреты учёток только на сервере; прод-профиль `FORBID_PRIVILEGED=1`
 - 5.3 ✅ `config/users.example.json`, `config/presets.example.json`, `extensions/ai_debug/README.md`
 

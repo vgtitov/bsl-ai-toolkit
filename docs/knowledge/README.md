@@ -8,71 +8,71 @@
 технологический журнал, `pg_stat_*`, `EXPLAIN ANALYZE`, счётчики ОС/СУБД), а не память модели. Сначала снять
 данные — потом вывод; непроверенное помечать `[проверить]`.
 
-## Домен: администрирование + DevOps — `skills/1c-admin-devops/`
+## Домен: администрирование + DevOps — `core/skills/1c-admin-devops/`
 Установка, эксплуатация, публикация, обновление, доставка, мониторинг 1С. Что покрыто и где раскрыто:
-- **Кластер и лицензирование** — `skills/1c-admin-devops/references/cluster-and-licensing.md`: архитектура
+- **Кластер и лицензирование** — `core/skills/1c-admin-devops/references/cluster-and-licensing.md`: архитектура
   кластера (`ragent`/`rmngr`/`rphost`, центральный/рабочий сервер), сервисы кластера, требования назначения
   функциональности (РНФ), отказоустойчивость, утилиты `rac`/`ras`; программные/аппаратные (HASP) лицензии, сервер
   и сервис лицензирования, диагностика «не хватает лицензий».
-- **Публикация на веб-сервере** — `skills/1c-admin-devops/references/publish-and-web.md`: Apache/nginx/IIS,
+- **Публикация на веб-сервере** — `core/skills/1c-admin-devops/references/publish-and-web.md`: Apache/nginx/IIS,
   web-клиент, web/http-сервисы, OData, `default.vrd`, права на каталоги, HTTPS, типичные ошибки публикации и их
   диагностика по логу.
-- **Обновление и доставка (CI/CD)** — `skills/1c-admin-devops/references/update-deploy-cicd.md`: режим поддержки и
+- **Обновление и доставка (CI/CD)** — `core/skills/1c-admin-devops/references/update-deploy-cicd.md`: режим поддержки и
   «замок», сравнение-объединение, `cf`/`cfu`/`cfe`, риски динамического обновления; EDT vs Хранилище, OneScript +
   `gitsync`, GitLab CI/Jenkins, SonarQube + 1С:АПК, тесты Vanessa.
-- **Контейнеры** — `skills/1c-admin-devops/references/containers-docker-k8s.md`: образы сервера/RAS/клиента (на базе
+- **Контейнеры** — `core/skills/1c-admin-devops/references/containers-docker-k8s.md`: образы сервера/RAS/клиента (на базе
   onec-docker), `Dockerfile`/`docker-compose`, лицензирование в контейнере, тома/PV/сеть/секреты, 1С Fresh,
   реальные ограничения контейнеризации сервера 1С.
-- **Мониторинг и бэкап** — `skills/1c-admin-devops/references/monitoring-and-backup.md`: Zabbix, Prometheus+Grafana,
+- **Мониторинг и бэкап** — `core/skills/1c-admin-devops/references/monitoring-and-backup.md`: Zabbix, Prometheus+Grafana,
   ЦКК, ТЖ, журнал регистрации, RAC-метрики, ключевые метрики PostgreSQL/MS SQL, APDEX; `dt` vs бэкап СУБД, PITR,
   ротация и обязательная проверка восстановимости.
-- **Linux-сервер 1С** — `skills/1c-admin-devops/references/linux-server-ops.md`: установка платформы (deb/rpm),
+- **Linux-сервер 1С** — `core/skills/1c-admin-devops/references/linux-server-ops.md`: установка платформы (deb/rpm),
   systemd-юниты (`srv1cv8`, `ras`), лимиты (`ulimit`/`limits.conf`, `vm.*`, THP), права/локали/шрифты, диагностика
   сервиса, S3 как объектное хранилище.
 
-## Домен: DBA под 1С — `skills/1c-dba/`
+## Домен: DBA под 1С — `core/skills/1c-dba/`
 Настройка и обслуживание СУБД под 1С (основное — PostgreSQL / Postgres Pro Enterprise; кратко — MS SQL). Что
 покрыто и где раскрыто:
-- **Тюнинг PostgreSQL под 1С** — `skills/1c-dba/references/postgres-tuning.md`: память (`shared_buffers`,
+- **Тюнинг PostgreSQL под 1С** — `core/skills/1c-dba/references/postgres-tuning.md`: память (`shared_buffers`,
   `work_mem`, `maintenance_work_mem`, `effective_cache_size`), IO (`random_page_cost`,
   `effective_io_concurrency`), параллелизм, агрессивный автовакуум под 1С, WAL/контрольные точки, специфика
   Postgres Pro (`pg-setup --tune=1c`, `online_analyze`, `plantuner`) — с формулами расчёта от RAM/ядер.
-- **Регламентное обслуживание** — `skills/1c-dba/references/maintenance.md`: VACUUM/ANALYZE, VACUUM FREEZE против
+- **Регламентное обслуживание** — `core/skills/1c-dba/references/maintenance.md`: VACUUM/ANALYZE, VACUUM FREEZE против
   TXID wraparound, REINDEX CONCURRENTLY и `pg_repack` против распухания (bloat), пороги и расписание; опирается на
   готовые скрипты (см. ниже).
-- **Мониторинг и блокировки** — `skills/1c-dba/references/monitoring-and-locks.md`: базовая диагностика,
+- **Мониторинг и блокировки** — `core/skills/1c-dba/references/monitoring-and-locks.md`: базовая диагностика,
   `pg_stat_activity`/`pg_locks` (кто кого блокирует), аккуратное снятие (`pg_cancel_backend` →
   `pg_terminate_backend`), `pg_stat_statements`/`pgpro_stats`, cache hit ratio, `age(datfrozenxid)`.
-- **Резервное копирование и восстановление** — `skills/1c-dba/references/backup-recovery.md`: логический
+- **Резервное копирование и восстановление** — `core/skills/1c-dba/references/backup-recovery.md`: логический
   (`pg_dump`) vs физический (`pg_basebackup`) бэкап, архив WAL и PITR, регламент и хранение, обязательная проверка
   восстановимости, согласование с выгрузкой ИБ (`.dt`).
-- **HA и масштабирование** — `skills/1c-dba/references/ha-and-scaling.md`: Patroni + etcd (+ HAProxy/PgBouncer),
+- **HA и масштабирование** — `core/skills/1c-dba/references/ha-and-scaling.md`: Patroni + etcd (+ HAProxy/PgBouncer),
   потоковая/логическая репликация, реплики только для чтения (и почему 1С на них падает), `postgres_fdw` для
   аналитики, сайзинг, секционирование vs шардирование/Citus.
-- **MS SQL для 1С (кратко)** — `skills/1c-dba/references/mssql-for-1c.md`: модель восстановления, `tempdb`,
+- **MS SQL для 1С (кратко)** — `core/skills/1c-dba/references/mssql-for-1c.md`: модель восстановления, `tempdb`,
   обслуживание индексов и статистики, флаги трассировки 1224/4199, очистка кэша, отличия от PostgreSQL.
 
-Готовые pg-скрипты регламента — `skills/1c-dba/scripts/`: `pg_1c_daily_maintenance.sh` (+ `.conf`),
+Готовые pg-скрипты регламента — `core/skills/1c-dba/scripts/`: `pg_1c_daily_maintenance.sh` (+ `.conf`),
 `pg_periodic_freeze.sh`, `pgpass-example.txt`.
 
-## Домен: эксперт по техн. вопросам и highload — `skills/1c-expert/`
+## Домен: эксперт по техн. вопросам и highload — `core/skills/1c-expert/`
 Расследование «почему медленно/падает/не масштабируется» и оптимизация по измерениям. Что покрыто и где раскрыто:
-- **Технологический журнал** — `skills/1c-expert/references/tech-journal.md`: `logcfg.xml`, события (EXCP, TLOCK,
+- **Технологический журнал** — `core/skills/1c-expert/references/tech-journal.md`: `logcfg.xml`, события (EXCP, TLOCK,
   TDEADLOCK, TTIMEOUT, QERR, SDBL, DBMSSQL/DBPOSTGRS, CALL/SCALL), фильтры/`<dump>`/`<plansql>`, готовые
   bash-конвейеры «top-N длительных запросов/транзакций/вызовов/ожиданий».
-- **Оптимизация запросов** — `skills/1c-expert/references/query-optimization.md`: поиск тяжёлого запроса по ТЖ,
+- **Оптимизация запросов** — `core/skills/1c-expert/references/query-optimization.md`: поиск тяжёлого запроса по ТЖ,
   снятие плана (`EXPLAIN ANALYZE` / план MS SQL / `<plansql>`), чтение плана, типовые неоптимальности и лечение
   (индексы, временные таблицы, переписывание, статистика).
-- **Блокировки и взаимоблокировки** — `skills/1c-expert/references/locks-and-deadlocks.md`: управляемые vs
+- **Блокировки и взаимоблокировки** — `core/skills/1c-expert/references/locks-and-deadlocks.md`: управляемые vs
   автоматические блокировки, ожидания (TLOCK), эскалация/гранулярность/`Regions`, дедлоки (TDEADLOCK), порядок
   захвата и retry, уровни изоляции/MVCC.
-- **APDEX, замеры и счётчики** — `skills/1c-expert/references/performance-apdex.md`: формула APDEX и целевые
+- **APDEX, замеры и счётчики** — `core/skills/1c-expert/references/performance-apdex.md`: формула APDEX и целевые
   времена, встроенный замер, счётчики PerfMon и Linux (top/vmstat/iostat/sar), счётчики MS SQL/PostgreSQL, пороги
   и интерпретация.
 - **Высоконагруженный кластер и нагрузочное тестирование** —
-  `skills/1c-expert/references/highload-cluster-loadtest.md`: архитектура кластера, балансировка, РНФ,
+  `core/skills/1c-expert/references/highload-cluster-loadtest.md`: архитектура кластера, балансировка, РНФ,
   отказоустойчивость, масштабирование, сценарии и метрики нагрузочного теста, поиск узкого места.
-- **Методика расследования** — `skills/1c-expert/references/investigation-methodology.md`: от симптома к корневой
+- **Методика расследования** — `core/skills/1c-expert/references/investigation-methodology.md`: от симптома к корневой
   причине, дерево гипотез (CPU/IO/память/блокировки/сеть), корреляция ТЖ ↔ счётчиков ОС ↔ счётчиков СУБД,
   валидация фикса повторным замером + чек-лист компетенций как карта самопроверки.
 
@@ -94,7 +94,7 @@
 ## Самодостаточность
 - Скиллы **не зависят от локальных файлов диска** пользователя: всё необходимое знание лежит в `references/*.md`
   внутри репозитория.
-- Готовые pg-скрипты регламента — в `skills/1c-dba/scripts/` (а не во внешнем расположении), их `.conf`/`pgpass`
+- Готовые pg-скрипты регламента — в `core/skills/1c-dba/scripts/` (а не во внешнем расположении), их `.conf`/`pgpass`
   заполняются под свой проект.
 - Конкретные версии платформы/СУБД/ОС, топология и регламенты — **НАСТРОЙ ПОД СВОЙ ПРОЕКТ** (отмечено в каждом
   SKILL.md); репозиторий даёт методику и проверенные приёмы, а не привязку к одной инсталляции.

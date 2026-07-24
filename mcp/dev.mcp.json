@@ -1,9 +1,15 @@
 {
+  "//": "LEGACY-алиас для совместимости. КАНОН профиля MCP — core/mcp/servers.json (из него build.sh генерирует .mcp.json). Держи синхронным или ссылайся на core/mcp/servers.json.",
+
   "mcpServers": {
     "onec-code": {
       "type": "stdio",
       "command": "uv",
-      "args": ["run", "--quiet", "${ONEC_SRC_DIR}/onec_mcp.py"],
+      "args": [
+        "run",
+        "--quiet",
+        "${ONEC_SRC_DIR}/onec_mcp.py"
+      ],
       "env": {
         "ONEC_SRC_DIR": "${ONEC_SRC_DIR}"
       }
@@ -23,7 +29,11 @@
     "bsl-ls": {
       "type": "stdio",
       "command": "uv",
-      "args": ["run", "--quiet", "${BSL_LS_MCP}"],
+      "args": [
+        "run",
+        "--quiet",
+        "${BSL_LS_MCP}"
+      ],
       "env": {
         "BSL_JAR": "${BSL_JAR}",
         "BSL_MEMORY_MB": "${BSL_MEMORY_MB:-4096}"
@@ -32,7 +42,11 @@
     "onec-ops": {
       "type": "stdio",
       "command": "uv",
-      "args": ["run", "--quiet", "${ONEC_OPS_MCP}"],
+      "args": [
+        "run",
+        "--quiet",
+        "${ONEC_OPS_MCP}"
+      ],
       "env": {
         "ZABBIX_URL": "${ZABBIX_URL:-}",
         "ZABBIX_TOKEN": "${ZABBIX_TOKEN:-}",
@@ -42,7 +56,11 @@
     "onec-data": {
       "type": "stdio",
       "command": "uv",
-      "args": ["run", "--quiet", "${ONEC_DATA_MCP}"],
+      "args": [
+        "run",
+        "--quiet",
+        "${ONEC_DATA_MCP}"
+      ],
       "env": {
         "ONEC_DATA_BASE_URL": "${ONEC_DATA_BASE_URL:-}",
         "ONEC_DATA_USERS": "${ONEC_DATA_USERS:-}",

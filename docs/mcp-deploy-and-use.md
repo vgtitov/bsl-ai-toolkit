@@ -8,7 +8,7 @@ MCP-серверы toolkit. Сначала — для агента (точные
 
 ## ЧАСТЬ 1. ДЛЯ CLAUDE (агента) — как поднять и применять
 
-### 1.1. Реестр MCP-серверов toolkit (`mcp/dev.mcp.json`)
+### 1.1. Реестр MCP-серверов toolkit (`core/mcp/servers.json`)
 | Сервер | Файл | Назначение | Обязательный env |
 | --- | --- | --- | --- |
 | `onec-code` | `mcp/onec_mcp.py` | Чтение кода 1С (ripgrep по клонам, auto-discovery слоёв) | `ONEC_SRC_DIR` |
@@ -23,7 +23,7 @@ uv run --with mcp --with openpyxl <repo>/mcp/onec_ops_mcp.py    # запусти
 # тесты перед использованием/внедрением:
 uv run --with mcp --with openpyxl --with pytest pytest -q <repo>/tests/test_onec_ops_*.py
 ```
-Регистрация для Claude Code — профиль `mcp/dev.mcp.json` раскладывается onboard'ом; для `onec-ops` задать env
+Регистрация для Claude Code — профиль `core/mcp/servers.json` раскладывается onboard'ом; для `onec-ops` задать env
 `ONEC_OPS_MCP=<repo>/mcp/onec_ops_mcp.py`. Опциональные env инструментов мониторинга:
 `ZABBIX_URL`, `ZABBIX_TOKEN` (read-only пользователь), `PROMETHEUS_URL`.
 
@@ -40,7 +40,7 @@ uv run --with mcp --with openpyxl --with pytest pytest -q <repo>/tests/test_onec
   (админы дали Zabbix/Prometheus, прямого доступа к ТЖ/`rac`/СУБД нет).
 
 ### 1.4. Алгоритм агента «расследование от сценария пользователя»
-Источник истины — измерение. Путь (см. `skills/1c-expert/references/investigation-methodology.md`):
+Источник истины — измерение. Путь (см. `core/skills/1c-expert/references/investigation-methodology.md`):
 1) уточнить операцию/окно/охват → 2) `apdex_by_operation` (baseline) → 3) собрать данные по доступному
 (`tech_journal_parse` ИЛИ `event_log_parse` ИЛИ `zabbix_*`/`prometheus_query`) → 4) `diagnose_metrics`
 (дерево гипотез) → 5) фикс корня → 6) повторный Apdex (доказать ускорение).
@@ -101,7 +101,7 @@ uv run --with mcp --with openpyxl --with pytest pytest -q <repo>/tests/test_onec
 
 ## ЧАСТЬ 2. ДЛЯ ЧЕЛОВЕКА — установка
 1. Установить `uv` (astral) и `ripgrep`; для `bsl-ls` — Java.
-2. `git clone <toolkit> && cd claude-1c-toolkit && bash onboard/onboard.sh` (Windows — `onboard.ps1`).
+2. `git clone <toolkit> && cd bsl-ai-toolkit && bash onboard/onboard.sh` (Windows — `onboard.ps1`).
 3. Заполнить env под свой проект (см. `docs/connect.md`): пути к клонам кода, jar'ы, `ONEC_OPS_MCP`.
 4. Перезапустить Claude Code, подтвердить MCP-серверы.
 5. Проверка: `uv run --with mcp --with openpyxl --with pytest pytest -q tests/` (зелёные).
@@ -115,7 +115,7 @@ uv run --with mcp --with openpyxl --with pytest pytest -q <repo>/tests/test_onec
 конфиги контуров, пути, токены (в env/секретах), org-специфичные данные. Ядро методологии/код MCP — НЕ копировать.
 
 Способы подтягивания ядра (выбрать один):
-- **git submodule** — `git submodule add https://github.com/<owner>/claude-1c-toolkit toolkit` → обновление
+- **git submodule** — `git submodule add https://github.com/<owner>/bsl-ai-toolkit toolkit` → обновление
   `git submodule update --remote`. Team-репо хранит только свой `config/` и `CLAUDE.md`-оверрайды.
 - **git subtree** — если нужен моно-репо без submodule-механики.
 - **pin по тегу/релизу** — фиксировать версию toolkit, обновлять осознанно.
