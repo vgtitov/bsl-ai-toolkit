@@ -29,7 +29,10 @@ Write-Host "[2/4] Проверяю доступ к удалённому docker c
 docker --context $Context info --format '{{.Name}} / containers: {{.Containers}}'
 
 Write-Host "[3/4] Пересобираю и поднимаю стек (новые теги bsl-ai-toolkit/*)"
+# По умолчанию поднимается профиль без onec-data (слой данных opt-in: --profile data + ONEC_DATA_* в .env).
 docker --context $Context compose -f server/docker-compose.yml up -d --build
+# $ErrorActionPreference не ловит ненулевой exit нативного docker в PS 5.1 — проверяем явно, иначе [ok] будет ложным.
+if ($LASTEXITCODE -ne 0) { throw "docker compose up завершился с кодом $LASTEXITCODE — стек НЕ пересобран (см. вывод выше)" }
 
 Write-Host "[4/4] Итог: что поднято"
 docker --context $Context ps --format '{{.Names}}  {{.Image}}  {{.Status}}'
