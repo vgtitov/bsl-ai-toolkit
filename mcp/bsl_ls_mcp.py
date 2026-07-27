@@ -25,22 +25,52 @@ MEM = os.environ.get("BSL_MEMORY_MB", "4096")
 CONFIG = os.environ.get("BSL_CONFIG", "")
 
 
+def _ascii_safe(path):
+    """Windows: java получает argv в системной ANSI-кодировке, и кириллица в пути
+    превращается в «?» — BSL LS либо падает (-o), либо тихо анализирует ДРУГОЙ каталог
+    с именем той же длины (-s). Отдаём короткое 8.3-имя, если том его даёт.
+    На macOS/Linux (UTF-8 argv) путь не трогаем."""
+    if os.name != "nt" or path.isascii():
+        return path
+    try:
+        import ctypes
+        buf = ctypes.create_unicode_buffer(32767)
+        n = ctypes.windll.kernel32.GetShortPathNameW(path, buf, 32767)
+        if n and buf.value.isascii():
+            return buf.value
+    except Exception:
+        pass
+    return path
+
+
 def _analyze(src, timeout=300):
     if not JAR or not os.path.isfile(JAR):
         return {"error": f"BSL_JAR не найден: {JAR!r} — задай env BSL_JAR на bsl-language-server-*-exec.jar"}
     src = os.path.abspath(src)
     if not os.path.exists(src):
         return {"error": f"путь не существует: {src}"}
+    # `analyze -s` у BSL LS принимает только КАТАЛОГ: путь-файл даёт пустой отчёт
+    # («0 файлов», exit 0). Одиночный файл копируем во временный каталог и анализируем его.
+    scan_dir, tmp_src = src, None
+    if os.path.isfile(src):
+        tmp_src = tempfile.mkdtemp(prefix="bsl_ls_src_")
+        shutil.copy2(src, os.path.join(tmp_src, os.path.basename(src)))
+        scan_dir = tmp_src
     out = tempfile.mkdtemp(prefix="bsl_ls_")
-    cmd = [JAVA, f"-Xmx{MEM}m", "-Dfile.encoding=UTF-8", "-jar", JAR,
-           "analyze", "-s", src, "-o", out, "-r", "json", "-q"]
+    out_arg = _ascii_safe(out)
+    # `-s .` + cwd=каталог: сам путь сканирования в argv не попадает вовсе, поэтому
+    # кириллица в нём безопасна на любой ОС (см. _ascii_safe).
+    cmd = [JAVA, f"-Xmx{MEM}m", "-Dfile.encoding=UTF-8", "-jar", _ascii_safe(JAR),
+           "analyze", "-s", ".", "-o", out_arg, "-r", "json", "-q"]
     if CONFIG and os.path.isfile(CONFIG):
-        cmd += ["-c", CONFIG]
+        cmd += ["-c", _ascii_safe(CONFIG)]
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True,
+        p = subprocess.run(cmd, cwd=scan_dir, capture_output=True, text=True,
                            encoding="utf-8", errors="replace", timeout=timeout)
     except subprocess.TimeoutExpired:
         shutil.rmtree(out, ignore_errors=True)
+        if tmp_src:
+            shutil.rmtree(tmp_src, ignore_errors=True)
         return {"error": f"таймаут анализа ({timeout}s)"}
     reports = glob.glob(os.path.join(out, "*.json"))
     data = None
@@ -51,8 +81,15 @@ def _analyze(src, timeout=300):
         except Exception as e:
             data = {"error": f"не разобрал отчёт: {e}"}
     shutil.rmtree(out, ignore_errors=True)
+    if tmp_src:
+        shutil.rmtree(tmp_src, ignore_errors=True)
     if data is None:
-        return {"error": "BSL LS не создал отчёт",
+        why = "BSL LS не создал отчёт"
+        if not out_arg.isascii():
+            why += (f" — не-ASCII путь во временном каталоге ({out}): java на Windows не"
+                    " принимает его в аргументах, а короткого 8.3-имени том не даёт."
+                    " Задай TEMP/TMP в путь без кириллицы")
+        return {"error": why,
                 "stderr": (p.stderr or "")[-1500:], "stdout": (p.stdout or "")[-800:]}
     return data
 
@@ -82,6 +119,9 @@ def bsl_analyze(src: str, max_issues: int = 100, severities: str = "", timeout_s
             ln = d.get("range", {}).get("start", {}).get("line", 0)
             issues.append((sev, fp, ln + 1, d.get("code", ""), (d.get("message") or "").strip()))
     nfiles = len(res.get("fileinfos", []))
+    if nfiles == 0:
+        return (f"[bsl-ls] ⚠ ПРОВЕРКА НЕ ВЫПОЛНЕНА: 0 файлов .bsl/.os подхвачено — {src}. "
+                "Это НЕ «чисто»: проверь путь (каталог с кодом или конкретный файл).")
     if not summary:
         return f"[bsl-ls] чисто: диагностик нет ({nfiles} файлов) — {src}"
     sev_order = {"Error": 0, "Warning": 1, "Info": 2, "Hint": 3}
