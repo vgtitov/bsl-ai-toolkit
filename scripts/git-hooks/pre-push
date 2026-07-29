@@ -1,17 +1,20 @@
 #!/bin/sh
 # claude-no-coauthor / pre-push: точка расширения для проверок репозитория + штатный хук Git LFS.
 #
-# Хук глобальный (ставится через core.hooksPath, см. scripts/install_git_hooks.py), поэтому сам
-# ничего про конкретные репозитории не знает и в чужих молча пропускает (exit 0).
+# Хук ГЛОБАЛЬНЫЙ (ставится через core.hooksPath, см. scripts/install_git_hooks.py), поэтому
+# срабатывает во ВСЕХ репозиториях на машине и обязан быть безвредным в чужих: без проверок
+# репозитория и без LFS он просто ничего не делает.
 #
-# Делает две вещи по порядку:
-#   1. Если в репозитории есть scripts/hooks/pre-push — запускает его. Это даёт репозиториям
-#      возможность иметь свои pre-push проверки, не трогая toolkit. Специфика остаётся в репо.
-#   2. Вызывает git lfs pre-push — ОБЯЗАТЕЛЬНО: без него не выгружаются LFS-объекты. Если в системе
-#      нет git-lfs, ведём себя как штатный хук LFS (сообщение + exit 2).
+# Порядок:
+#   1. Если в репозитории есть scripts/hooks/pre-push — запускаем его. Это даёт репозиториям свои
+#      pre-push проверки без правок toolkit; специфика остаётся в репозитории.
+#   2. Git LFS. Если git-lfs установлен — вызываем его всегда (в не-LFS репозитории это no-op).
+#      Если НЕ установлен — блокируем push ТОЛЬКО когда репозиторий реально использует LFS
+#      (в .gitattributes есть filter=lfs): иначе push залил бы указатели вместо файлов. В остальных
+#      репозиториях молча выходим — глобальный хук не должен ломать работу тем, кому LFS не нужен.
 #
-# Проверка репозитория идёт ПЕРВОЙ, чтобы не тратить время и трафик на выгрузку бинарников, когда
-# push всё равно будет отклонён. Ей отдаём </dev/null: в stdin git передаёт список ссылок, он нужен LFS.
+# Проверка репозитория идёт до LFS, чтобы не тратить трафик на выгрузку бинарников, если push всё
+# равно будет отклонён. Ей отдаём </dev/null: в stdin git передаёт список ссылок, он нужен LFS.
 #
 # Обойти разово: git push --no-verify
 
@@ -20,5 +23,15 @@ if [ -f "$REPO_HOOK" ]; then
     sh "$REPO_HOOK" "$@" </dev/null || exit 1
 fi
 
-command -v git-lfs >/dev/null 2>&1 || { printf >&2 "\n%s\n\n" "This repository is configured for Git LFS but 'git-lfs' was not found on your path. If you no longer wish to use Git LFS, remove this hook by deleting the 'pre-push' file in the hooks directory (set by 'core.hookspath'; usually '.git/hooks')."; exit 2; }
-git lfs pre-push "$@"
+if command -v git-lfs >/dev/null 2>&1; then
+    git lfs pre-push "$@"
+    exit $?
+fi
+
+# git-lfs нет. Молча пропускаем, если репозиторий его не использует.
+if ! git grep -qI --no-color -e 'filter=lfs' -- '.gitattributes' '*/.gitattributes' >/dev/null 2>&1; then
+    exit 0
+fi
+
+printf >&2 "\n%s\n\n" "В этом репозитории используется Git LFS (filter=lfs в .gitattributes), но 'git-lfs' не найден в PATH. Push остановлен: без git-lfs в удалённый репозиторий уедут указатели вместо файлов. Установите git-lfs (winget install GitHub.GitLFS) и выполните 'git lfs install'. Обойти разово: git push --no-verify"
+exit 2
