@@ -50,7 +50,7 @@ AI-агенты (Claude Code, Cursor, Copilot, Gemini CLI, Codex, Cline, Windsur
 bsl-ai-toolkit/
 ├── core/                       # ЕДИНЫЙ ИСТОЧНИК ИСТИНЫ (общий для всех AI-агентов)
 │   ├── AGENTS.md               # правила (спроси-инструмент, слои контура, гейт метаданных, производительность, безопасность)
-│   ├── skills/                 # SKILL.md × 6: 1c-dev · 1c-analyst · 1c-metadata · 1c-admin-devops · 1c-dba · 1c-expert
+│   ├── skills/                 # SKILL.md × 7: 1c-dev · 1c-analyst · 1c-metadata · 1c-admin-devops · 1c-dba · 1c-expert · 1c-tester
 │   └── mcp/servers.json        # профиль MCP: onec-code · bsl-ls · onec-ops · onec-data (пути/креды через env)
 ├── adapters/                   # тонкие адаптеры под агентов (claude — эталон; codex/gemini — фолбэк; cursor/copilot/… — rulesync)
 │   ├── claude/                 #   CLAUDE.md (@AGENTS.md) + settings.json (хук bsl_guard)
@@ -180,6 +180,7 @@ onboard раскладывает скиллы, профиль `.mcp.json` и п�
 - [docs/AI_INSTALL_GUIDE.md](docs/AI_INSTALL_GUIDE.md) · [docs/AI_UPDATE.md](docs/AI_UPDATE.md) — установка и обновление.
 - [docs/example.md](docs/example.md) — пример: как ИИ ведёт задачу от тех-проекта до передачи кода.
 - [docs/data-access-architecture.md](docs/data-access-architecture.md) — доступ к данным живой базы (лестница уровней).
+- [docs/data-access-verification-runbook.md](docs/data-access-verification-runbook.md) — воспроизводимая проверка OData/HTTP-сервиса расширения на новой машине: автономный сервер, деплой через SSH, диагностика по коду ответа.
 - [docs/testing-ladder.md](docs/testing-ladder.md) — как доказываем поведение (лестница тестирования).
 - [docs/ops-tools-catalog.md](docs/ops-tools-catalog.md) · [docs/zabbix-1c-monitoring-guide.md](docs/zabbix-1c-monitoring-guide.md) — эксплуатация и мониторинг.
 - [docs/mcp-deploy-and-use.md](docs/mcp-deploy-and-use.md) · [docs/deploy-center.md](docs/deploy-center.md) — общий сервер на команду.
