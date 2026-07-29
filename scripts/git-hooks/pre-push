@@ -1,0 +1,24 @@
+#!/bin/sh
+# claude-no-coauthor / pre-push: точка расширения для проверок репозитория + штатный хук Git LFS.
+#
+# Хук глобальный (ставится через core.hooksPath, см. scripts/install_git_hooks.py), поэтому сам
+# ничего про конкретные репозитории не знает и в чужих молча пропускает (exit 0).
+#
+# Делает две вещи по порядку:
+#   1. Если в репозитории есть scripts/hooks/pre-push — запускает его. Это даёт репозиториям
+#      возможность иметь свои pre-push проверки, не трогая toolkit. Специфика остаётся в репо.
+#   2. Вызывает git lfs pre-push — ОБЯЗАТЕЛЬНО: без него не выгружаются LFS-объекты. Если в системе
+#      нет git-lfs, ведём себя как штатный хук LFS (сообщение + exit 2).
+#
+# Проверка репозитория идёт ПЕРВОЙ, чтобы не тратить время и трафик на выгрузку бинарников, когда
+# push всё равно будет отклонён. Ей отдаём </dev/null: в stdin git передаёт список ссылок, он нужен LFS.
+#
+# Обойти разово: git push --no-verify
+
+REPO_HOOK="scripts/hooks/pre-push"
+if [ -f "$REPO_HOOK" ]; then
+    sh "$REPO_HOOK" "$@" </dev/null || exit 1
+fi
+
+command -v git-lfs >/dev/null 2>&1 || { printf >&2 "\n%s\n\n" "This repository is configured for Git LFS but 'git-lfs' was not found on your path. If you no longer wish to use Git LFS, remove this hook by deleting the 'pre-push' file in the hooks directory (set by 'core.hookspath'; usually '.git/hooks')."; exit 2; }
+git lfs pre-push "$@"
