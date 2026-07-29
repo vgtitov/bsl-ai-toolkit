@@ -5,12 +5,16 @@
   - commit-msg — срезает соавторство/атрибуцию Claude/Anthropic из сообщений коммитов;
   - pre-commit — bsl-guard: блокирует staged *.bsl с обращением к БД в цикле (Запрос…Выполнить()/
     ПолучитьОбъект/.Ссылка. в Пока|Для). В чужих репозиториях (нет detector'а) молча пропускает.
+  - pre-push — точка расширения: запускает scripts/hooks/pre-push репозитория (если есть), затем
+    штатный git lfs pre-push. Позволяет репозиторию иметь свои pre-push проверки без правок toolkit.
 Маленький org-agnostic установщик: всю остальную git-настройку (идентичность по площадкам, токен)
 разработчик делает стандартными командами git — см. docs/git.md.
 
 Идемпотентно, кросс-платформенно, только стандартная библиотека:
   - core.hooksPath: берётся существующий; если не задан — ставится ~/.git-global-hooks.
   - копирует scripts/git-hooks/* в этот каталог; чужой commit-msg НЕ затирает (предупреждает).
+  - ИСКЛЮЧЕНИЕ: штатный pre-push от `git lfs install` заменяем своим — он есть почти на каждой
+    машине и иначе блокировал бы установку, а наш pre-push сам вызывает git lfs pre-push.
 
 Запуск:  uv run scripts/install_git_hooks.py   (или python scripts/install_git_hooks.py)
 """
@@ -26,6 +30,15 @@ for _s in (sys.stdout, sys.stderr):
 
 MARKER = "claude-no-coauthor"
 SRC = Path(__file__).resolve().parent / "git-hooks"
+
+
+def is_stock_lfs_hook(name, content):
+    """Это штатный pre-push, поставленный `git lfs install`, без наших правок?
+
+    Признак: вызывает `git lfs pre-push` и не содержит нашего маркера. Такой хук можно заменить —
+    наш pre-push сам вызывает git lfs pre-push, поведение LFS сохраняется.
+    """
+    return name == "pre-push" and "git lfs pre-push" in content and MARKER not in content
 
 
 def gget(key):
@@ -59,10 +72,16 @@ def main():
             cur = target.read_text(encoding="utf-8", errors="ignore")
             if MARKER in cur:
                 print(f"[ok] {src_hook.name}: уже стоит наш хук")
+                continue
+            if is_stock_lfs_hook(src_hook.name, cur):
+                # Штатный хук от `git lfs install` есть почти на каждой машине. Наш pre-push сам
+                # вызывает git lfs pre-push, поэтому замена ничего не ломает, а иначе установка
+                # молча не состоялась бы у всех, у кого настроен LFS.
+                print(f"[i] {src_hook.name}: заменяю штатный хук Git LFS (наш сам вызывает git lfs pre-push)")
             else:
                 print(f"[!] {src_hook.name}: на машине уже есть ДРУГОЙ хук — не затираю. "
                       f"Допиши строку фильтрации из {src_hook} вручную или объедини.", file=sys.stderr)
-            continue
+                continue
         shutil.copyfile(src_hook, target)
         try:
             os.chmod(target, 0o755)
