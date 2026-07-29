@@ -10,6 +10,19 @@ _spec.loader.exec_module(rds_setup)
 
 build_host_block = rds_setup.build_host_block
 upsert_host_block = rds_setup.upsert_host_block
+admin_handoff_text = rds_setup.admin_handoff_text
+
+
+def test_handoff_covers_both_key_locations():
+    """Текст для админа должен покрыть обе учётки: обычную (профиль) и админскую."""
+    pub = "ssh-ed25519 AAAAKEY test@host"
+    txt = admin_handoff_text("vc-d-rds-01", "10.1.5.13", "INTKZ\\via.titov", pub)
+    assert pub in txt
+    assert "vc-d-rds-01" in txt and "10.1.5.13" in txt
+    assert "INTKZ\\via.titov" in txt
+    # обычная учётка → профиль; админская → administrators_authorized_keys
+    assert "authorized_keys" in txt
+    assert "administrators_authorized_keys" in txt
 
 
 def test_block_quotes_domain_login():
