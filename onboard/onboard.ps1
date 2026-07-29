@@ -92,9 +92,14 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
 
 Say "8/8 Git: коммиты без соавторства Claude (commit-msg хук)"
 if (Get-Command uv -ErrorAction SilentlyContinue) {
-  try { uv run (Join-Path $TeamDir 'scripts\install_git_hooks.py'); Ok "commit-msg хук поставлен" }
-  catch { Warn "install_git_hooks пропущен — поставь вручную: uv run scripts\install_git_hooks.py" }
-} else { Warn "uv не найден — поставь хук вручную: python scripts\install_git_hooks.py" }
+  & uv run (Join-Path $TeamDir 'scripts\install_git_hooks.py')
+} else {
+  & python (Join-Path $TeamDir 'scripts\install_git_hooks.py')
+}
+if ($LASTEXITCODE -ne 0) {
+  throw "install_git_hooks завершился с кодом $LASTEXITCODE; onboarding остановлен"
+}
+Ok "commit-msg/pre-commit hooks установлены без конфликтов"
 
 Say "Готово. Ручные шаги"
 @"

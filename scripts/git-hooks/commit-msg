@@ -1,7 +1,31 @@
 #!/bin/sh
-# claude-no-coauthor: коммиты без соавторства/атрибуции Claude/Anthropic.
+# claude-no-coauthor: backward-compatible ownership marker for toolkit installers.
+# Коммиты только от лица владельца: строки с именами/атрибуцией AI-систем
+# удаляются из сообщения до создания коммита.
 # Ставится автоматически scripts/setup_git.py (через core.hooksPath). Этот файл — эталон для ручного слияния,
 # если на машине уже есть свой commit-msg хук.
-f="$1"; [ -f "$f" ] || exit 0
-grep -viE 'co-authored-by:[[:space:]]*.*(claude|anthropic)|generated with \[?claude code|claude\.com/claude-code|noreply@anthropic\.com' "$f" > "$f.noai" 2>/dev/null && mv "$f.noai" "$f"
+f="$1"
+[ -f "$f" ] || exit 0
+
+pattern='co[[:space:]-]*authored[[:space:]-]*by|reviewed[[:space:]-]*by|assisted[[:space:]-]*by|generated[[:space:]-]*(with|by)|claude|anthropic|codex|chatgpt|openai|gemini|copilot|grok|deepseek|qwen|mistral|perplexity|meta[[:space:]-]*ai|llama|cohere|cursor|windsurf|cline|aider|tabnine|devin|replit[[:space:]-]*agent|phind|kimi|gigachat|yandexgpt|(^|[^[:alnum:]_])(ai|ии)([^[:alnum:]_]|$)|ai[[:space:]-]*(generated|assisted)'
+if [ -n "${OPERKONTUR_AI_NAME_PATTERN:-}" ]; then
+  pattern="${pattern}|${OPERKONTUR_AI_NAME_PATTERN}"
+fi
+tmp="${f}.noai.$$"
+trap 'rm -f "$tmp"' EXIT HUP INT TERM
+
+grep -viE "$pattern" "$f" > "$tmp" 2>/dev/null
+status=$?
+case "$status" in
+  0|1) ;;
+  *)
+    printf >&2 '%s\n' "commit-msg: filter failed; original message preserved"
+    exit "$status"
+    ;;
+esac
+if ! mv "$tmp" "$f"; then
+  printf >&2 '%s\n' "commit-msg: cannot replace message; original message preserved"
+  exit 3
+fi
+trap - EXIT HUP INT TERM
 exit 0

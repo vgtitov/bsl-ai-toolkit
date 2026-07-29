@@ -74,8 +74,11 @@ else warn "uv не найден — позже: python scripts/detect_tools.py -
 
 say "8/8 Git: коммиты без соавторства Claude (commit-msg хук)"
 if command -v uv >/dev/null 2>&1; then
-  uv run "$TEAM_DIR/scripts/install_git_hooks.py" && ok "commit-msg хук поставлен" || warn "install_git_hooks пропущен — вручную: uv run scripts/install_git_hooks.py"
-else warn "uv не найден — поставь хук вручную: python scripts/install_git_hooks.py"; fi
+  uv run "$TEAM_DIR/scripts/install_git_hooks.py"
+else
+  python3 "$TEAM_DIR/scripts/install_git_hooks.py"
+fi
+ok "commit-msg/pre-commit hooks установлены без конфликтов"
 
 say "Готово. Ручные шаги"
 cat <<EOF
