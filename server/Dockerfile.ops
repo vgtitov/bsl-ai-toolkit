@@ -3,7 +3,7 @@
 # Каталог(и) логов 1С (ТЖ/ЖР) монтируются томом read-only; сервис отдаёт MCP по HTTP (SSE).
 FROM python:3.12-slim
 
-RUN pip install --no-cache-dir "mcp>=1.2" openpyxl
+RUN pip install --no-cache-dir "mcp>=1.2,<2" openpyxl
 
 WORKDIR /app
 COPY mcp/onec_ops_mcp.py /app/onec_ops_mcp.py

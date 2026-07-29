@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["mcp"]
+# dependencies = ["mcp<2"]  # mcp 2.0.0 убрал mcp.server.fastmcp
 # ///
 """MCP-сервер bsl-ls — диагностики BSL Language Server (синтаксис + стандарты ИТС) поверх
 официального jar 1c-syntax/bsl-language-server (MIT). Тонкая аудируемая обёртка в духе onec-code:

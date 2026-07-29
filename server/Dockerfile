@@ -6,7 +6,7 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends ripgrep \
  && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir "mcp>=1.2"
+RUN pip install --no-cache-dir "mcp>=1.2,<2"
 
 WORKDIR /app
 COPY mcp/onec_mcp.py /app/onec_mcp.py

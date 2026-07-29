@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["mcp"]
+# dependencies = ["mcp<2"]  # mcp 2.0.0 убрал mcp.server.fastmcp
 # ///
 """MCP-сервер чтения кода 1С — точный контекст по РЕАЛЬНОМУ коду, чтобы AI не гадал.
 
