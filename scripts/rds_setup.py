@@ -13,8 +13,8 @@
 Кроссплатформенно (Windows/macOS/Linux), только stdlib. Ничего секретного не пишет в git.
 
     python scripts/rds_setup.py setup            # спросит алиас/адрес/логин интерактивно
-    python scripts/rds_setup.py setup --host onec-rds-kz --ip 10.1.5.13 --login "INTKZ\\via.titov"
-    python scripts/rds_setup.py check --host onec-rds-kz
+    python scripts/rds_setup.py setup --host rds-01 --ip 10.0.0.10 --login "DOMAIN\\user"
+    python scripts/rds_setup.py check --host rds-01
 """
 from __future__ import annotations
 
@@ -34,9 +34,9 @@ DEFAULT_IDENTITY = "~/.ssh/onec_rds"
 def build_host_block(alias: str, ip: str, login: str, identity: str) -> str:
     """Собрать блок Host для ~/.ssh/config.
 
-    Логин ВСЕГДА в кавычках: в доменных именах вида ``INTKZ\\via.titov`` без
-    кавычек ssh трактует ``\\v`` как escape и превращает логин в ``INTKZAia.titov``
-    — реальная грабля, стоившая пары часов отладки.
+    Логин ВСЕГДА в кавычках: в доменных именах вида ``DOMAIN\\vuser`` без
+    кавычек ssh трактует ``\\v`` как escape (вертикальная табуляция) и калечит
+    логин — реальная грабля, стоившая пары часов отладки.
     """
     return (
         f"Host {alias}\n"
@@ -168,7 +168,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
         print("macOS/Linux: ssh обычно уже установлен; иначе поставьте пакет openssh-client.")
         return 2
 
-    alias = args.host or _prompt("Имя терминала (как в реестре баз, напр. vc-d-rds-01)", "vc-d-rds-01")
+    alias = args.host or _prompt("Имя терминала (как в реестре баз)", "rds-01")
     ip = args.ip or _prompt("Адрес терминала (IP)")
     login = args.login or _prompt(r"Ваш логин домена (ДОМЕН\пользователь)")
     identity = args.identity
@@ -197,7 +197,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
 
 
 def cmd_check(args: argparse.Namespace) -> int:
-    alias = args.host or _prompt("Алиас", "onec-rds-kz")
+    alias = args.host or _prompt("Имя терминала", "rds-01")
     print(f"Проверяю связь с {alias} …")
     try:
         r = subprocess.run(
@@ -234,7 +234,7 @@ def main(argv: list[str] | None = None) -> int:
     s = sub.add_parser("setup", help="настроить ключ и ~/.ssh/config, напечатать текст для админа")
     s.add_argument("--host", help="алиас хоста (короткое имя)")
     s.add_argument("--ip", help="адрес терминала")
-    s.add_argument("--login", help=r"логин домена, напр. INTKZ\via.titov")
+    s.add_argument("--login", help=r"логин домена, напр. DOMAIN\user")
     s.add_argument("--identity", default=DEFAULT_IDENTITY, help=f"файл ключа (по умолчанию {DEFAULT_IDENTITY})")
     s.set_defaults(func=cmd_setup)
 
