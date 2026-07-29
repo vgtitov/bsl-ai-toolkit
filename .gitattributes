@@ -2,3 +2,8 @@
 # Без -text git с core.autocrlf=true на Windows конвертирует LF→CRLF при checkout
 # и тесты стиля падают (реальный случай: schema.dcs, test_scd_edt на Work PC).
 tests/onec_metadata/fixtures/** -text
+
+# Глобальные git-хуки — sh-скрипты. С core.autocrlf=true на Windows checkout сделал бы CRLF,
+# и хук упал бы ещё до первой строки («'\r': command not found»). Держим LF всегда — по тому же
+# прецеденту, что и фикстуры выше.
+scripts/git-hooks/** text eol=lf
