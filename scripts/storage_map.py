@@ -242,7 +242,7 @@ def main():
     sub = p.add_subparsers(dest="cmd", required=True)
     pi = sub.add_parser("import", help="импорт/обновление карты базы из выгрузки")
     pi.add_argument("file")
-    pi.add_argument("--base", required=True, help="имя базы (как в СУБД/Zabbix, напр. AskonaKZ_ERP)")
+    pi.add_argument("--base", required=True, help="имя базы (как в СУБД/Zabbix, напр. OrgKZ_ERP)")
     ps = sub.add_parser("status", help="какие базы покрыты/нет, свежесть карт")
     ps.add_argument("--expect", default="", help="ожидаемые базы через запятую")
     pl = sub.add_parser("lookup", help="перевести имена таблиц")

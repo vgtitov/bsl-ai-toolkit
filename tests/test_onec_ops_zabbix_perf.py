@@ -635,8 +635,8 @@ def test_pg_master_json_and_widget_text_items_ignored():
     """Сырые JSON-агрегаты шаблона PG («Get dbstat», ключ с {$PG.CONNSTRING…}) и текстовые
     заготовки для виджетов — служебные: не в unclassified."""
     m = _load()
-    assert m.zbx_is_inventory_item({"key_": 'pgsql.dbstat.get_metrics["AskonaKZ_ERP"]',
-                                    "name": "DB [AskonaKZ_ERP]: Get dbstat", "value_type": "4"})
+    assert m.zbx_is_inventory_item({"key_": 'pgsql.dbstat.get_metrics["OrgKZ_ERP"]',
+                                    "name": "DB [OrgKZ_ERP]: Get dbstat", "value_type": "4"})
     assert m.zbx_is_inventory_item({"key_": 'pgsql.connections["{$PG.CONNSTRING.AGENT2}","{$PG.USER}"]',
                                     "name": "Get connections sum", "value_type": "4"})
     assert m.zbx_is_inventory_item({"key_": "windows.commit.text", "name": "Выделенная память (Текст для виджета)"})

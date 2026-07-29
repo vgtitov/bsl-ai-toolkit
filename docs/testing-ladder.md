@@ -84,8 +84,8 @@
 - **Vanessa Automation** (github.com/Pr-Mex/vanessa-automation, BDD/Gherkin,
   сценарные и UI-тесты через платформенный механизм автоматизированного
   тестирования `/TESTMANAGER + /TESTCLIENT`; запуск в CI —
-  vanessa-opensource/vanessa-runner на OneScript). Корп-стандарт Аскона
-  (см. OneDrive `DIT-1С/1С-Инфраструктура/CI CD`): smoke-набор на каждый MR.
+  vanessa-opensource/vanessa-runner на OneScript). Частый корп-стандарт —
+  smoke-набор на каждый MR (описать свой в `config/ci.example.md`, если есть).
 - **YAxUnit** (github.com/bia-technologies/yaxunit, расширение .cfe) — юнит-тесты
   серверного кода, плагин EDT, JUnit-отчёты для CI. Лучший выбор для модульных
   тестов общих модулей.
@@ -119,5 +119,5 @@ python scripts/onec_verify.py smoke --base "D:\bases\erp" --scenario scen.bsl --
   (раннер-EPF в ТЕСТ-базу — допустимо: это данные, не конфигурация).
 - Нет публикации/веб-сервера → ступень 3 заменяется толстым/тонким клиентом
   на машине с доступом, либо пропускается с фиксацией «UI не проверен».
-- Полноценный CI (Аскона): ступени 0–2 на каждый коммит, 4 (VA smoke) на MR,
-  регресс — по релизу (дорожная карта DIT).
+- Полноценный CI (пример зрелого конвейера): ступени 0–2 на каждый коммит, 4
+  (VA smoke) на MR, регресс — по релизу.

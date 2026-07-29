@@ -18,7 +18,7 @@ dashboards = "408,410"
 hosts = "vc-1c-*"
 window_hours = 24
 licensed_cores = { "vc-1c-app-01" = 12 }
-storage_map_base = "AskonaKZ_ERP"
+storage_map_base = "OrgKZ_ERP"
 onec_profile = "kz"
 
 [by]
@@ -49,7 +49,7 @@ def test_resolve_contour_full_preset(tmp_path):
     assert c["hosts"] == ["vc-1c-*"]
     assert c["window_hours"] == 24.0
     assert c["licensed_cores"] == {"vc-1c-app-01": 12}
-    assert c["storage_map_base"] == "AskonaKZ_ERP"
+    assert c["storage_map_base"] == "OrgKZ_ERP"
     assert c["onec_profile"] == "kz"
 
 

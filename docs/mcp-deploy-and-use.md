@@ -68,8 +68,8 @@ uv run --with mcp --with openpyxl --with pytest pytest -q <repo>/tests/test_onec
 Ничего не ломается: `onec-code` (чтение кода) не менялся — импортированный код/каталоги `ONEC_SRC_DIR` и
 подключение остаются рабочими. Чтобы получить НОВОЕ (скиллы 1c-admin-devops/1c-dba/1c-expert + MCP onec-ops):
 1. `git pull` репозитория toolkit (или `git submodule update --remote` в Team-слое, см. ниже).
-2. Переустановить скиллы: повторить `onboard` (копирует свежие skills в `~/.claude/skills`) — существующие
-   askona/иные скиллы не затрагиваются (разные имена).
+2. Переустановить скиллы: повторить `onboard` (копирует свежие skills в `~/.claude/skills`) — прочие
+   ваши скиллы не затрагиваются (разные имена).
 3. Добавить MCP onec-ops: `claude mcp add onec-ops -s user -- uv run --with mcp --with openpyxl <repo>/mcp/onec_ops_mcp.py`.
 4. Перезапустить Claude Code. Импортированные данные/код re-import НЕ требуют — только добавляются новые инструменты.
 
