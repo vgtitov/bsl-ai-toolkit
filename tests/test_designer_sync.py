@@ -47,11 +47,11 @@ def test_build_dump_cmd_objects_listfile_and_extension(tmp_path):
     cmd, listfile = m.build_dump_cmd(
         v8="1cv8", base=str(tmp_path), out_dir=str(tmp_path / "out"),
         objects=["ОбщийМодуль.Тест", "Справочник.Товары"],
-        user="u", password="p", extension="askЯдро", log=str(tmp_path / "o.log"))
+        user="u", password="p", extension="Расширение", log=str(tmp_path / "o.log"))
     text = Path(listfile).read_text(encoding="utf-8-sig")
     assert text.splitlines() == ["ОбщийМодуль.Тест", "Справочник.Товары"]
     assert cmd[:2] == ["1cv8", "DESIGNER"]
-    for part in ("/DumpConfigToFiles", "-listFile", "-Extension", "askЯдро",
+    for part in ("/DumpConfigToFiles", "-listFile", "-Extension", "Расширение",
                  "/N", "u", "/P", "p", "/DisableStartupDialogs"):
         assert part in cmd
     # без objects — полная выгрузка, listFile не пишется
@@ -75,7 +75,7 @@ def test_build_load_cmd_files_normalized(tmp_path):
 class _FakeRunner:
     """Двойник Runner — без реального SSH/scp, только запись вызовов."""
     def __init__(self):
-        self.host = "vc-d-rds-01"
+        self.host = "term-01"
         self.made_dirs = []
         self.run_calls = []
 
@@ -110,14 +110,14 @@ def test_remote_dump_uses_runner_and_fetches_result(monkeypatch, tmp_path):
     monkeypatch.setattr("onec_metadata.apply.dumpload.fetch_tree", fake_fetch_tree)
 
     out_dir = tmp_path / "out"
-    m.remote_dump(r, r"vc-p-1c-f-app01\FranchiseERP_Dev_TVG", "u", "p", "askЯдро",
+    m.remote_dump(r, r"srv-1c\ERP_Test", "u", "p", "Расширение",
                  ["ОбщийМодуль.Тест"], str(out_dir), workdir=r"C:\work\point_sync")
 
     assert r.made_dirs == [r"C:\work\point_sync"]
     dump_runner, dump_base, dump_ext, remote_dst, objects = calls["dump"]
     assert dump_runner is r
-    assert dump_base == r"vc-p-1c-f-app01\FranchiseERP_Dev_TVG"
-    assert dump_ext == "askЯдро"
+    assert dump_base == r"srv-1c\ERP_Test"
+    assert dump_ext == "Расширение"
     assert objects == ["ОбщийМодуль.Тест"]
     fetch_runner, fetch_remote_dir, fetch_local_dir = calls["fetch"]
     assert fetch_runner is r
@@ -145,7 +145,7 @@ def test_remote_load_uploads_then_loads_without_update_dbcfg(monkeypatch, tmp_pa
 
     out_dir = tmp_path / "out"
     out_dir.mkdir()
-    m.remote_load(r, r"vc-p-1c-f-app01\FranchiseERP_Dev_TVG", "u", "p", "askЯдро",
+    m.remote_load(r, r"srv-1c\ERP_Test", "u", "p", "Расширение",
                  [r"CommonModules\X\Ext\Module.bsl"], str(out_dir), workdir=r"C:\work\point_sync")
 
     assert r.made_dirs == [r"C:\work\point_sync"]
@@ -180,7 +180,7 @@ def test_remote_deploy_extension_uploads_then_loads_with_update_dbcfg(monkeypatc
 
     src_dir = tmp_path / "ai_debug_src"
     src_dir.mkdir()
-    m.remote_deploy_extension(r, r"vc-p-1c-f-app01\FranchiseERP_Dev_TVG", "u", "p",
+    m.remote_deploy_extension(r, r"srv-1c\ERP_Test", "u", "p",
                               "ai_debug", str(src_dir), workdir=r"C:\work\ext_deploy")
 
     assert r.made_dirs == [r"C:\work\ext_deploy"]

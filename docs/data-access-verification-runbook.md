@@ -68,7 +68,7 @@ $log1 = "$env:TEMP\ext_load_step1.log"; $log2 = "$env:TEMP\ext_load_step2.log"
 
 cmd /c ('start /wait "" "' + $exe + '" DESIGNER /F "' + $shortPath + '" /N"' + $user + '" /P"' + $pass + `
   '" /DisableSplash /DisableStartupDialogs /DisableStartupMessages /LoadConfigFromFiles ' + `
-  '"C:\dev\tvg\rp\claude-1c-toolkit\extensions\ai_debug\src" -Extension ai_debug /Out "' + $log1 + '"')
+  '"<путь_к_репозиторию>\claude-1c-toolkit\extensions\ai_debug\src" -Extension ai_debug /Out "' + $log1 + '"')
 Get-Content $log1 -Encoding UTF8 -Raw   # пусто = успех
 
 cmd /c ('start /wait "" "' + $exe + '" DESIGNER /F "' + $shortPath + '" /N"' + $user + '" /P"' + $pass + `
@@ -85,7 +85,7 @@ Get-Content $log2 -Encoding UTF8 -Raw   # пусто = успех
 
 ## Сценарий B — серверная база через SSH (нет локального файла)
 
-Плацдарм — терминал рядом с кластером (см. `~/.ssh/config`, алиас, например `vc-d-rds-01`).
+Плацдарм — терминал рядом с кластером (см. `~/.ssh/config`, алиас, например `term-01`).
 Локальный DESIGNER здесь не нужен вовсе — тем же путём идут point dump/load и smoke.
 
 ### B.1 Задеплоить расширение — одной командой, без ad hoc скриптов
@@ -217,8 +217,8 @@ Claude/агента — правка веб-сервера.
 
 ## Что уже проверено этим путём (29–30.07.2026)
 
-Файловая копия `FranchiseERP_Dev_TVG` (сценарий A) и серверная `FranchiseERP_Dev_TVG`
-через `vc-d-rds-01` (сценарий B): OData-чтение реальных данных, `/hs/aidbg/health`,
+Файловая копия `ERP_Test` (сценарий A) и серверная `ERP_Test`
+через `term-01` (сценарий B): OData-чтение реальных данных, `/hs/aidbg/health`,
 `/hs/aidbg/query`, `/hs/aidbg/settings?what=access`, `/hs/aidbg/call` (корректный отказ
 пустым whitelist). См. `docs/data-access-implementation-plan.md` §6 для статуса по
 конкретным базам.
