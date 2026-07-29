@@ -23,6 +23,9 @@ SNG_REPOS_ACTUALIZATION_PLAN.md в operkontur-work): listFile принимает
   load --base ... [--files "a,b" | --changed] [--ext Имя] [--out DIR] [--contour <КЛЮЧ>]
        — точечная загрузка (--changed = изменённые по git-статусу каталога выгрузки)
   status --out DIR                                — что изменено в каталоге выгрузки
+  deploy-extension --base ... --host <алиас> --ext Имя --src <каталог исходников>
+       — полный деплой расширения (Load+UpdateDBCfg) через SSH; для доступа к данным
+         (onec-data/ai_debug) см. docs/data-access-verification-runbook.md
 
 База: существующий каталог = файловая (/F), иначе «сервер\\база» (/S).
 Интерактивный Конфигуратор на той же базе должен быть закрыт. Кроссплатформенно (stdlib).
@@ -193,6 +196,22 @@ def remote_load(r, base, user, password, ext, files, out_dir, workdir=None):
                             files=files, update_dbcfg=False)
 
 
+def remote_deploy_extension(r, base, user, password, ext, src_dir, workdir=None):
+    """Полный деплой расширения ЧЕРЕЗ RUNNER (SSH — платформа рядом с кластером):
+    весь src/ уходит на сервер, затем LoadConfigFromFiles + UpdateDBCfg (в отличие
+    от remote_load точечного цикла — это полное применение расширения к базе,
+    UpdateDBCfg обязателен)."""
+    from onec_metadata.apply import dumpload
+
+    workdir = workdir or _point_sync_workdir()
+    r.makedirs(workdir)
+    remote_src = workdir + r"\ext_src"
+    log = workdir + r"\ext_load.log"
+    _upload_dir_plain(r, Path(src_dir).resolve(), remote_src)
+    dumpload.load_extension(r, base, user, password, ext, remote_src, log=log,
+                            update_dbcfg=True)
+
+
 def main(argv=None):
     try:
         from onec_ops_mcp import load_dotenv_defaults
@@ -215,11 +234,25 @@ def main(argv=None):
     p.add_argument("--changed", action="store_true", help="взять изменённые по git-статусу каталога выгрузки")
     p = sub.add_parser("status", help="изменённые файлы каталога выгрузки")
     p.add_argument("--out", default="designer_src")
+    p = sub.add_parser("deploy-extension", help="полный деплой расширения из исходников (--host обязателен)")
+    p.add_argument("--base", required=True, help="каталог файловой ИБ или сервер\\база")
+    p.add_argument("--host", required=True, help="алиас ssh хоста рядом с кластером (~/.ssh/config)")
+    p.add_argument("--ext", required=True, help="имя расширения (создаётся, если ещё не существует)")
+    p.add_argument("--src", required=True, help="каталог исходников расширения (Configuration.xml внутри)")
+    p.add_argument("--contour", help="ключ пароля ONEC_IB_PASS_<КЛЮЧ>")
     a = ap.parse_args(argv)
 
     if a.cmd == "status":
         got = changed_files(a.out)
         print("\n".join(got) if got else ("(каталог не под git)" if got is None else "(нет изменений)"))
+        return
+
+    if a.cmd == "deploy-extension":
+        from onec_metadata.apply.runner import make_runner
+        user, password = resolve_cred("IB", a.contour)
+        r = make_runner(a.host)
+        remote_deploy_extension(r, a.base, user, password, a.ext, a.src)
+        print(f"[ok] расширение {a.ext} задеплоено на {a.base} через {a.host}")
         return
 
     v8 = None if a.host else _find_v8()   # --host: платформа НА СЕРВЕРЕ, локальная не нужна
