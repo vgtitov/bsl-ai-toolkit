@@ -20,4 +20,5 @@ jobs:
 
       - name: Run tests
         # Зависимости движка/тестов: lxml (правки XML метаданных), openpyxl/xlrd (storage_map), mcp, pytest.
-        run: uv run --no-project --with mcp --with pytest --with lxml --with openpyxl --with xlrd pytest tests/ -q
+        # mcp<2: релиз mcp 2.0.0 убрал mcp.server.fastmcp, на который завязаны серверы; держим 1.x до миграции.
+        run: uv run --no-project --with "mcp<2" --with pytest --with lxml --with openpyxl --with xlrd pytest tests/ -q
