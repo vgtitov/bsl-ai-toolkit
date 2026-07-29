@@ -159,6 +159,41 @@ def test_remote_load_uploads_then_loads_without_update_dbcfg(monkeypatch, tmp_pa
     assert update_dbcfg is False
 
 
+def test_remote_deploy_extension_uploads_then_loads_with_update_dbcfg(monkeypatch, tmp_path):
+    """--host: деплой ЦЕЛОГО расширения (не точечных объектов) — сперва весь src/
+    уходит на сервер (иначе LoadConfigFromFiles там нечего читать), потом
+    LoadConfigFromFiles + ОБЯЗАТЕЛЬНО UpdateDBCfg (в отличие от remote_load точечного
+    цикла — здесь это полный цикл применения расширения, не ad hoc правка)."""
+    m = _load()
+    r = _FakeRunner()
+    calls = {}
+
+    def fake_upload(runner, local_dir, remote_dir):
+        calls["upload"] = (runner, local_dir, remote_dir)
+
+    def fake_load_extension(runner, base, user, pwd, ext, remote_src, log=None,
+                            files=None, update_dbcfg=True):
+        calls["load"] = (runner, base, ext, remote_src, update_dbcfg)
+
+    monkeypatch.setattr(m, "_upload_dir_plain", fake_upload)
+    monkeypatch.setattr("onec_metadata.apply.dumpload.load_extension", fake_load_extension)
+
+    src_dir = tmp_path / "ai_debug_src"
+    src_dir.mkdir()
+    m.remote_deploy_extension(r, r"vc-p-1c-f-app01\FranchiseERP_Dev_TVG", "u", "p",
+                              "ai_debug", str(src_dir), workdir=r"C:\work\ext_deploy")
+
+    assert r.made_dirs == [r"C:\work\ext_deploy"]
+    up_runner, up_local, up_remote = calls["upload"]
+    assert up_runner is r
+    assert up_local == src_dir.resolve()
+    load_runner, load_base, load_ext, remote_src, update_dbcfg = calls["load"]
+    assert load_runner is r
+    assert load_ext == "ai_debug"
+    assert remote_src == up_remote
+    assert update_dbcfg is True
+
+
 def test_changed_files_via_git(tmp_path):
     m = _load()
     d = tmp_path / "out"
