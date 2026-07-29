@@ -77,20 +77,42 @@ def _run_designer(r: Runner, ib: str, user: str, pwd: str, action: str,
             f"out: {out.strip()[:500]}\nlog: {logtxt.strip()[:2000]}")
 
 
-def load_extension(r: Runner, ib: str, user: str, pwd: str, ext: str,
-                   remote_src: str, log: str | None = None) -> None:
+def _put_text(r: Runner, remote_path: str, text: str) -> None:
+    """Положить текст файлом НА СЕРВЕР (Runner.put берёт только локальный файл)."""
+    import tempfile
+    fd, local_path = tempfile.mkstemp(suffix=".txt", prefix="ds_listfile_")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8-sig") as f:
+            f.write(text)
+        r.put(local_path, remote_path)
+    finally:
+        os.unlink(local_path)
+
+
+def load_extension(r: Runner, ib: str, user: str, pwd: str, ext: str | None,
+                   remote_src: str, log: str | None = None,
+                   files: list[str] | None = None, update_dbcfg: bool = True) -> None:
+    """Полная (files=None) или точечная (`files` — пути от remote_src, `-files`)
+    загрузка. `update_dbcfg=False` — для ad hoc точечного цикла: человек сам
+    прогоняет UpdateDBCfg/синтакс-контроль в Конфигураторе после правки."""
     log = log or _wpath("load.log")
-    _run_designer(r, ib, user, pwd, "/LoadConfigFromFiles",
-                  [remote_src, "-Extension", ext], log)
-    # ВАЖНО: без -Extension обновится только основная конфигурация, а
-    # загруженная версия расширения останется НЕ применённой к ИБ —
-    # исполняться будет старая (боевой урок эксплуатации).
-    _run_designer(r, ib, user, pwd, "/UpdateDBCfg",
-                  ["-Extension", ext], log)
+    args = [remote_src]
+    if files:
+        args += ["-files", ",".join(p.replace("\\", "/") for p in files)]
+    if ext:
+        args += ["-Extension", ext]
+    _run_designer(r, ib, user, pwd, "/LoadConfigFromFiles", args, log)
+    if update_dbcfg and ext:
+        # ВАЖНО: без -Extension обновится только основная конфигурация, а
+        # загруженная версия расширения останется НЕ применённой к ИБ —
+        # исполняться будет старая (боевой урок эксплуатации).
+        _run_designer(r, ib, user, pwd, "/UpdateDBCfg",
+                      ["-Extension", ext], log)
 
 
-def dump_extension(r: Runner, ib: str, user: str, pwd: str, ext: str,
-                   remote_dst: str, log: str | None = None) -> None:
+def dump_extension(r: Runner, ib: str, user: str, pwd: str, ext: str | None,
+                   remote_dst: str, log: str | None = None,
+                   objects: list[str] | None = None) -> None:
     """Перевыгрузка расширения платформой → ПЛАТФОРМЕННО-КАНОНИЧЕСКОЕ дерево.
 
     Это дерево (`after` в roundtrip_verify) и есть артефакт для коммита в git:
@@ -98,10 +120,25 @@ def dump_extension(r: Runner, ib: str, user: str, pwd: str, ext: str,
     правкой. Наша byte-perfect правка (`before`) годится как источник изменения,
     но канонический результат даёт именно эта перевыгрузка (архитектурный аудит,
     canonization). См. docs/architecture-review-2026-07.md.
+
+    `objects` (дот-нотация, напр. «ОбщийМодуль.Имя») — точечная выгрузка:
+    список уходит listFile'ом НА СЕРВЕР (там же читает платформа), файл
+    подчищается после выгрузки. Без objects — полная выгрузка.
     """
     log = log or _wpath("dump.log")
-    _run_designer(r, ib, user, pwd, "/DumpConfigToFiles",
-                  [remote_dst, "-Extension", ext], log)
+    args = [remote_dst]
+    listfile_remote = None
+    if objects:
+        listfile_remote = _wpath("_objects.txt")
+        _put_text(r, listfile_remote, "\n".join(objects))
+        args += ["-listFile", listfile_remote]
+    if ext:
+        args += ["-Extension", ext]
+    try:
+        _run_designer(r, ib, user, pwd, "/DumpConfigToFiles", args, log)
+    finally:
+        if listfile_remote:
+            r.remove(listfile_remote)
 
 
 def upload_tree(r: Runner, local_dir: Path, remote_dir: str,
