@@ -4,7 +4,7 @@
 # здесь (env/смонтированный файл ONEC_DATA_USERS), наружу — за bearer через Caddy.
 FROM python:3.12-slim
 
-RUN pip install --no-cache-dir "mcp>=1.2"
+RUN pip install --no-cache-dir "mcp>=1.2,<2"
 
 WORKDIR /app
 COPY mcp/onec_data_mcp.py /app/onec_data_mcp.py

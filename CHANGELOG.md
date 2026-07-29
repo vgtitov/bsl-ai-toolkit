@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Пин `mcp<2` в runtime-серверах и Docker.** v2.1.0 запинил только CI; сами серверы (`mcp/onec_mcp.py`,
+  `onec_data_mcp.py`, `onec_ops_mcp.py`, `bsl_ls_mcp.py` — inline `dependencies`) и образы (`server/Dockerfile*`)
+  тянули `mcp` без верхней границы, поэтому при свежей установке `uv run` ставил mcp 2.0.0 и падал на импорте
+  `mcp.server.fastmcp`. Теперь везде `mcp>=1.2,<2` / `mcp<2`. Проверено: `uv run mcp/onec_mcp.py` поднимается.
+
 ## [2.1.0] - 2026-07-29
 
 ### Added

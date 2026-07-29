@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["mcp", "openpyxl"]
+# dependencies = ["mcp<2", "openpyxl"]  # mcp 2.0.0 убрал mcp.server.fastmcp
 # ///
 """MCP-сервер onec-ops — инструменты ЭКСПЛУАТАЦИИ 1С (read-only). Первый инструмент:
 `tech_journal_parse` — разбор технологического журнала по каталогу ИЛИ ГРУППЕ каталогов

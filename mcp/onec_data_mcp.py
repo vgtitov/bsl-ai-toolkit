@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["mcp"]
+# dependencies = ["mcp<2"]  # mcp 2.0.0 убрал mcp.server.fastmcp
 # ///
 """MCP-сервер onec-data — слой ДАННЫХ живой ИБ 1С (read-only). Архитектура и лестница
 уровней: docs/data-access-architecture.md; план: docs/data-access-implementation-plan.md.
