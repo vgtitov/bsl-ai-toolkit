@@ -166,6 +166,16 @@ def check_prereqs():
             res.append((OK, f"prereq {c}", "найден"))
         else:
             res.append((BAD, f"prereq {c}", f"НЕ найден — {hint}"))
+    # git-lfs — нужен НЕ всем: только репозиториям с LFS (filter=lfs в .gitattributes). Глобальный
+    # pre-push (scripts/git-hooks/pre-push) в таком репозитории остановит push без git-lfs, иначе
+    # уехали бы указатели вместо файлов. Поэтому WARN, а не BAD: на машине без LFS-репозиториев
+    # отсутствие git-lfs ничему не мешает.
+    if shutil.which("git-lfs"):
+        res.append((OK, "prereq git-lfs", "найден"))
+    else:
+        res.append((WARN, "prereq git-lfs", "НЕ найден — нужен только репозиториям с LFS "
+                                            "(winget install GitHub.GitLFS, затем git lfs install); "
+                                            "в них push будет остановлен глобальным pre-push"))
     if os.name == "nt":
         try:
             out = subprocess.run(["powershell", "-NoProfile", "-Command",
