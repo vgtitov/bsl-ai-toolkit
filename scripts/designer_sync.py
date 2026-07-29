@@ -44,6 +44,7 @@ for _s in (sys.stdout, sys.stderr):
 SCRIPTS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS_DIR))                      # detect_tools рядом
 sys.path.insert(0, str(SCRIPTS_DIR.parent / "mcp"))       # load_dotenv_defaults
+sys.path.insert(0, str(SCRIPTS_DIR.parent))               # onec_metadata (--host: Runner/dumpload)
 
 
 def resolve_cred(kind: str, keys, env=None):
@@ -143,6 +144,55 @@ def _run(cmd, log):
     return r.returncode
 
 
+def _point_sync_workdir() -> str:
+    return os.environ.get("ONEC_REMOTE_WORKDIR", r"D:\src") + r"\point_sync"
+
+
+def _upload_dir_plain(r, local_dir: Path, remote_dir: str) -> None:
+    """Перенос каталога выгрузки НА СЕРВЕР — простой tar+scp, без гейтов версии/BSL
+    (`onec_metadata.apply.dumpload.upload_tree`): это ad hoc точечный цикл на паре
+    файлов, не публикация целого дерева расширения в git."""
+    tmp_tar_remote = remote_dir + "_upload.tar"
+    local_tar = Path(tempfile.gettempdir()) / f"ds_upload_{os.getpid()}.tar"
+    subprocess.run(["tar", "-cf", str(local_tar), "-C", str(local_dir), "."], check=True)
+    subprocess.run(["scp", "-o", "BatchMode=yes", str(local_tar),
+                    f"{r.host}:{tmp_tar_remote}"], check=True)
+    local_tar.unlink()
+    code, out = r.run(
+        f"chcp 65001 >nul & (if exist {remote_dir} rmdir /s /q {remote_dir}) & "
+        f"mkdir {remote_dir} & tar -xf {tmp_tar_remote} -C {remote_dir} & echo EXIT=%errorlevel%")
+    if "EXIT=0" not in out:
+        raise SystemExit(f"выгрузка каталога на сервер не удалась: {out.strip()[:500]}")
+
+
+def remote_dump(r, base, user, password, ext, objects, out_dir, workdir=None):
+    """Точечная (или полная) выгрузка ЧЕРЕЗ RUNNER (SSH — платформа рядом с
+    кластером, не на Work PC) + возврат результата локально (fetch_tree)."""
+    from onec_metadata.apply import dumpload
+
+    workdir = workdir or _point_sync_workdir()
+    r.makedirs(workdir)
+    remote_dst = workdir + r"\dump"
+    log = workdir + r"\dump.log"
+    dumpload.dump_extension(r, base, user, password, ext, remote_dst, log=log, objects=objects)
+    dumpload.fetch_tree(r, remote_dst, Path(out_dir).resolve())
+
+
+def remote_load(r, base, user, password, ext, files, out_dir, workdir=None):
+    """Точечная загрузка ЧЕРЕЗ RUNNER: сперва локальный каталог выгрузки (уже
+    правленный) уходит на сервер, потом -files грузится в базу. UpdateDBCfg —
+    НЕ вызывается (ad hoc цикл, дальше — Конфигуратор/EDT человека)."""
+    from onec_metadata.apply import dumpload
+
+    workdir = workdir or _point_sync_workdir()
+    r.makedirs(workdir)
+    remote_src = workdir + r"\dump"
+    log = workdir + r"\load.log"
+    _upload_dir_plain(r, Path(out_dir).resolve(), remote_src)
+    dumpload.load_extension(r, base, user, password, ext, remote_src, log=log,
+                            files=files, update_dbcfg=False)
+
+
 def main(argv=None):
     try:
         from onec_ops_mcp import load_dotenv_defaults
@@ -156,6 +206,8 @@ def main(argv=None):
     common.add_argument("--out", default="designer_src", help="каталог выгрузки (по умолчанию ./designer_src)")
     common.add_argument("--ext", help="имя расширения (иначе основная конфигурация)")
     common.add_argument("--contour", help="ключ пароля ONEC_IB_PASS_<КЛЮЧ>; КЛЮЧ = имя базы UPPER (см. bases.*.toml), напр. SLEEPMARKETRB_ERP_TEST")
+    common.add_argument("--host", help="алиас ssh хоста рядом с кластером (~/.ssh/config); "
+                        "без него — платформа этой машины (сеть до сервера напрямую)")
     p = sub.add_parser("dump", parents=[common], help="точечная выгрузка объектов")
     p.add_argument("--objects", help="объекты через запятую в дот-нотации (пусто = полная выгрузка)")
     p = sub.add_parser("load", parents=[common], help="точечная загрузка файлов")
@@ -170,13 +222,20 @@ def main(argv=None):
         print("\n".join(got) if got else ("(каталог не под git)" if got is None else "(нет изменений)"))
         return
 
-    v8 = _find_v8()
+    v8 = None if a.host else _find_v8()   # --host: платформа НА СЕРВЕРЕ, локальная не нужна
     user, password = resolve_cred("IB", a.contour)
     log = str(Path(a.out).resolve().with_suffix(".log")) if a.out else "designer_sync.log"
     Path(a.out).mkdir(parents=True, exist_ok=True)
 
     if a.cmd == "dump":
         objects = [o.strip() for o in (a.objects or "").split(",") if o.strip()] or None
+        if a.host:
+            from onec_metadata.apply.runner import make_runner
+            r = make_runner(a.host)
+            remote_dump(r, a.base, user, password, a.ext, objects, a.out)
+            print(f"[ok] выгружено в {a.out} через {a.host}"
+                  + (f" (объекты: {len(objects)})" if objects else " (полная)"))
+            return
         cmd, listfile = build_dump_cmd(v8, a.base, str(Path(a.out).resolve()), objects,
                                        user, password, a.ext, log)
         try:
@@ -194,6 +253,13 @@ def main(argv=None):
             files = got
         if not files:
             raise SystemExit("Нечего грузить: укажи --files или --changed (полная загрузка в базу с хранилищем запрещена платформой)")
+        if a.host:
+            from onec_metadata.apply.runner import make_runner
+            r = make_runner(a.host)
+            remote_load(r, a.base, user, password, a.ext, files, a.out)
+            print(f"[ok] загружено файлов через {a.host}: {len(files)} — дальше в Конфигураторе: "
+                  "синтакс-контроль, тест, помещение в хранилище")
+            return
         cmd = build_load_cmd(v8, a.base, str(Path(a.out).resolve()), files, user, password, a.ext, log)
         _run(cmd, log)
         print(f"[ok] загружено файлов: {len(files)} — дальше в Конфигураторе: синтакс-контроль, тест, помещение в хранилище")

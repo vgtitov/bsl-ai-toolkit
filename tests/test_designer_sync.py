@@ -72,6 +72,93 @@ def test_build_load_cmd_files_normalized(tmp_path):
     assert "/LoadConfigFromFiles" in cmd and "/N" not in cmd
 
 
+class _FakeRunner:
+    """Двойник Runner — без реального SSH/scp, только запись вызовов."""
+    def __init__(self):
+        self.host = "vc-d-rds-01"
+        self.made_dirs = []
+        self.run_calls = []
+
+    def makedirs(self, path, timeout=60):
+        self.made_dirs.append(path)
+
+    def run(self, cmd, timeout=600):
+        self.run_calls.append(cmd)
+        return 0, "__DSGN_OK__"
+
+    def put(self, local, remote, timeout=300):
+        pass
+
+    def remove(self, path, timeout=60):
+        pass
+
+
+def test_remote_dump_uses_runner_and_fetches_result(monkeypatch, tmp_path):
+    """--host: точечная выгрузка идёт через Runner (не локальный subprocess), а итог
+    возвращается локально через fetch_tree — иначе результата на диске не окажется."""
+    m = _load()
+    r = _FakeRunner()
+    calls = {}
+
+    def fake_dump_extension(runner, base, user, pwd, ext, remote_dst, log=None, objects=None):
+        calls["dump"] = (runner, base, ext, remote_dst, objects)
+
+    def fake_fetch_tree(runner, remote_dir, local_dir):
+        calls["fetch"] = (runner, remote_dir, local_dir)
+
+    monkeypatch.setattr("onec_metadata.apply.dumpload.dump_extension", fake_dump_extension)
+    monkeypatch.setattr("onec_metadata.apply.dumpload.fetch_tree", fake_fetch_tree)
+
+    out_dir = tmp_path / "out"
+    m.remote_dump(r, r"vc-p-1c-f-app01\FranchiseERP_Dev_TVG", "u", "p", "askЯдро",
+                 ["ОбщийМодуль.Тест"], str(out_dir), workdir=r"C:\work\point_sync")
+
+    assert r.made_dirs == [r"C:\work\point_sync"]
+    dump_runner, dump_base, dump_ext, remote_dst, objects = calls["dump"]
+    assert dump_runner is r
+    assert dump_base == r"vc-p-1c-f-app01\FranchiseERP_Dev_TVG"
+    assert dump_ext == "askЯдро"
+    assert objects == ["ОбщийМодуль.Тест"]
+    fetch_runner, fetch_remote_dir, fetch_local_dir = calls["fetch"]
+    assert fetch_runner is r
+    assert fetch_remote_dir == remote_dst          # тот же удалённый каталог, что дампили
+    assert fetch_local_dir == out_dir.resolve()
+
+
+def test_remote_load_uploads_then_loads_without_update_dbcfg(monkeypatch, tmp_path):
+    """--host: точечная загрузка сперва отправляет локальный каталог на сервер (иначе
+    файлов, которые правил AI локально, там просто нет), затем -files; UpdateDBCfg
+    в ad hoc цикле НЕ вызывается — это шаг человека в Конфигураторе."""
+    m = _load()
+    r = _FakeRunner()
+    calls = {}
+
+    def fake_upload(runner, local_dir, remote_dir):
+        calls["upload"] = (runner, local_dir, remote_dir)
+
+    def fake_load_extension(runner, base, user, pwd, ext, remote_src, log=None,
+                            files=None, update_dbcfg=True):
+        calls["load"] = (runner, base, ext, remote_src, files, update_dbcfg)
+
+    monkeypatch.setattr(m, "_upload_dir_plain", fake_upload)
+    monkeypatch.setattr("onec_metadata.apply.dumpload.load_extension", fake_load_extension)
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    m.remote_load(r, r"vc-p-1c-f-app01\FranchiseERP_Dev_TVG", "u", "p", "askЯдро",
+                 [r"CommonModules\X\Ext\Module.bsl"], str(out_dir), workdir=r"C:\work\point_sync")
+
+    assert r.made_dirs == [r"C:\work\point_sync"]
+    up_runner, up_local, up_remote = calls["upload"]
+    assert up_runner is r
+    assert up_local == out_dir.resolve()
+    load_runner, load_base, load_ext, remote_src, files, update_dbcfg = calls["load"]
+    assert load_runner is r
+    assert remote_src == up_remote                 # грузим ровно то, что залили
+    assert files == [r"CommonModules\X\Ext\Module.bsl"]
+    assert update_dbcfg is False
+
+
 def test_changed_files_via_git(tmp_path):
     m = _load()
     d = tmp_path / "out"
