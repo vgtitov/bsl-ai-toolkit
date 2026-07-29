@@ -135,6 +135,31 @@ def _prompt(label: str, default: str = "") -> str:
     return val or default
 
 
+def admin_handoff_text(alias: str, ip: str, login: str, pub: str) -> str:
+    """Готовый текст для отправки администратору. Покрывает обе учётки:
+    обычную (ключ в профиль) и админскую (ключ в administrators_authorized_keys)."""
+    return (
+        f"Прошу дать SSH-доступ на терминал {alias} ({ip}) под моей учёткой {login}.\n"
+        "Нужно: (1) моя учётка в группе доступа SSH; (2) мой публичный ключ на сервере.\n"
+        "Мой ключ:\n\n"
+        f"{pub}\n\n"
+        "Куда класть ключ — зависит от прав моей учётки на терминале:\n\n"
+        "• ОБЫЧНАЯ учётка — в профиль (PowerShell под моей учёткой из RDP):\n"
+        r'    $k = "<ключ выше>"' + "\n"
+        r'    New-Item -ItemType Directory -Force "$env:USERPROFILE\.ssh" | Out-Null' + "\n"
+        r'    Set-Content "$env:USERPROFILE\.ssh\authorized_keys" $k -Encoding ascii' + "\n"
+        r'    icacls "$env:USERPROFILE\.ssh\authorized_keys" /inheritance:r /grant:r "$env:USERNAME:F" "SYSTEM:F"' + "\n\n"
+        "• АДМИНСКАЯ учётка (входит в Администраторы сервера) — sshd читает ключ НЕ из\n"
+        "  профиля, а из общего файла; класть туда (PowerShell от администратора):\n"
+        r'    $k = "<ключ выше>"' + "\n"
+        r'    $f = "C:\ProgramData\ssh\administrators_authorized_keys"' + "\n"
+        r'    Add-Content $f $k -Encoding ascii' + "\n"
+        r'    icacls $f /inheritance:r /grant "Administrators:F" "SYSTEM:F"' + "\n\n"
+        "Если не знаете, какая у меня учётка — админская или обычная — подскажите, "
+        "проверю сам."
+    )
+
+
 def cmd_setup(args: argparse.Namespace) -> int:
     missing = check_client()
     if missing:
@@ -143,7 +168,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
         print("macOS/Linux: ssh обычно уже установлен; иначе поставьте пакет openssh-client.")
         return 2
 
-    alias = args.host or _prompt("Алиас (короткое имя хоста)", "onec-rds-kz")
+    alias = args.host or _prompt("Имя терминала (как в реестре баз, напр. vc-d-rds-01)", "vc-d-rds-01")
     ip = args.ip or _prompt("Адрес терминала (IP)")
     login = args.login or _prompt(r"Ваш логин домена (ДОМЕН\пользователь)")
     identity = args.identity
@@ -161,17 +186,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
     print("─" * 70)
     print("ОТПРАВЬТЕ АДМИНИСТРАТОРУ (например в Teams) следующий текст и ключ:")
     print("─" * 70)
-    print(f"Прошу дать SSH-доступ на терминал {alias} ({ip}) под моей учёткой {login}.")
-    print("Положите, пожалуйста, мой публичный ключ в authorized_keys моего профиля на")
-    print("сервере и добавьте учётку в группу доступа SSH. Мой ключ:")
-    print()
-    print(pub)
-    print()
-    print("Команды на сервере (PowerShell под моей учёткой из RDP-сессии):")
-    print(r'  $k = "<вставить ключ выше>"')
-    print(r'  New-Item -ItemType Directory -Force "$env:USERPROFILE\.ssh" | Out-Null')
-    print(r'  Set-Content "$env:USERPROFILE\.ssh\authorized_keys" $k -Encoding ascii')
-    print(r'  icacls "$env:USERPROFILE\.ssh\authorized_keys" /inheritance:r /grant:r "$env:USERNAME:F" "SYSTEM:F"')
+    print(admin_handoff_text(alias, ip, login, pub))
     print("─" * 70)
     print()
     print("Когда админ подтвердит — проверьте связь:")
