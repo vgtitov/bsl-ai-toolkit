@@ -149,14 +149,14 @@ def test_dump_extension_objects_uses_listfile_and_cleans_up(monkeypatch, tmp_pat
             self.removed.append(path)
 
     r = FakeRunner()
-    dumpload.dump_extension(r, r"srv\base", "u", "p", "askЯдро", r"D:\src\dump",
+    dumpload.dump_extension(r, r"srv\base", "u", "p", "Расширение", r"D:\src\dump",
                             objects=["ОбщийМодуль.Тест", "Справочник.Товары"])
 
     assert r.put_calls, "listFile не отправлен на сервер"
     content, remote_listfile = r.put_calls[0]
     assert content == "ОбщийМодуль.Тест\nСправочник.Товары"
     assert any("-listFile" in c and remote_listfile in c for c in r.run_calls)
-    assert any("-Extension askЯдро" in c for c in r.run_calls)
+    assert any("-Extension Расширение" in c for c in r.run_calls)
     assert r.removed == [remote_listfile]
 
 
@@ -181,7 +181,7 @@ def test_dump_extension_without_objects_no_listfile(monkeypatch):
             self.put_called = True
 
     r = FakeRunner()
-    dumpload.dump_extension(r, r"srv\base", "u", "p", "askЯдро", r"D:\src\dump")
+    dumpload.dump_extension(r, r"srv\base", "u", "p", "Расширение", r"D:\src\dump")
     assert not r.put_called
     assert not any("-listFile" in c for c in r.run_calls)
 
@@ -229,13 +229,13 @@ def test_load_extension_files_and_update_dbcfg_toggle(monkeypatch):
             return 0, "__DSGN_OK__"
 
     r = FakeRunner()
-    dumpload.load_extension(r, r"srv\base", "u", "p", "askЯдро", r"D:\src\dump",
+    dumpload.load_extension(r, r"srv\base", "u", "p", "Расширение", r"D:\src\dump",
                             files=[r"CommonModules\X\Ext\Module.bsl"], update_dbcfg=False)
     assert any("-files CommonModules/X/Ext/Module.bsl" in c for c in r.calls)
     assert not any("/UpdateDBCfg" in c for c in r.calls)
 
     r2 = FakeRunner()
-    dumpload.load_extension(r2, r"srv\base", "u", "p", "askЯдро", r"D:\src\dump")
+    dumpload.load_extension(r2, r"srv\base", "u", "p", "Расширение", r"D:\src\dump")
     assert any("/UpdateDBCfg" in c for c in r2.calls), "дефолт (полный цикл) обязан обновить БД расширения"
 
 
