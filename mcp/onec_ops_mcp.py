@@ -40,8 +40,16 @@ def load_dotenv_defaults(*dirs):
             if not line or line.startswith("#") or "=" not in line:
                 continue
             k, v = line.split("=", 1)
-            k, v = k.strip(), v.strip().strip("'\"")
-            if k and k not in os.environ:
+            k, v = k.strip(), v.strip()
+            if v[:1] not in ("'", '"'):        # срезать inline-комментарий у некавыченного значения
+                if v.startswith("#"):
+                    v = ""
+                else:
+                    cut = min([i for i in (v.find(" #"), v.find("\t#")) if i != -1], default=-1)
+                    if cut != -1:
+                        v = v[:cut].strip()
+            v = v.strip("'\"")
+            if k and v and k not in os.environ:  # пустое значение = «взять дефолт», не выставляем
                 os.environ[k] = v
                 added[k] = v
     return added
