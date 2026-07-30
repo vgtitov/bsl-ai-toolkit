@@ -157,6 +157,52 @@ def check_unsafe_action_protection(base: str | None = None):
     return res
 
 
+def check_com_connector():
+    """V83.COMConnector — резервный механизм доступа к данным живой ИБ (см. docs/data-access-architecture.md,
+    строка «COM» в сравнительной матрице): расходует клиентскую лицензию, только Windows, но иногда — единственный
+    вариант со стороны Windows-узла. Регистрация COM-класса (regsvr32) может завершиться НЕПОЛНОЙ: сам класс
+    зарегистрирован (CLSID есть), но библиотека типов (TypeLib) — нет; тогда позднее связывание (PowerShell,
+    .NET, большинство скриптовых языков) падает с TYPE_E_LIBNOTREGISTERED, а ранее связанный код может работать.
+    Только Windows; ничего не проверяет, если коннектор не зарегистрирован вовсе (он не всем нужен)."""
+    if os.name != "nt":
+        return []
+    try:
+        import winreg
+    except ImportError:
+        return []
+    name = "COM V83.COMConnector"
+    try:
+        with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, r"V83.COMConnector\CLSID") as k:
+            clsid = winreg.QueryValueEx(k, None)[0]
+    except FileNotFoundError:
+        return []                          # не зарегистрирован — резервный механизм, не всем нужен
+    except OSError as e:
+        return [(WARN, name, f"не смог прочитать реестр ({type(e).__name__})")]
+    dll = None
+    try:
+        with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, fr"CLSID\{clsid}\InprocServer32") as k:
+            dll = winreg.QueryValueEx(k, None)[0]
+    except OSError:
+        pass
+    try:
+        with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, fr"CLSID\{clsid}\TypeLib") as k:
+            libid = winreg.QueryValueEx(k, None)[0]
+    except FileNotFoundError:
+        return [(WARN, name, f"CLSID {clsid} зарегистрирован, но без ключа TypeLib — "
+                              f"перерегистрируй: regsvr32 \"{dll or '<comcntr.dll платформы>'}\"")]
+    except OSError as e:
+        return [(WARN, name, f"не смог прочитать ключ TypeLib для CLSID {clsid} ({type(e).__name__})")]
+    try:
+        winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, fr"TypeLib\{libid}").Close()
+    except FileNotFoundError:
+        return [(WARN, name, f"библиотека типов {libid} НЕ зарегистрирована (TYPE_E_LIBNOTREGISTERED "
+                              "у позднего связывания — PowerShell/.NET упадёт, хотя CLSID на месте): "
+                              f"перерегистрируй от администратора — regsvr32 \"{dll or '<comcntr.dll платформы>'}\"")]
+    except OSError as e:
+        return [(WARN, name, f"не смог прочитать TypeLib\\{libid} в реестре ({type(e).__name__})")]
+    return [(OK, name, f"CLSID и TypeLib зарегистрированы ({dll or clsid})")]
+
+
 def check_prereqs():
     res = []
     for c, hint in [("git", "winget install Git.Git"), ("uv", "https://astral.sh/uv"),
@@ -228,6 +274,7 @@ def main():
 
     results += check_prereqs()
     results += check_unsafe_action_protection(ns.base)
+    results += check_com_connector()
 
     cfg = Path(ns.config) if ns.config else Path.cwd() / ".mcp.json"
     if not cfg.exists():
