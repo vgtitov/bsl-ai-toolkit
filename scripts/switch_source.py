@@ -13,6 +13,12 @@
             (секрет в файл НЕ пишется, остаётся в окружении).
   auto    — если задан ONEC_MCP_URL и центр доступен по TCP → central, иначе local (безопасный откат).
 
+central + локальные клоны рядом (ONEC_SRC_DIR с хотя бы одним .git внутри) — ставится ВТОРОЙ сервер
+`onec-code-local` НЕ вместо центрального, а ДОПОЛНИТЕЛЬНО: центр экономит место (не все конфигурации
+клонированы), но актуальная версия репозитория, который разработчик правит здесь и сейчас, всегда
+локально — центр синхронизируется с лагом. Агенту: если есть оба сервера, по репозиторию, который
+реально склонирован локально, предпочитать onec-code-local; onec-code (центр) — для остального/breadth.
+
 Переход на центр = одна команда (её зовёт onboard и может выполнить сам ассистент):
   uv run scripts/switch_source.py --mode auto      # после раздачи ONEC_MCP_URL/ONEC_MCP_TOKEN сам подхватит центр
 Кросс-платформенно (только стандартная библиотека). После запуска — перезапустить Claude Code.
@@ -67,6 +73,17 @@ def _central_block():
             "headers": {"Authorization": "Bearer ${ONEC_MCP_TOKEN}"}}
 
 
+def _has_local_clones(src_dir):
+    """Есть ли в ONEC_SRC_DIR хотя бы один реальный клон (подкаталог с .git) — не просто движок onec_mcp.py."""
+    if not src_dir or not os.path.isdir(src_dir):
+        return False
+    try:
+        return any(os.path.isdir(os.path.join(src_dir, d, ".git"))
+                   for d in os.listdir(src_dir))
+    except OSError:
+        return False
+
+
 def switch(workdir, mode, profile):
     url = os.environ.get("ONEC_MCP_URL", "").strip()
     if mode == "auto":
@@ -84,7 +101,18 @@ def switch(workdir, mode, profile):
     # иначе Claude Code пытается поднять его по несуществующему erp_mcp.py и ругается.
     for legacy in ("erp-1c",):
         cfg["mcpServers"].pop(legacy, None)
-    cfg["mcpServers"]["onec-code"] = _central_block() if mode == "central" else _local_block(profile)
+    src_dir = os.environ.get("ONEC_SRC_DIR", "")
+    if mode == "central":
+        cfg["mcpServers"]["onec-code"] = _central_block()
+        if _has_local_clones(src_dir):
+            cfg["mcpServers"]["onec-code-local"] = _local_block(profile)
+            print(f"[ok] onec-code → central; ДОПОЛНИТЕЛЬНО onec-code-local → локальные клоны в {src_dir} "
+                  "(предпочитать локальный для репо, которые реально там есть — это актуальнее центра)")
+        else:
+            cfg["mcpServers"].pop("onec-code-local", None)
+    else:
+        cfg["mcpServers"]["onec-code"] = _local_block(profile)
+        cfg["mcpServers"].pop("onec-code-local", None)  # локальный режим и так читает ONEC_SRC_DIR — дублировать незачем
     with open(mcp_path, "w", encoding="utf-8") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
         f.write("\n")
