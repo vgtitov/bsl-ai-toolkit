@@ -81,10 +81,16 @@ class Runner:
         self.host = host
 
     def run(self, cmd: str, timeout: int = 600):
+        # encoding+errors ОБЯЗАТЕЛЬНЫ: text=True без encoding декодирует вывод ssh
+        # локальной кодировкой Windows (cp1251), а файл-результат/лог платформа отдаёт
+        # в UTF-8 (read_text тянет его через `chcp 65001 & type`). На кириллице это
+        # роняло `UnicodeDecodeError: 'charmap' codec` уже ПОСЛЕ успешного прогона.
+        # errors="replace" — служебные команды (whoami/ver) редко, но бывают не-UTF-8.
         with _masked(cmd, timeout):
             p = subprocess.run(
                 ["ssh", "-o", "BatchMode=yes", self.host, cmd],
-                capture_output=True, text=True, timeout=timeout)
+                capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=timeout)
         return p.returncode, (p.stdout + p.stderr)
 
     def put(self, local, remote: str, timeout: int = 300):
