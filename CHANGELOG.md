@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+## [2.2.3] - 2026-07-31
+
+### Fixed
+- Release validation учитывает поведение `actions/checkout` для tag-trigger: локальный
+  ref аннотированного тега может быть нормализован до peeled commit. Источником истины
+  теперь служат direct и peeled refs удалённого тега через `git ls-remote`, а release-ветка
+  загружается отдельно без конфликтующей перезаписи локального tag ref.
+
 ## [2.2.2] - 2026-07-31
 
 ### Added
