@@ -209,6 +209,16 @@ def test_validate_pushed_tag_refuses_commit_outside_remote_main(
             release_repo.work, "v1.0.1", "origin", "main")
 
 
+def test_validate_pushed_tag_refuses_lightweight_tag(
+        release_repo: ReleaseRepo):
+    """Release tags carry metadata and therefore must be annotated objects."""
+    release_repo.prepare_release("v1.0.1")
+    release_repo.git("tag", "v1.0.1")
+    with pytest.raises(release_guard.ReleaseError, match="annotated"):
+        release_guard.validate_pushed_tag(
+            release_repo.work, "v1.0.1", "origin", "main")
+
+
 def test_cli_check_accepts_explicit_verification_command(
         release_repo: ReleaseRepo):
     """Maintainers can run a deterministic preflight without shell evaluation."""
@@ -294,3 +304,20 @@ def test_cli_reports_contract_error_without_traceback(tmp_path: Path):
     assert result.returncode == 2
     assert result.stderr.startswith("ERROR:")
     assert "Traceback" not in result.stderr
+
+
+def test_release_workflow_runs_tests_and_guard_before_release():
+    """Tag publication repeats verification before creating a release."""
+    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
+        encoding="utf-8")
+    full_tests = (
+        'uv run --no-project --with "mcp<2" --with pytest --with lxml '
+        "--with openpyxl --with xlrd pytest tests/ -q"
+    )
+    guard = 'python scripts/release_guard.py validate-tag "$TAG"'
+    publish = 'gh release create "$TAG"'
+    assert "fetch-depth: 0" in workflow
+    assert full_tests in workflow
+    assert guard in workflow
+    assert workflow.index(full_tests) < workflow.index(guard)
+    assert workflow.index(guard) < workflow.index(publish)
