@@ -102,3 +102,16 @@ def test_lfs_usage_detection(tmp_path):
     with_lfs = _init_repo(tmp_path / "lfs", "*.bin filter=lfs diff=lfs merge=lfs -text\n")
     assert _repo_uses_lfs(without) is False, "в репозитории без LFS хук обязан пропускать push"
     assert _repo_uses_lfs(with_lfs) is True, "в репозитории с LFS хук обязан требовать git-lfs"
+
+
+def test_no_external_sh_lookup():
+    """Хук не должен вызывать внешний `sh`: EDT/EGit даёт урезанный PATH, где его нет.
+
+    Реальный случай: push из EDT падал с "sh: command not found". Репо-хук запускаем напрямую
+    (исполняемый) либо в подоболочке — оба варианта не требуют поиска интерпретатора в PATH.
+    """
+    ours = (SCRIPTS_DIR / "git-hooks" / "pre-push").read_text(encoding="utf-8")
+    code = [ln for ln in ours.splitlines() if not ln.lstrip().startswith("#")]
+    assert not any(ln.strip().startswith("sh ") or " sh " in ln for ln in code),         "вызов внешнего sh в хуке — он не находится в окружении EDT"
+    assert '"$REPO_HOOK" "$@"' in ours, "исполняемый репо-хук должен запускаться напрямую"
+    assert '( . "$REPO_HOOK" )' in ours, "нужен фолбэк через подоболочку для неисполняемого файла"
