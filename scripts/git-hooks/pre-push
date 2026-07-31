@@ -20,7 +20,14 @@
 
 REPO_HOOK="scripts/hooks/pre-push"
 if [ -f "$REPO_HOOK" ]; then
-    sh "$REPO_HOOK" "$@" </dev/null || exit 1
+    # НЕ вызываем внешний `sh`: EDT/EGit запускает хуки с урезанным PATH, где его нет — реальный
+    # случай, push из EDT падал с "line 23: sh: command not found". Исполняемый файл запускаем
+    # напрямую (шебанг разрешается по абсолютному пути), иначе — в подоболочке, без поиска в PATH.
+    if [ -x "$REPO_HOOK" ]; then
+        "$REPO_HOOK" "$@" </dev/null || exit 1
+    else
+        ( . "$REPO_HOOK" ) </dev/null || exit 1
+    fi
 fi
 
 if command -v git-lfs >/dev/null 2>&1; then
