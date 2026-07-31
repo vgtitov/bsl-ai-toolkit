@@ -164,6 +164,8 @@ def validate_pushed_tag(
     parse_version(version)
     _require_changelog(root, version)
     _fetch_release_ref(root, remote, branch)
+    if _run_git(root, "cat-file", "-t", version) != "tag":
+        raise ReleaseError(f"release tag {version} must be annotated")
     tag_commit = _run_git(root, "rev-parse", f"{version}^{{}}")
     head = _run_git(root, "rev-parse", "HEAD")
     if tag_commit != head:
