@@ -204,6 +204,7 @@ def test_validate_pushed_tag_refuses_commit_outside_remote_main(
     release_repo.git("add", "unreviewed.txt")
     release_repo.git("commit", "-qm", "unreviewed")
     release_repo.git("tag", "-a", "v1.0.1", "-m", "Release v1.0.1")
+    release_repo.git("push", "-q", "origin", "v1.0.1")
     with pytest.raises(release_guard.ReleaseError, match="origin/main"):
         release_guard.validate_pushed_tag(
             release_repo.work, "v1.0.1", "origin", "main")
@@ -214,9 +215,24 @@ def test_validate_pushed_tag_refuses_lightweight_tag(
     """Release tags carry metadata and therefore must be annotated objects."""
     release_repo.prepare_release("v1.0.1")
     release_repo.git("tag", "v1.0.1")
+    release_repo.git("push", "-q", "origin", "v1.0.1")
     with pytest.raises(release_guard.ReleaseError, match="annotated"):
         release_guard.validate_pushed_tag(
             release_repo.work, "v1.0.1", "origin", "main")
+
+
+def test_validate_pushed_tag_accepts_actions_checkout_normalized_tag(
+        release_repo: ReleaseRepo):
+    """Actions may replace the local annotated ref with its peeled commit."""
+    release_repo.prepare_release("v1.0.1")
+    release_repo.git("tag", "-a", "v1.0.1", "-m", "Release v1.0.1")
+    release_repo.git("push", "-q", "origin", "v1.0.1")
+    commit = release_repo.git("rev-parse", "v1.0.1^{}")
+    release_repo.git("update-ref", "refs/tags/v1.0.1", commit)
+    assert release_repo.git("cat-file", "-t", "v1.0.1") == "commit"
+
+    release_guard.validate_pushed_tag(
+        release_repo.work, "v1.0.1", "origin", "main")
 
 
 def test_cli_check_accepts_explicit_verification_command(

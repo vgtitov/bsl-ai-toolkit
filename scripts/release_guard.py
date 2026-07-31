@@ -75,10 +75,13 @@ def _fetch_release_ref(root: Path, remote: str, branch: str) -> None:
         root,
         "fetch",
         "--quiet",
-        "--tags",
         remote,
         f"refs/heads/{branch}:refs/remotes/{remote}/{branch}",
     )
+
+
+def _fetch_release_tags(root: Path, remote: str) -> None:
+    _run_git(root, "fetch", "--quiet", "--tags", remote)
 
 
 def _require_clean_release_branch(
@@ -90,6 +93,7 @@ def _require_clean_release_branch(
         raise ReleaseError(
             f"release branch must be {branch}, got {actual_branch or 'detached HEAD'}")
     _fetch_release_ref(root, remote, branch)
+    _fetch_release_tags(root, remote)
     head = _run_git(root, "rev-parse", "HEAD")
     remote_head = _run_git(
         root, "rev-parse", f"refs/remotes/{remote}/{branch}")
@@ -156,6 +160,39 @@ def create_release_tag(
     _run_git(root, "tag", "-a", version, "-m", message)
 
 
+def _remote_annotated_tag_commit(
+        root: Path, remote: str, version: str) -> str:
+    result = subprocess.run(
+        [
+            "git",
+            "ls-remote",
+            "--exit-code",
+            "--tags",
+            remote,
+            f"refs/tags/{version}",
+            f"refs/tags/{version}^{{}}",
+        ],
+        cwd=root,
+        text=True,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        reason = result.stderr.strip() or result.stdout.strip()
+        suffix = f": {reason}" if reason else ""
+        raise ReleaseError(
+            f"remote tag {version} is unavailable on {remote}{suffix}")
+    refs = {}
+    for line in result.stdout.splitlines():
+        fields = line.split(maxsplit=1)
+        if len(fields) == 2:
+            refs[fields[1]] = fields[0]
+    tag_ref = f"refs/tags/{version}"
+    peeled_ref = f"{tag_ref}^{{}}"
+    if tag_ref not in refs or peeled_ref not in refs:
+        raise ReleaseError(f"remote release tag {version} must be annotated")
+    return refs[peeled_ref]
+
+
 def validate_pushed_tag(
         root: Path,
         version: str,
@@ -164,9 +201,7 @@ def validate_pushed_tag(
     parse_version(version)
     _require_changelog(root, version)
     _fetch_release_ref(root, remote, branch)
-    if _run_git(root, "cat-file", "-t", version) != "tag":
-        raise ReleaseError(f"release tag {version} must be annotated")
-    tag_commit = _run_git(root, "rev-parse", f"{version}^{{}}")
+    tag_commit = _remote_annotated_tag_commit(root, remote, version)
     head = _run_git(root, "rev-parse", "HEAD")
     if tag_commit != head:
         raise ReleaseError(
