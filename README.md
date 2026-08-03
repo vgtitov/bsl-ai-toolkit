@@ -50,7 +50,7 @@ AI-агенты (Claude Code, Cursor, Copilot, Gemini CLI, Codex, Cline, Windsur
 bsl-ai-toolkit/
 ├── core/                       # ЕДИНЫЙ ИСТОЧНИК ИСТИНЫ (общий для всех AI-агентов)
 │   ├── AGENTS.md               # правила (спроси-инструмент, слои контура, гейт метаданных, производительность, безопасность)
-│   ├── skills/                 # SKILL.md × 7: 1c-dev · 1c-analyst · 1c-metadata · 1c-admin-devops · 1c-dba · 1c-expert · 1c-tester
+│   ├── skills/                 # SKILL.md × 8: 1c-dev · 1c-analyst · 1c-metadata · 1c-admin-devops · 1c-dba · 1c-expert · 1c-tester · 1c-estimation
 │   └── mcp/servers.json        # профиль MCP: onec-code · bsl-ls · onec-ops · onec-data (пути/креды через env)
 ├── adapters/                   # тонкие адаптеры под агентов (claude — эталон; codex/gemini — фолбэк; cursor/copilot/… — rulesync)
 │   ├── claude/                 #   CLAUDE.md (@AGENTS.md) + settings.json (хук bsl_guard)
