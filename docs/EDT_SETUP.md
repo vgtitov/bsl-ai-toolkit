@@ -56,3 +56,31 @@ curl -N -H "Authorization: Bearer $EDT_MCP_TOKEN" http://127.0.0.1:3001/mcp/sse
 
 Безопасность: токен EDT MCP только в окружении. Слой обезличивания персональных данных в плагине не отменяет наших
 правил — данные информационной базы в модель без необходимости не отправляем.
+
+## Известное ограничение `DitriXNew/EDT-MCP`: внешняя обработка/отчёт (проверено 24.07.2026)
+Плагин (версии 2.6.x) создаёт **проект** внешних объектов, но не создаёт сам объект внешней обработки/отчёта:
+`create_metadata`/`modify_metadata` падают с «Could not get configuration for project» (у externalObjects-проекта нет
+Configuration), отдельного create-инструмента нет, инструмент сборки только компилирует уже существующие объекты.
+Рабочий путь — материализация на диск + индексация:
+
+1. **Проект:** `create_project projectKind=externalObjects name=<Имя> version=8.3.27 scriptVariant=Russian` (на диске
+   `.project`, `DT-INF/PROJECT.PMF`, `.settings/`; при таймауте проверь `list_projects` — обычно уже создан).
+2. **Объект — по каноническому пути:** `src/ExternalDataProcessors/<Имя>/<Имя>.mdo` (для отчёта —
+   `src/ExternalReports/<Имя>/<Имя>.mdo`). ⚠ Именно `src/External…` — в корне проекта не индексируется (проверено:
+   раскладка в `<project>/<Имя>/` не подхватывается даже после `clean_project`). В `.mdo`: root
+   `mdclass:ExternalDataProcessor` (для отчёта `ExternalReport`); `producedTypes` содержит только `objectType` (менеджера
+   у внешнего объекта нет); обязателен `<containedObjects classId="c3831ec8-d8d5-4f93-8a22-f9bfae07327f"
+   objectId="<новый GUID>"/>` (classId фиксирован для внешней обработки; у внешнего отчёта свой — бери из образца); опц.
+   `useStandardCommands`, `defaultForm`. Все `uuid`/`typeId`/`valueTypeId`/`objectId` — свежие GUID, не переиспользуй чужие.
+3. **Формы — на диск:** `src/ExternalDataProcessors/<Имя>/Forms/<Форма>/Form.form` + `Module.bsl` (+
+   `Attributes/<Рекв>/ExtInfo/ListSettings.dcss` для динамических списков, `Help/ru.html` — по необходимости). В `.mdo`
+   добавить на каждую форму блок `<forms uuid="<GUID>"><name>..</name><usePurposes>PersonalComputer</usePurposes>…</forms>`
+   и `<defaultForm>ExternalDataProcessor.<Имя>.Form.<Форма></defaultForm>`. Схема `Form.form` — та же, что у внутренней
+   обработки (можно брать из типовой конфигурации), ссылки на формы — `ExternalDataProcessor.<Имя>.Form.<Форма>`.
+4. **Индексация:** `clean_project <Проект>` (полный ребилд надёжно подхватывает новый top-объект с диска; точечного
+   `revalidate_objects` для нового объекта в externalObjects-проекте может не хватить). Проверка — `get_project_errors`.
+5. **Сборка `.epf`/`.erf`:** `build_external_objects projectName=<Проект> outputDir=<путь>` (нужен резолвимый рантайм 1С,
+   как для `update_database`; `recordBuildTime=false` — чтобы не переписывать Comment/.mdo).
+
+Ограничение стоит завести как фидбэк-кандидат в апстрим DitriX: нужен create-инструмент для внешних объектов (сейчас —
+только руками на диске).
