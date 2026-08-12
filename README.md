@@ -133,7 +133,7 @@ Toolkit — не только про код: смежные системы SDLC/
 | **Zabbix** | APDEX → trapper-items (`1c.apdex[...]`), метрики/проблемы/дашборды, perf-отчёт и diff | `scripts/apdex_to_zabbix.py`, `scripts/zabbix_perf.py`, MCP `onec-ops` (Zabbix API) |
 | **Prometheus** | запрос метрик 1С/кластера (PromQL) | MCP `onec-ops` (`prometheus_query`) |
 | **Технологический журнал / ЖР** | разбор ТЖ (TTIMEOUT/TLOCK/EXCP…), журнал регистрации, APDEX по операциям | MCP `onec-ops` (`tech_journal_parse`, `event_log_parse`, `apdex_by_operation`) |
-| **BSL Language Server** | диагностики BSL после каждой правки | MCP `bsl-ls` (в комплекте) + авто-скачивание `scripts/detect_tools.py` |
+| **BSL Language Server** | батч-диагностики BSL после правки + (≥1.0, JDK 21+) навигация по типам/ссылкам/hover | MCP `bsl-ls` + `bsl-ls-native` (в комплекте) + авто-скачивание `scripts/detect_tools.py` |
 | **Данные живой ИБ** | OData + отладочный сервис `ai_debug` (read-only, RLS, маскирование ПДн) | MCP `onec-data` (10 инструментов) |
 | **Центральный onec-code** | общий на команду поиск по коду 1С по HTTP за auth (Caddy) | `server/` (docker-compose) + `scripts/switch_source.py` / `set_token.*` |
 

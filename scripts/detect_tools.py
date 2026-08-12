@@ -23,7 +23,12 @@
   uv run scripts/detect_tools.py --install  # + скачать недостающие бесплатные инструменты
   uv run scripts/detect_tools.py --dry-run  # только показать, ничего не менять и не качать
 
-Версии можно переопределить env: BSL_LS_VERSION (дефолт 0.28.5), MCP_BSL_CONTEXT_VERSION (дефолт 0.3.2).
+Версии можно переопределить env: BSL_LS_VERSION (дефолт 1.0.7), MCP_BSL_CONTEXT_VERSION (дефолт 0.3.2).
+
+⚠ bsl-language-server ≥1.0 требует **JDK 21+** (class file version 65; проверено локально на 0.28.5→JDK17
+и 1.0.7→JDK21, см. docs/design/2026-08-12-bsl-ls-mcp-mode.md) — старее JDK даёт
+`UnsupportedClassVersionError`, а не диагностику 1С. mcp-bsl-context (bsl-platform) на JDK17+ работает
+как прежде. Скрипт проверяет РЕАЛЬНУЮ версию найденной java, а не только её наличие.
 """
 import argparse, os, re, ssl, subprocess, sys, tempfile, urllib.request
 from pathlib import Path
@@ -45,7 +50,7 @@ TOOLS_MCP = HOME / "tools" / "mcp"
 TOOLS_BSL = HOME / "tools" / "bsl"
 
 # Реестр бесплатных, официально публикуемых инструментов (скачиваются при --install).
-_BSL_LS_V = os.environ.get("BSL_LS_VERSION", "0.28.5")
+_BSL_LS_V = os.environ.get("BSL_LS_VERSION", "1.0.7")
 _CTX_V = os.environ.get("MCP_BSL_CONTEXT_VERSION", "0.3.2")
 INSTALLABLE = {
     "BSL_PLATFORM_JAR": {
@@ -112,6 +117,26 @@ def find_jdk_java():
             if cand.exists():
                 return cand, "EDT"
     return None, None
+
+
+_JAVA_VERSION_RE = re.compile(r'version "(\d+)(?:\.(\d+))?')
+
+
+def java_major_version(java_path):
+    """Мажорная версия JDK по выводу `java -version` (старый формат "1.8.0_x" → 8, новый "17.0.x"/"21.0.x" → как есть).
+    Возвращает None, если не удалось определить (не блокирует — просто не сможем предупредить заранее)."""
+    try:
+        p = subprocess.run([str(java_path), "-version"], capture_output=True, text=True, timeout=15)
+    except Exception:
+        return None
+    out = (p.stdout or "") + (p.stderr or "")
+    m = _JAVA_VERSION_RE.search(out)
+    if not m:
+        return None
+    major = int(m.group(1))
+    if major == 1 and m.group(2):  # старый формат "1.8.0_x" — реальная версия во втором числе
+        return int(m.group(2))
+    return major
 
 
 def _prune(dirnames):
@@ -236,12 +261,23 @@ def main():
     posix_exports = []
     found, missing = [], []
 
-    # java / JDK
+    # java / JDK — версия важна: bsl-ls ≥1.0 (BSL_LS_VERSION) требует JDK 21+, иначе валится
+    # UnsupportedClassVersionError вместо диагностики. Наличия java уже не достаточно — проверяем реальную версию.
     java, src = find_jdk_java()
     if java:
-        ok(f"java: {java} (источник: {src})")
+        v = java_major_version(java)
+        if v is None:
+            ok(f"java: {java} (источник: {src}, версию не удалось определить)")
+        elif v < 21:
+            ok(f"java: {java} (версия {v}, источник: {src})")
+            warn(f"java {v} < 21 — bsl-ls {_BSL_LS_V} НЕ запустится (нужен JDK 21+, class file version 65). "
+                 "bsl-platform и bsl-ls 0.x работают на 17+. Поставь JDK 21 (Zulu/Temurin/Liberica) и убедись, "
+                 "что именно он первый в PATH — либо закрепи BSL_LS_VERSION=0.28.5, если обновление JDK не вариант.")
+        else:
+            ok(f"java: {java} (версия {v}, источник: {src})")
     else:
-        warn("java не найден ни в PATH, ни в EDT — bsl-platform/bsl-ls не стартуют. Поставь JDK 17+ или добавь EDT-java в PATH.")
+        warn("java не найден ни в PATH, ни в EDT — bsl-platform/bsl-ls не стартуют. Поставь JDK 21+ "
+             "(закрывает и bsl-platform, и bsl-ls ≥1.0) или добавь EDT-java в PATH.")
 
     # ONEC_PLATFORM_PATH — только поиск (установка платформы не автоматизируется)
     pre = env_valid("ONEC_PLATFORM_PATH")
