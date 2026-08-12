@@ -4,6 +4,21 @@
 
 ## [Unreleased]
 
+### Added
+- **MCP `bsl-ls-native`** (issue #6) — нативный MCP-режим `bsl-language-server` ≥1.0 (JDK 21+):
+  `analyze_file`, `document_symbols`, `find_references`, `call_hierarchy`, `hover`, `definition`,
+  `type_info`, `global_member_info`, `global_member_search`, `type_at_position` — passthrough без
+  нового Python-кода, дополняет батч-диагностики `bsl-ls`. Решение и живая проверка (CLI-совместимость
+  0.28.5→1.0.7, реальный JSON-RPC диалог, риски экспериментального MCP-режима у 1c-syntax) —
+  `docs/design/2026-08-12-bsl-ls-mcp-mode.md`. `scripts/detect_tools.py`: `BSL_LS_VERSION` по
+  умолчанию `1.0.7`, добавлена реальная проверка версии JDK (не только наличие `java`).
+- **`1c-tester`, `unit-test-conventions.md`** — сверка сигнатуры инструментом (`bsl-ls-native`
+  `hover`/`type_info`/`type_at_position`) перед Arrange вместо чтения модуля глазами; оценка ширины
+  регресса через `find_references`/`call_hierarchy` при правке общей функции.
+- **`1c-estimation`, `estimation-by-analogy.md`** — раздел «Инструментальный сигнал размера — blast
+  radius по коду»: объективный сигнал числа вызывающих мест (`find_references`/`call_hierarchy`)
+  как вход для подбора аналога и оценки объёма регресса, не замена оценки по аналогии.
+
 ### Changed
 - **`1c-estimation`, порог блокера смягчён** по итогам прямого сравнения с реальным результатом
   (round 1): тест «есть ли у разработчика безопасный, дёшево поправимый дефолт» — если да,
