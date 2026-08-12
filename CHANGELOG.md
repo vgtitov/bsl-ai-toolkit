@@ -12,9 +12,10 @@
   0.28.5→1.0.7, реальный JSON-RPC диалог, риски экспериментального MCP-режима у 1c-syntax) —
   `docs/design/2026-08-12-bsl-ls-mcp-mode.md`. `scripts/detect_tools.py`: `BSL_LS_VERSION` по
   умолчанию `1.0.7`, добавлена реальная проверка версии JDK (не только наличие `java`).
-- **`1c-tester`, `unit-test-conventions.md`** — сверка сигнатуры инструментом (`bsl-ls-native`
-  `hover`/`type_info`/`type_at_position`) перед Arrange вместо чтения модуля глазами; оценка ширины
-  регресса через `find_references`/`call_hierarchy` при правке общей функции.
+- **`1c-tester`, `unit-test-conventions.md`** — необязательные пункты чек-листа (не отдельный
+  блокирующий этап): при сомнении в сигнатуре — `bsl-ls-native` (`hover`/`type_info`) вместо
+  догадки; при правке общей функции — `find_references`/`call_hierarchy` на предмет регресса у
+  других вызывающих.
 - **`1c-estimation`, `estimation-by-analogy.md`** — раздел «Инструментальный сигнал размера — blast
   radius по коду»: объективный сигнал числа вызывающих мест (`find_references`/`call_hierarchy`)
   как вход для подбора аналога и оценки объёма регресса, не замена оценки по аналогии.
