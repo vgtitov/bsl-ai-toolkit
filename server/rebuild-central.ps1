@@ -10,11 +10,11 @@
 .PARAMETER RepoDir
   Путь к клону toolkit на Work PC.
 .EXAMPLE
-  .\server\rebuild-central.ps1 -Context corp -RepoDir C:\dev\tvg\rp\claude-1c-toolkit
+  .\server\rebuild-central.ps1 -Context corp -RepoDir C:\dev\<путь>\claude-1c-toolkit
 #>
 param(
   [string]$Context = 'corp',
-  [string]$RepoDir = 'C:\dev\tvg\rp\claude-1c-toolkit'
+  [string]$RepoDir = 'C:\dev\<путь>\claude-1c-toolkit'
 )
 $ErrorActionPreference = 'Stop'
 
