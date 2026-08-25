@@ -6,15 +6,15 @@
   Образы переименованы claude-1c-toolkit/* -> bsl-ai-toolkit/*. Контекст сборки = корень репозитория (Dockerfile
   делает COPY mcp/*.py), поэтому запускать из клона toolkit. Клон обновляется из ПУБЛИЧНОГО GitHub (без корп-авторизации).
 .PARAMETER Context
-  Имя docker context удалённого движка (по умолчанию 'askona' = ssh://askona-docker).
+  Имя docker context удалённого движка (по умолчанию 'corp' = ssh://corp-docker).
 .PARAMETER RepoDir
   Путь к клону toolkit на Work PC.
 .EXAMPLE
-  .\server\rebuild-central.ps1 -Context askona -RepoDir C:\dev\tvg\rp\claude-1c-toolkit
+  .\server\rebuild-central.ps1 -Context corp -RepoDir C:\dev\<путь>\claude-1c-toolkit
 #>
 param(
-  [string]$Context = 'askona',
-  [string]$RepoDir = 'C:\dev\tvg\rp\claude-1c-toolkit'
+  [string]$Context = 'corp',
+  [string]$RepoDir = 'C:\dev\<путь>\claude-1c-toolkit'
 )
 $ErrorActionPreference = 'Stop'
 
