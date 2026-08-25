@@ -276,7 +276,7 @@ Run:
 
 ```bash
 uv run --python 3.12 --no-project --with pytest pytest tests/test_release_guard.py tests/test_consumer_pin.py -q
-rg -n 'askona|Аскона|gitlab\.askona|claude-1c-team' scripts/release_guard.py scripts/consumer_pin.py docs/RELEASING.md docs/AI_UPDATE.md
+rg -n '<имя организации>|<её латиницей>|gitlab\.<её домен>|claude-1c-team' scripts/release_guard.py scripts/consumer_pin.py docs/RELEASING.md docs/AI_UPDATE.md
 ```
 
 Expected: tests pass; scope search returns no matches in the new generic release surface.
