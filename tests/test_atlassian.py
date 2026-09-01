@@ -26,7 +26,7 @@ def test_md_link_and_escape():
 
 def test_conf_page_id_parsing(monkeypatch):
     # числовой id и оба вида URL разбираются без сети
-    assert atlassian.conf_page_id("209491238") == "209491238"
+    assert atlassian.conf_page_id("123456789") == "123456789"
     assert atlassian.conf_page_id("https://c.x/pages/viewpage.action?pageId=123") == "123"
     assert atlassian.conf_page_id("https://c.x/spaces/AD/pages/456/T") == "456"
 
