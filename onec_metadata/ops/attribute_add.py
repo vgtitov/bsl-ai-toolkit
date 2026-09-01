@@ -4,6 +4,9 @@
 - Конфигуратор (`*.xml`): <Attribute> в ChildObjects (MDClasses);
 - EDT (`*.mdo`): блок <attributes> (mdclass).
 
+Образец берётся ТОЛЬКО с корневого уровня объекта (реквизиты табличных
+частей не годятся: клон оттуда попал бы внутрь ТЧ).
+
 Новый реквизит — deepcopy последнего существующего (наследует отступы и
 структуру, как сгенерировала бы IDE) с заменой uuid / имени / синонима / типа.
 Объект без единого реквизита-образца не поддерживается (создание «с нуля» —
@@ -32,15 +35,21 @@ def _add_attribute_configurator(object_xml: Path, name: str, type_ref: str,
                                 synonym: str) -> None:
     doc = cfg.load(object_xml)
 
-    names = doc.xpath("//md:Attribute/md:Properties/md:Name/text()",
-                      namespaces=cfg.NS)
+    # ТОЛЬКО корневой уровень объекта: у объекта с табличными частями последний
+    # //md:Attribute лежит ВНУТРИ ТЧ, и образец оттуда уронил бы реквизит в ТЧ
+    # (загрузка при этом проходит успешно, ошибка видна только запросом к полю).
+    own = "//md:ChildObjects[not(ancestor::md:TabularSection)]/md:Attribute"
+
+    names = doc.xpath(f"{own}/md:Properties/md:Name/text()", namespaces=cfg.NS)
     if name in names:
         raise OpPreconditionError(f"Реквизит '{name}' уже существует")
 
-    attrs = doc.xpath("//md:Attribute", namespaces=cfg.NS)
+    attrs = doc.xpath(own, namespaces=cfg.NS)
     if not attrs:
         raise OpPreconditionError(
-            "У объекта нет реквизита-образца (создание с нуля — отдельная операция)")
+            "У объекта нет реквизита-образца на корневом уровне "
+            "(создание с нуля — отдельная операция; реквизит табличной части — "
+            "child add --parent <ТабличнаяЧасть>)")
     sample = attrs[-1]
 
     new = copy.deepcopy(sample)
@@ -73,14 +82,20 @@ def _add_attribute_edt(mdo_path: Path, name: str, type_ref: str,
                        synonym: str) -> None:
     doc = cfg.load(mdo_path)
 
-    names = doc.xpath("//attributes/name/text()")
+    # ТОЛЬКО прямые дети корня: <attributes> внутри <tabularSections> — это
+    # реквизиты табличной части, образец оттуда положил бы новый реквизит в ТЧ.
+    root = doc.getroot()
+
+    names = [el.findtext("name") for el in root.xpath("attributes")]
     if name in names:
         raise OpPreconditionError(f"Реквизит '{name}' уже существует")
 
-    attrs = doc.xpath("//attributes")
+    attrs = root.xpath("attributes")
     if not attrs:
         raise OpPreconditionError(
-            "У объекта нет реквизита-образца (создание с нуля — отдельная операция)")
+            "У объекта нет реквизита-образца на корневом уровне "
+            "(создание с нуля — отдельная операция; реквизит табличной части — "
+            "child add --parent <ТабличнаяЧасть>)")
     sample = attrs[-1]
 
     new = copy.deepcopy(sample)
