@@ -11,8 +11,14 @@ py=python3
 command -v "$py" >/dev/null 2>&1 || py=python
 command -v "$py" >/dev/null 2>&1 || exit 0
 
-# staged .bsl файлы (только добавленные/изменённые)
-files=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null | grep -iE '\.bsl$')
+# staged .bsl файлы (только добавленные/изменённые). ВАЖНО: -z, не текстовый вывод —
+# у git core.quotepath по умолчанию true (у большинства окружений, кроме локально
+# перенастроенных), и кириллические/юникодные имена (почти все объекты 1С) в обычном
+# `--name-only` уходят в кавычки с восьмеричным экранированием: "src/...\320\257...mdo".
+# Итоговая строка кончается на `"`, а не на `o`, и `grep '\.bsl$'`/`.mdo$` перестаёт
+# матчить — файл тихо выпадает из проверки. `-z` (NUL-разделитель) путь не квотирует
+# независимо от core.quotepath.
+files=$(git diff --cached --name-only --diff-filter=ACM -z 2>/dev/null | tr '\0' '\n' | grep -iE '\.bsl$')
 
 # ВАЖНО: секция ниже не должна делать `exit 0` на пустом $files — коммит может
 # стейджить только .mdo/.rights (новый объект метаданных без кода вообще), и
@@ -47,7 +53,7 @@ fi
 # --- rights-guard: забытые права, дыры в RLS, запросы без РАЗРЕШЕННЫЕ -----------
 # Смотрит staged метаданные, роли и модули. Ошибка (объект расширения без прав)
 # блокирует коммит; предупреждения (запрос без РАЗРЕШЕННЫЕ) только печатаются.
-rfiles=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null | grep -iE '\.(bsl|mdo|rights)$')
+rfiles=$(git diff --cached --name-only --diff-filter=ACM -z 2>/dev/null | tr '\0' '\n' | grep -iE '\.(bsl|mdo|rights)$')
 if [ -n "$rfiles" ]; then
   rguard=""
   for cand in \
