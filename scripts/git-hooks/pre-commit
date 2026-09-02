@@ -7,61 +7,68 @@
 # поэтому detector ищется гибко и в ЧУЖИХ репозиториях молча пропускает (exit 0),
 # чтобы не мешать. Явно указать toolkit можно env ONEC_TOOLKIT_DIR.
 
-# staged .bsl файлы (только добавленные/изменённые)
-files=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null | grep -iE '\.bsl$')
-[ -z "$files" ] && exit 0
-
-# найти bsl_guard.py: 1) ONEC_TOOLKIT_DIR  2) scripts рядом с этим хуком
-#                     3) scripts в текущем репозитории
-guard=""
-for cand in \
-  "$ONEC_TOOLKIT_DIR/scripts/bsl_guard.py" \
-  "$(dirname "$0")/../scripts/bsl_guard.py" \
-  "$(dirname "$0")/bsl_guard.py" \
-  "$(git rev-parse --show-toplevel 2>/dev/null)/scripts/bsl_guard.py"
-do
-  [ -f "$cand" ] && guard="$cand" && break
-done
-[ -z "$guard" ] && exit 0   # detector не найден — не мешаем чужим репозиториям
-
 py=python3
 command -v "$py" >/dev/null 2>&1 || py=python
 command -v "$py" >/dev/null 2>&1 || exit 0
 
-# shellcheck disable=SC2086
-echo "$files" | xargs "$py" "$guard"
-rc=$?
-if [ "$rc" -ne 0 ]; then
-  echo "" >&2
-  echo "[bsl-guard] коммит остановлен: обращение к БД в цикле (см. выше)." >&2
-  echo "  переделай пакетно; обойти разово: git commit --no-verify" >&2
-  exit 1
+# staged .bsl файлы (только добавленные/изменённые)
+files=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null | grep -iE '\.bsl$')
+
+# ВАЖНО: секция ниже не должна делать `exit 0` на пустом $files — коммит может
+# стейджить только .mdo/.rights (новый объект метаданных без кода вообще), и
+# rights-guard дальше по файлу обязан всё равно отработать. Поэтому весь
+# bsl-guard блок — внутри `if`, а не серия ранних `exit`.
+if [ -n "$files" ]; then
+  # найти bsl_guard.py: 1) ONEC_TOOLKIT_DIR  2) scripts рядом с этим хуком
+  #                     3) scripts в текущем репозитории
+  guard=""
+  for cand in \
+    "$ONEC_TOOLKIT_DIR/scripts/bsl_guard.py" \
+    "$(dirname "$0")/../scripts/bsl_guard.py" \
+    "$(dirname "$0")/bsl_guard.py" \
+    "$(git rev-parse --show-toplevel 2>/dev/null)/scripts/bsl_guard.py"
+  do
+    [ -f "$cand" ] && guard="$cand" && break
+  done
+
+  if [ -n "$guard" ]; then   # detector не найден — не мешаем чужим репозиториям
+    # shellcheck disable=SC2086
+    echo "$files" | xargs "$py" "$guard"
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+      echo "" >&2
+      echo "[bsl-guard] коммит остановлен: обращение к БД в цикле (см. выше)." >&2
+      echo "  переделай пакетно; обойти разово: git commit --no-verify" >&2
+      exit 1
+    fi
+  fi
 fi
 
 # --- rights-guard: забытые права, дыры в RLS, запросы без РАЗРЕШЕННЫЕ -----------
 # Смотрит staged метаданные, роли и модули. Ошибка (объект расширения без прав)
 # блокирует коммит; предупреждения (запрос без РАЗРЕШЕННЫЕ) только печатаются.
 rfiles=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null | grep -iE '\.(bsl|mdo|rights)$')
-[ -z "$rfiles" ] && exit 0
+if [ -n "$rfiles" ]; then
+  rguard=""
+  for cand in \
+    "$ONEC_TOOLKIT_DIR/scripts/rights_guard.py" \
+    "$(dirname "$0")/../scripts/rights_guard.py" \
+    "$(dirname "$0")/rights_guard.py" \
+    "$(git rev-parse --show-toplevel 2>/dev/null)/scripts/rights_guard.py"
+  do
+    [ -f "$cand" ] && rguard="$cand" && break
+  done
 
-rguard=""
-for cand in \
-  "$ONEC_TOOLKIT_DIR/scripts/rights_guard.py" \
-  "$(dirname "$0")/../scripts/rights_guard.py" \
-  "$(dirname "$0")/rights_guard.py" \
-  "$(git rev-parse --show-toplevel 2>/dev/null)/scripts/rights_guard.py"
-do
-  [ -f "$cand" ] && rguard="$cand" && break
-done
-[ -z "$rguard" ] && exit 0
-
-# shellcheck disable=SC2086
-echo "$rfiles" | xargs "$py" "$rguard"
-rc=$?
-if [ "$rc" -ne 0 ]; then
-  echo "" >&2
-  echo "[rights-guard] коммит остановлен: объект расширения без прав (см. выше)." >&2
-  echo "  выдай права явно в роли расширения; обойти разово: git commit --no-verify" >&2
-  exit 1
+  if [ -n "$rguard" ]; then
+    # shellcheck disable=SC2086
+    echo "$rfiles" | xargs "$py" "$rguard"
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+      echo "" >&2
+      echo "[rights-guard] коммит остановлен: объект расширения без прав (см. выше)." >&2
+      echo "  выдай права явно в роли расширения; обойти разово: git commit --no-verify" >&2
+      exit 1
+    fi
+  fi
 fi
 exit 0
