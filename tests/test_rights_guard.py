@@ -8,6 +8,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 GUARD = ROOT / "scripts" / "rights_guard.py"
+PRE_COMMIT_HOOK = ROOT / "scripts" / "git-hooks" / "pre-commit"
 
 RIGHTS_TMPL = """<?xml version="1.0" encoding="UTF-8"?>
 <Rights xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://v8.1c.ru/8.2/roles" xsi:type="Rights">
@@ -160,3 +161,29 @@ def test_strict_makes_warnings_fatal(tmp_path):
                      adopted=["ЗаимствованныйСправочник"])
     _, rc = run(src, extra=["--strict"])
     assert rc == 1
+
+
+def test_pre_commit_hook_runs_rights_guard_when_only_metadata_staged(tmp_path):
+    """Регрессия: коммит стейджит только .mdo/.rights, без .bsl вообще (типовой случай
+    «добавили новый объект метаданных»). Ранний `exit 0` bsl-guard-секции (когда нет
+    staged *.bsl) обрывал весь хук ДО rights-guard — объект без прав проходил незамеченным.
+    """
+    build_tree(tmp_path, native=["ЯдроТест"])
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
+
+    staged = subprocess.run(
+        ["git", "diff", "--cached", "--name-only"],
+        cwd=tmp_path, capture_output=True, text=True, check=True).stdout
+    assert not any(name.lower().endswith(".bsl") for name in staged.splitlines()), (
+        "фикстура должна стейджить только .mdo/.rights — иначе тест не про эту регрессию")
+
+    env = {**__import__("os").environ, "ONEC_TOOLKIT_DIR": str(ROOT)}
+    result = subprocess.run(
+        ["sh", str(PRE_COMMIT_HOOK)], cwd=tmp_path, env=env,
+        capture_output=True, text=True)
+
+    assert result.returncode == 1, (
+        f"хук должен заблокировать коммит (объект без прав), stdout={result.stdout!r} "
+        f"stderr={result.stderr!r}")
+    assert "object-without-rights" in result.stdout
