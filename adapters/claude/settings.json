@@ -1,8 +1,11 @@
 {
-  "//": "Пример авто-проверки BSL. Хук PostToolUse срабатывает после каждой правки *.bsl:",
-  "//1": "  scripts/bsl_guard.py — детектор «запрос в цикле» (pure-Python, exit 1 при находке),",
-  "//2": "  агент видит анти-паттерн сразу и чинит без траты токенов на ручной запуск.",
-  "//3": "Для полной диагностики BSL используйте MCP bsl-ls (в .mcp.json). matcher ограничивает хук инструментами правки.",
+  "//": "Пример авто-проверки BSL/прав. Хук PostToolUse срабатывает после каждой правки:",
+  "//1": "  scripts/bsl_guard.py (*.bsl) — детектор «запрос в цикле» (pure-Python, exit 1 при находке);",
+  "//2": "  scripts/rights_guard.py (*.bsl/*.mdo/Rights.rights) — забытые права на новый объект расширения,",
+  "//3": "  дыра в RLS (безусловное право на заимствованный объект), запрос без РАЗРЕШЕННЫЕ.",
+  "//4": "  Правило инструкцией модель может пройти формально — гейт харнесса пропустить нельзя: агент",
+  "//5": "  видит находку сразу в контексте и чинит без траты токенов на ручной запуск скрипта.",
+  "//6": "Для полной диагностики BSL используйте MCP bsl-ls (в .mcp.json). matcher ограничивает хук инструментами правки.",
   "hooks": {
     "PostToolUse": [
       {
@@ -10,7 +13,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "f=\"$CLAUDE_FILE_PATHS\"; case \"$f\" in *.bsl) python3 scripts/bsl_guard.py \"$f\" 2>/dev/null || echo \"[bsl_guard] возможен запрос в цикле в $f — проверь\" ;; esac"
+            "command": "f=\"$CLAUDE_FILE_PATHS\"; case \"$f\" in *.bsl) python3 scripts/bsl_guard.py \"$f\" 2>/dev/null || echo \"[bsl_guard] возможен запрос в цикле в $f — проверь\" ;; esac; case \"$f\" in *.bsl|*.mdo|*Rights.rights) python3 scripts/rights_guard.py \"$f\" 2>/dev/null || echo \"[rights_guard] возможна проблема с правами/RLS в $f — проверь вывод\" ;; esac"
           }
         ]
       }
