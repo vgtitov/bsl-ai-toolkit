@@ -164,12 +164,21 @@ def test_strict_makes_warnings_fatal(tmp_path):
 
 
 def test_pre_commit_hook_runs_rights_guard_when_only_metadata_staged(tmp_path):
-    """Регрессия: коммит стейджит только .mdo/.rights, без .bsl вообще (типовой случай
-    «добавили новый объект метаданных»). Ранний `exit 0` bsl-guard-секции (когда нет
-    staged *.bsl) обрывал весь хук ДО rights-guard — объект без прав проходил незамеченным.
+    """Две регрессии сразу, обе реальные (вторая ловится только в этом тесте, если
+    core.quotepath явно true — дефолт git, а не у каждого разработчика на машине):
+
+    1. Коммит стейджит только .mdo/.rights, без .bsl вообще (типовой случай «добавили
+       новый объект метаданных»). Ранний `exit 0` bsl-guard-секции (когда нет staged
+       *.bsl) обрывал весь хук ДО rights-guard.
+    2. Имя объекта — кириллица (как почти всегда в 1С). С core.quotepath=true (дефолт
+       git) `git diff --name-only` без `-z` заворачивает такой путь в кавычки с
+       восьмеричным экранированием: `"src/...\\320\\257...mdo"`. Строка кончается на
+       `"`, `grep -iE '\\.mdo$'` перестаёт матчить, файл тихо выпадает из проверки —
+       именно так упал реальный CI (см. коммит с фиксом на `-z`).
     """
     build_tree(tmp_path, native=["ЯдроТест"])
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "core.quotepath", "true"], cwd=tmp_path, check=True)
     subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
 
     staged = subprocess.run(
