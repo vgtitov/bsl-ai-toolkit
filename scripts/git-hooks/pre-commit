@@ -37,4 +37,31 @@ if [ "$rc" -ne 0 ]; then
   echo "  переделай пакетно; обойти разово: git commit --no-verify" >&2
   exit 1
 fi
+
+# --- rights-guard: забытые права, дыры в RLS, запросы без РАЗРЕШЕННЫЕ -----------
+# Смотрит staged метаданные, роли и модули. Ошибка (объект расширения без прав)
+# блокирует коммит; предупреждения (запрос без РАЗРЕШЕННЫЕ) только печатаются.
+rfiles=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null | grep -iE '\.(bsl|mdo|rights)$')
+[ -z "$rfiles" ] && exit 0
+
+rguard=""
+for cand in \
+  "$ONEC_TOOLKIT_DIR/scripts/rights_guard.py" \
+  "$(dirname "$0")/../scripts/rights_guard.py" \
+  "$(dirname "$0")/rights_guard.py" \
+  "$(git rev-parse --show-toplevel 2>/dev/null)/scripts/rights_guard.py"
+do
+  [ -f "$cand" ] && rguard="$cand" && break
+done
+[ -z "$rguard" ] && exit 0
+
+# shellcheck disable=SC2086
+echo "$rfiles" | xargs "$py" "$rguard"
+rc=$?
+if [ "$rc" -ne 0 ]; then
+  echo "" >&2
+  echo "[rights-guard] коммит остановлен: объект расширения без прав (см. выше)." >&2
+  echo "  выдай права явно в роли расширения; обойти разово: git commit --no-verify" >&2
+  exit 1
+fi
 exit 0
