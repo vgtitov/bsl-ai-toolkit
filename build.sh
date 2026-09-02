@@ -3,7 +3,8 @@
 # Три оси переносимости: AGENTS.md (правила) + SKILL.md (навыки) + MCP (инструменты).
 #
 # Стратегия: если установлен rulesync — используем его как движок (20+ агентов). Иначе — минимальный
-# фолбэк симлинками/копиями, которого достаточно для Claude Code + AGENTS.md-совместимых (Codex/Cursor/Gemini).
+# фолбэк копиями (не симлинками — на Windows git-символьные ссылки в репозитории ломаются при чекауте
+# на Linux/Mac, см. историю GEMINI.md), которого достаточно для Claude Code + AGENTS.md-совместимых.
 #
 # Запуск:  sh build.sh            # собрать всё
 #          sh build.sh claude     # только Claude Code
@@ -11,13 +12,6 @@ set -eu
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
 TARGET="${1:-all}"
-
-link_or_copy() { # src dst  — симлинк, на Windows/без симлинков — копия
-  src="$1"; dst="$2"
-  mkdir -p "$(dirname "$dst")"
-  rm -f "$dst"
-  ln -s "$src" "$dst" 2>/dev/null || cp -f "$ROOT/$src" "$dst"
-}
 
 build_claude() {
   echo "[claude] CLAUDE.md (@AGENTS.md) + .claude/skills + .claude/settings.json + .mcp.json"
@@ -35,7 +29,7 @@ build_claude() {
   cp -f core/mcp/servers.json .mcp.json
 }
 
-build_gemini()  { echo "[gemini] GEMINI.md → AGENTS.md";  cp -f core/AGENTS.md AGENTS.md; link_or_copy core/AGENTS.md GEMINI.md; }
+build_gemini()  { echo "[gemini] GEMINI.md → AGENTS.md";  cp -f core/AGENTS.md AGENTS.md; cp -f core/AGENTS.md GEMINI.md; }
 build_codex()   { echo "[codex] AGENTS.md (канон, читается нативно)"; cp -f core/AGENTS.md AGENTS.md; }
 
 build_rulesync() {
