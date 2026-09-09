@@ -137,6 +137,24 @@ def validate_schema(schema_path: Path) -> list:
                         f"Набор '{ds_name}': дублирующийся dataPath '{dp_text}'")
                 seen_paths.add(dp_text)
 
+    # ресурсы: два выражения одного поля для одной и той же группировки недопустимы
+    seen_totals = set()
+    for total in root.xpath("dcs:totalField", namespaces=cfg.NS):
+        dp = total.xpath("dcs:dataPath", namespaces=cfg.NS)
+        dp_text = dp[0].text if dp and dp[0].text else None
+        if not dp_text:
+            issues.append("Ресурс (totalField) без непустого <dataPath>")
+            continue
+        groups = tuple(sorted(g.text or "" for g in
+                              total.xpath("dcs:group", namespaces=cfg.NS)))
+        key = (dp_text, groups)
+        if key in seen_totals:
+            scope = ", ".join(groups) if groups else "все группировки"
+            issues.append(
+                f"Ресурс '{dp_text}' объявлен дважды для одной области ({scope}) — "
+                "два выражения одного ресурса для одной группировки недопустимы")
+        seen_totals.add(key)
+
     # связи наборов данных должны ссылаться на существующие наборы
     for link in root.xpath("dcs:dataSetLink", namespaces=cfg.NS):
         for tag in ("sourceDataSet", "destinationDataSet"):

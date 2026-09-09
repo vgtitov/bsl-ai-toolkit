@@ -1,7 +1,24 @@
 #!/bin/sh
-# claude-no-coauthor: коммиты без соавторства/атрибуции Claude/Anthropic.
-# Ставится автоматически scripts/setup_git.py (через core.hooksPath). Этот файл — эталон для ручного слияния,
-# если на машине уже есть свой commit-msg хук.
+# claude-no-coauthor: коммиты без соавторства/атрибуции AI-инструментов (любых, не только
+# Claude/Anthropic — команда пользуется разными ассистентами: Copilot, ChatGPT и т.д.).
+# Ставится автоматически scripts/install_git_hooks.py (через core.hooksPath). Этот файл —
+# эталон для ручного слияния, если на машине уже есть свой commit-msg хук.
+#
+# Ловим по ФОРМЕ атрибуции (git-трейлер "Token: значение" с attribution-токеном, либо фраза
+# "co-authored by / generated with|by / reviewed by / assisted by / written by" в строке),
+# а не по списку имён — так работает и для инструментов, которых ещё не существует.
+# Только grep (без awk/perl) — хук должен пережить урезанный PATH (EDT/EGit).
 f="$1"; [ -f "$f" ] || exit 0
-grep -viE 'co-authored-by:[[:space:]]*.*(claude|anthropic)|generated with \[?claude code|claude\.com/claude-code|noreply@anthropic\.com' "$f" > "$f.noai" 2>/dev/null && mv "$f.noai" "$f"
+
+trailer='^[[:space:]]*[a-z0-9][a-z0-9_-]*(-by|-session|-generated|-assisted)[[:space:]]*:'
+verb='co[[:space:]-]*authored[[:space:]-]*by|reviewed[[:space:]-]*by|assisted[[:space:]-]*by|generated[[:space:]-]*(with|by)|written[[:space:]-]*by'
+domain='anthropic\.com|claude\.ai|openai\.com|noreply@(anthropic|openai|github)\.com'
+
+tmp="$f.noai.$$"
+grep -viE "${trailer}|${verb}|${domain}" "$f" > "$tmp" 2>/dev/null
+status=$?
+case "$status" in
+  0|1) mv "$tmp" "$f" ;;
+  *) rm -f "$tmp" ;;
+esac
 exit 0

@@ -80,3 +80,27 @@ def test_validate_after_add_field_stays_valid(tmp_path):
     shutil.copy(FIXTURES / "scd.xml", p)
     add_field(p, "Данные", "Поле3", "Поле3", "Поле 3")
     assert _v(p) == []
+
+
+def test_duplicate_resource_same_scope_flagged(tmp_path):
+    # DISCIPLINE_ALLOW_TEST_EDIT: два выражения одного ресурса для одной группировки недопустимы
+    src = (FIXTURES / "scd.xml").read_text(encoding="utf-8")
+    total = ("<totalField><dataPath>Поле1</dataPath>"
+             "<expression>Максимум(Поле1)</expression></totalField>")
+    broken = src.replace("</DataCompositionSchema>", total + total + "</DataCompositionSchema>")
+    p = tmp_path / "s.xml"
+    p.write_text(broken, encoding="utf-8")
+    assert any("ресурс" in s.lower() and "Поле1" in s for s in _v(p))
+
+
+def test_same_resource_different_groups_ok(tmp_path):
+    # DISCIPLINE_ALLOW_TEST_EDIT: разные «Рассчитывать по…» — законно
+    src = (FIXTURES / "scd.xml").read_text(encoding="utf-8")
+    totals = ("<totalField><dataPath>Поле1</dataPath><group>А</group>"
+              "<expression>Сумма(Поле1)</expression></totalField>"
+              "<totalField><dataPath>Поле1</dataPath><group>Б</group>"
+              "<expression>Максимум(Поле1)</expression></totalField>")
+    p = tmp_path / "s.xml"
+    p.write_text(src.replace("</DataCompositionSchema>", totals + "</DataCompositionSchema>"),
+                 encoding="utf-8")
+    assert not any("ресурс" in s.lower() for s in _v(p))

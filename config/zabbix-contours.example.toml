@@ -12,7 +12,7 @@ dashboards = "408,410"                        # ВСЕ дашборды конт
 hosts = "vc-1c-*"                             # маска ВСЕХ хостов контура (или список ["a", "b"])
 window_hours = 24                             # окно по умолчанию — сутки (не час!)
 licensed_cores = { "vc-1c-app-01" = 12 }      # лимит ядер лицензии 1С (ПРОФ = 12 на рабочий сервер)
-storage_map_base = "AskonaKZ_ERP"             # карта структуры хранения (scripts/storage_map.py status)
+storage_map_base = "CompanyKZ_ERP"             # карта структуры хранения (scripts/storage_map.py status)
 onec_profile = "kz"                           # профиль onec-code: корреляция SQL-улик с кодом контура
 # notes = "особенности контура — попадут в контекст анализа"
 
