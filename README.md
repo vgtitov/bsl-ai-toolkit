@@ -50,7 +50,7 @@ AI-агенты (Claude Code, Cursor, Copilot, Gemini CLI, Codex, Cline, Windsur
 bsl-ai-toolkit/
 ├── core/                       # ЕДИНЫЙ ИСТОЧНИК ИСТИНЫ (общий для всех AI-агентов)
 │   ├── AGENTS.md               # правила (спроси-инструмент, слои контура, гейт метаданных, производительность, безопасность)
-│   ├── skills/                 # SKILL.md × 7: 1c-dev · 1c-analyst · 1c-metadata · 1c-admin-devops · 1c-dba · 1c-expert · 1c-tester
+│   ├── skills/                 # SKILL.md × 8: 1c-dev · 1c-analyst · 1c-metadata · 1c-admin-devops · 1c-dba · 1c-expert · 1c-tester · 1c-estimation
 │   └── mcp/servers.json        # профиль MCP: onec-code · bsl-ls · onec-ops · onec-data (пути/креды через env)
 ├── adapters/                   # тонкие адаптеры под агентов (claude — эталон; codex/gemini — фолбэк; cursor/copilot/… — rulesync)
 │   ├── claude/                 #   CLAUDE.md (@AGENTS.md) + settings.json (хук bsl_guard)
@@ -133,7 +133,7 @@ Toolkit — не только про код: смежные системы SDLC/
 | **Zabbix** | APDEX → trapper-items (`1c.apdex[...]`), метрики/проблемы/дашборды, perf-отчёт и diff | `scripts/apdex_to_zabbix.py`, `scripts/zabbix_perf.py`, MCP `onec-ops` (Zabbix API) |
 | **Prometheus** | запрос метрик 1С/кластера (PromQL) | MCP `onec-ops` (`prometheus_query`) |
 | **Технологический журнал / ЖР** | разбор ТЖ (TTIMEOUT/TLOCK/EXCP…), журнал регистрации, APDEX по операциям | MCP `onec-ops` (`tech_journal_parse`, `event_log_parse`, `apdex_by_operation`) |
-| **BSL Language Server** | диагностики BSL после каждой правки | MCP `bsl-ls` (в комплекте) + авто-скачивание `scripts/detect_tools.py` |
+| **BSL Language Server** | батч-диагностики после правки (`bsl-ls`) + (≥1.0, JDK 21+) навигация по коду и типам одного файла: `hover`, `definition`, `find_references`, `call_hierarchy`, `document_symbols`, `analyze_file`, `type_at_position`, `type_info`, `global_member_info`, `global_member_search` (`bsl-ls-native`) | MCP `bsl-ls` + `bsl-ls-native` (в комплекте) + авто-скачивание `scripts/detect_tools.py` |
 | **Данные живой ИБ** | OData + отладочный сервис `ai_debug` (read-only, RLS, маскирование ПДн) | MCP `onec-data` (10 инструментов) |
 | **Центральный onec-code** | общий на команду поиск по коду 1С по HTTP за auth (Caddy) | `server/` (docker-compose) + `scripts/switch_source.py` / `set_token.*` |
 

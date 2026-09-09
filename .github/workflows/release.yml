@@ -18,6 +18,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Run full test suite
+        run: uv run --no-project --with "mcp<2" --with pytest --with lxml --with openpyxl --with xlrd pytest tests/ -q
+
+      - name: Validate immutable release tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: python scripts/release_guard.py validate-tag "$TAG" --remote origin --branch main
 
       - name: Package ai_debug extension source
         run: |

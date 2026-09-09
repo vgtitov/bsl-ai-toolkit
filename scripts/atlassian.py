@@ -7,12 +7,12 @@
 одной командой, без MCP и внешних библиотек. Только stdlib, кроссплатформенно.
 
 Примеры:
-  python scripts/atlassian.py jira issue DCM-5488 --comments
-  python scripts/atlassian.py jira search "project = DCM AND status = Done" --limit 10
-  python scripts/atlassian.py conf page 209491238            # id, URL или точный заголовок
-  python scripts/atlassian.py conf tree 148810173 --depth 2  # дерево раздела
+  python scripts/atlassian.py jira issue PROJ-123 --comments
+  python scripts/atlassian.py jira search "project = PROJ AND status = Done" --limit 10
+  python scripts/atlassian.py conf page 123456789             # id, URL или точный заголовок
+  python scripts/atlassian.py conf tree 123456700 --depth 2   # дерево раздела
   python scripts/atlassian.py conf search "критерии приёмки"
-  python scripts/atlassian.py conf publish docs/page.md --parent 209491237
+  python scripts/atlassian.py conf publish docs/page.md --parent 123456701
 
 Окружение (.env в CWD/корне репо подхватывается, уже установленное не перетирается):
   JIRA_URL / CONFLUENCE_URL          — базовые URL (https://jira.example.com)

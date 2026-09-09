@@ -24,7 +24,7 @@
       "env": {}
     },
     "bsl-ls": {
-      "//": "Мост над BSL Language Server (диагностики BSL). В комплекте, свободный. Прогон после каждой правки *.bsl.",
+      "//": "Мост над BSL Language Server (батч-диагностики каталога/файла после правки, явный сигнал «0 файлов = не проверено»). В комплекте, свободный.",
       "type": "stdio",
       "command": "uv",
       "args": ["run", "--quiet", "${BSL_LS_MCP}"],
@@ -32,6 +32,19 @@
         "BSL_JAR": "${BSL_JAR}",
         "BSL_MEMORY_MB": "${BSL_MEMORY_MB:-4096}"
       }
+    },
+    "bsl-ls-native": {
+      "//": "Нативный MCP-режим BSL Language Server ≥1.0 (требует JDK 21+) — 10 инструментов навигации/типов по одному файлу: analyze_file, document_symbols, find_references, call_hierarchy, hover, definition, type_info, global_member_info, global_member_search, type_at_position. Дополняет bsl-ls (батч-гейт после правки), не заменяет — экспериментальный режим у 1c-syntax (Spring AI milestone, API может меняться). См. docs/design/2026-08-12-bsl-ls-mcp-mode.md.",
+      "type": "stdio",
+      "command": "java",
+      "args": [
+        "-Dfile.encoding=UTF-8",
+        "-jar",
+        "${BSL_JAR}",
+        "mcp",
+        "--protocol=stdio"
+      ],
+      "env": {}
     },
     "onec-ops": {
       "//": "Эксплуатация read-only: ТЖ/ЖР/APDEX/Zabbix/Prometheus. Для скиллов 1c-expert/1c-dba/1c-admin-devops.",
