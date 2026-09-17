@@ -174,6 +174,7 @@ onboard раскладывает скиллы, профиль `.mcp.json` и п�
 - [docs/CONCEPT.md](docs/CONCEPT.md) — идея, методология, работа с артефактами (ЧТЗ, тех-проект), связь с курсами и реальными процессами.
 - [docs/METHODOLOGY_MAP.md](docs/METHODOLOGY_MAP.md) — карта: подходы с курсов (SDD, Memory Bank, Kiro, субагенты, Shotgun) → наши документы и процесс.
 - [docs/TOOLS.md](docs/TOOLS.md) — каталог инструментов: что внутри, что делает, как пользоваться.
+- [docs/sonarqube-bsl-agent.md](docs/sonarqube-bsl-agent.md) — SonarQube с анализатором BSL: как агенту читать замечания, отличать ложные срабатывания от дефектов и чем их гасить.
 - [docs/AGENT_SETUP.md](docs/AGENT_SETUP.md) — как поручить настройку самому ИИ-агенту (готовый промпт).
 - [docs/EDT_SETUP.md](docs/EDT_SETUP.md) — интеграция с 1C:EDT (опциональный MCP-плагин: живой доступ к рабочему пространству).
 - [docs/setup-actions-required.md](docs/setup-actions-required.md) — что должен сделать человек (публикация базы, флаг защиты, платформа).
