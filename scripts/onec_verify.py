@@ -112,7 +112,7 @@ def build_parser():
     p.add_argument("--status", action="store_true", help="показать текущие маски")
     p.add_argument("--disable", action="store_true", help="прописать маску (снять защиту)")
     p.add_argument("--enable", action="store_true", help="убрать маску (вернуть защиту)")
-    p.add_argument("--mask", default="*.*",
+    p.add_argument("--mask", default=".*",
                    help="маска строк соединения; *.* — все базы машины (умолч.)")
     p.add_argument("--base", help="проверить конкретную базу против масок")
     return ap
