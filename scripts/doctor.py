@@ -158,12 +158,19 @@ def check_unsafe_action_protection(base: str | None = None):
     else:
         res.append((WARN, name, f"масок в conf.cfg нет — {hint}"))
     if base:
-        covered = protection.status_for_base(base, root) == protection.OFF_BY_MASK
-        res.append((OK if covered else WARN, f"{name}: база {base}",
-                    "под маской в conf.cfg этой машины — окна не будет" if covered
-                    else f"маска не покрывает — {hint}. Для клиент-серверной базы маску "
-                         "надо ставить в conf.cfg СЕРВЕРА 1С: открытие внешней обработки "
-                         "проверяет он, и отсюда этого не видно"))
+        status = protection.status_for_base(base, root)
+        if status == protection.OFF_BY_MASK:
+            res.append((OK, f"{name}: база {base}",
+                        "под маской в conf.cfg этой машины — окна не будет"))
+        elif status == protection.LOCAL_ONLY:
+            # Зелёный тут был бы обманом: для клиент-серверной базы решение принимает сервер,
+            # а его conf.cfg отсюда не виден.
+            res.append((WARN, f"{name}: база {base}",
+                        "локально маска покрывает, но база клиент-серверная: открытие внешней "
+                        "обработки проверяет СЕРВЕР 1С, и решает его conf.cfg — проверьте маску "
+                        "там либо флаг у пользователя ИБ"))
+        else:
+            res.append((WARN, f"{name}: база {base}", f"маска не покрывает — {hint}"))
     return res
 
 
