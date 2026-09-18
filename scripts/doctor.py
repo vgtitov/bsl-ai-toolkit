@@ -145,15 +145,25 @@ def check_unsafe_action_protection(base: str | None = None):
     cfg = protection.conf_cfg_path(root)
     masks = protection.masks_from_conf(cfg)
     res = []
-    if masks:
+    bad = protection.invalid_masks(masks)
+    if bad:
+        # Маска, которая не является регулярным выражением, платформой молча игнорируется:
+        # человек считает, что защита снята, а окно всё равно ждёт его. Это хуже, чем
+        # отсутствие маски, потому и говорим отдельно.
+        res.append((WARN, name,
+                    f"маски в {cfg} не являются регулярными выражениями и не действуют: "
+                    f"{'; '.join(bad)}. Нужен вид .*Test.*, а не *Test*"))
+    elif masks:
         res.append((OK, name, f"маски в {cfg}: {'; '.join(masks)}"))
     else:
         res.append((WARN, name, f"масок в conf.cfg нет — {hint}"))
     if base:
         covered = protection.status_for_base(base, root) == protection.OFF_BY_MASK
         res.append((OK if covered else WARN, f"{name}: база {base}",
-                    "под маской — окна не будет" if covered
-                    else f"маска не покрывает — {hint}"))
+                    "под маской в conf.cfg этой машины — окна не будет" if covered
+                    else f"маска не покрывает — {hint}. Для клиент-серверной базы маску "
+                         "надо ставить в conf.cfg СЕРВЕРА 1С: открытие внешней обработки "
+                         "проверяет он, и отсюда этого не видно"))
     return res
 
 

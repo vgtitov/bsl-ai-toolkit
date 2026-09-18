@@ -13,9 +13,9 @@
 """
 from __future__ import annotations
 
-import fnmatch
 import os
 import re
+import shutil
 from pathlib import Path
 
 # Итог проверки
@@ -42,12 +42,32 @@ def conf_cfg_path(platform_root: str | Path | None = None) -> Path | None:
     return cfg if cfg.is_file() else None
 
 
+# Кодировки, в которых установщик платформы оставляет conf.cfg. Файл каталога версии
+# встречается в UTF-8 с BOM, общий `<корень>/conf/conf.cfg` — в UTF-16LE с BOM. Читать всё
+# как UTF-8 нельзя: из UTF-16 получается мусор и маска «пропадает», а запись в другой
+# кодировке делает файл нечитаемым уже для самой платформы.
+_BOMS = (
+    (b"\xff\xfe", "utf-16-le"),
+    (b"\xfe\xff", "utf-16-be"),
+    (b"\xef\xbb\xbf", "utf-8-sig"),
+)
+
+
+def read_cfg(cfg: Path) -> tuple[str, str]:
+    """Текст conf.cfg БЕЗ BOM и имя его кодировки — чтобы записать обратно так же."""
+    raw = Path(cfg).read_bytes()
+    for bom, enc in _BOMS:
+        if raw.startswith(bom):
+            return raw[len(bom):].decode(enc, errors="replace"), enc
+    return raw.decode("utf-8", errors="replace"), "utf-8"
+
+
 def masks_from_conf(cfg: Path | None) -> list[str]:
     """Маски строк соединения из `DisableUnsafeActionProtection` (через `;`).
     Файла нет / параметра нет → пусто."""
     if cfg is None or not Path(cfg).is_file():
         return []
-    text = Path(cfg).read_text(encoding="utf-8-sig", errors="replace")
+    text = read_cfg(Path(cfg))[0]
     out = []
     for line in text.splitlines():
         m = re.match(r"\s*DisableUnsafeActionProtection\s*=\s*(.*)$", line, re.IGNORECASE)
@@ -57,10 +77,34 @@ def masks_from_conf(cfg: Path | None) -> list[str]:
 
 
 def _matches(base: str, mask: str) -> bool:
-    """Маска сопоставляется без учёта регистра и разделителя пути: строку соединения
-    пишут и с `\\`, и с `/`, а маску — как придётся."""
-    norm = lambda s: s.replace("\\", "/").casefold()
-    return fnmatch.fnmatchcase(norm(base), norm(mask))
+    """Маска — РЕГУЛЯРНОЕ выражение, а не подстановочный шаблон.
+
+    Проверено на 8.3.27.1606 (18.09.2026): маска `.*_PP.*` снимает предупреждения,
+    а glob-вид `*_PP*` не даёт ничего — как regex он невалиден (строка начинается с
+    квантификатора), и платформа его молча игнорирует. В документации 1С пример
+    записан так же: `DisableUnsafeActionProtection=.*`.
+
+    Невалидное выражение здесь не ошибка вызывающего: такую маску платформа не применит,
+    и честный ответ — «не покрыта».
+    """
+    try:
+        return re.fullmatch(mask, base, re.IGNORECASE) is not None
+    except re.error:
+        return False
+
+
+def invalid_masks(masks: list[str]) -> list[str]:
+    """Маски, которые не являются допустимыми регулярными выражениями: платформа их
+    игнорирует, а человек считает, что защита снята. Такое стоит показывать явно."""
+    bad = []
+    for mask in masks:
+        if mask in UNIVERSAL_MASKS:
+            continue
+        try:
+            re.compile(mask)
+        except re.error:
+            bad.append(mask)
+    return bad
 
 
 def status_for_base(base: str, platform_root: str | Path | None = None) -> str:
@@ -71,10 +115,11 @@ def status_for_base(base: str, platform_root: str | Path | None = None) -> str:
     return UNKNOWN
 
 
-UNIVERSAL_MASKS = ("*", "*.*")
-"""Маски, которые платформа трактует как «все базы». `*.*` документирована именно так,
-хотя по правилам подстановки требовала бы точку в строке соединения — поэтому обе
-обрабатываются явно, а не через fnmatch."""
+UNIVERSAL_MASKS = (".*", "*", "*.*")
+""" Маски «все базы». Рабочая — `.*` (regex). Формы `*` и `*.*` ходят по статьям и
+встречаются в чужих конфигурациях: как регулярные выражения они невалидны, но считать
+их «не покрывающими ничего» было бы хуже — человек, написавший `*.*`, имел в виду именно
+«все базы»."""
 
 
 def set_mask(mask: str = "*.*", platform_root: str | Path | None = None,
@@ -89,10 +134,12 @@ def set_mask(mask: str = "*.*", platform_root: str | Path | None = None,
     if cfg is None:
         raise RuntimeError("conf.cfg платформы не найден: задай ONEC_1CV8_BIN или путь явно")
     cfg = Path(cfg)
-    text = cfg.read_text(encoding="utf-8-sig", errors="replace") if cfg.is_file() else ""
+    text, encoding = read_cfg(cfg) if cfg.is_file() else ("", "utf-8")
     backup = cfg.with_suffix(cfg.suffix + ".toolkit-backup")
     if cfg.is_file() and not backup.exists():
-        _write(backup, text)        # бэкап рядом с conf.cfg — те же права, тот же диагноз
+        # Бэкап копируем БАЙТАМИ: пересохранение текстом уже меняло бы кодировку, а бэкап
+        # должен воспроизводить файл в точности.
+        shutil.copy2(cfg, backup)
 
     line = f"DisableUnsafeActionProtection={mask}"
     lines, replaced = [], False
@@ -105,7 +152,7 @@ def set_mask(mask: str = "*.*", platform_root: str | Path | None = None,
         lines.append(raw)
     if not replaced:
         lines.append(line)
-    _write(cfg, "\n".join(lines).rstrip("\n") + "\n")
+    _write(cfg, "\n".join(lines).rstrip("\n") + "\n", encoding)
     return cfg
 
 
@@ -116,17 +163,23 @@ def clear_mask(platform_root: str | Path | None = None,
     if cfg is None or not Path(cfg).is_file():
         raise RuntimeError("conf.cfg платформы не найден")
     cfg = Path(cfg)
-    kept = [l for l in cfg.read_text(encoding="utf-8-sig", errors="replace").splitlines()
+    text, encoding = read_cfg(cfg)
+    kept = [l for l in text.splitlines()
             if not re.match(r"\s*DisableUnsafeActionProtection\s*=", l, re.IGNORECASE)]
-    _write(cfg, "\n".join(kept).rstrip("\n") + "\n")
+    _write(cfg, "\n".join(kept).rstrip("\n") + "\n", encoding)
     return cfg
 
 
-def _write(cfg: Path, text: str) -> None:
-    """Запись с внятной ошибкой: conf.cfg лежит в каталоге программы, и без прав
-    администратора он не пишется — это не баг, а нормальная ситуация."""
+def _write(cfg: Path, text: str, encoding: str = "utf-8") -> None:
+    """Запись в ТОЙ ЖЕ кодировке и с тем же BOM, что были у файла: платформа читает
+    conf.cfg по BOM, и перезапись UTF-16LE файла в UTF-8 делает его для неё бессмысленным.
+
+    Ошибка прав здесь ожидаема: conf.cfg лежит в каталоге программы."""
+    # utf-8-sig добавляет BOM сам, остальным кодировкам его дописываем мы
+    bom = b"" if encoding == "utf-8-sig" else next((b for b, e in _BOMS if e == encoding), b"")
+    data = bom + text.encode(encoding)
     try:
-        cfg.write_text(text, encoding="utf-8")
+        cfg.write_bytes(data)
     except PermissionError:
         raise PermissionError(
             f"нет прав на запись {cfg} — это каталог установки платформы. Запусти команду "
@@ -143,6 +196,8 @@ def preflight_note(base: str, platform_root: str | Path | None = None) -> str | 
     if status_for_base(base, platform_root) == OFF_BY_MASK:
         return None
     return (f"[предполёт] база {base} не покрыта маской DisableUnsafeActionProtection в "
-            "conf.cfg. Если сеанс не вернётся — это модальное окно «Защита от опасных "
-            "действий» ждёт человека: снимите флаг у пользователя ИБ либо добавьте маску "
-            "(docs/setup-actions-required.md §1). Проверка локальная, подключений не делает.")
+            "conf.cfg ЭТОЙ машины. Если сеанс не вернётся — это модальное окно «Защита от "
+            "опасных действий» ждёт человека: снимите флаг у пользователя ИБ либо добавьте "
+            "маску (docs/setup-actions-required.md §1). Для клиент-серверной базы маску надо "
+            "ставить в conf.cfg СЕРВЕРА 1С — открытие внешней обработки проверяет он, и по "
+            "нему эта локальная проверка ничего сказать не может. Подключений не делает.")
