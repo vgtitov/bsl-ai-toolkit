@@ -71,9 +71,15 @@ def main():
         if target.exists():
             cur = target.read_text(encoding="utf-8", errors="ignore")
             if MARKER in cur:
-                print(f"[ok] {src_hook.name}: уже стоит наш хук")
-                continue
-            if is_stock_lfs_hook(src_hook.name, cur):
+                # Наш же хук: ОБНОВЛЯЕМ, а не пропускаем. Раньше установка на машине с уже
+                # стоящим хуком тихо ничего не делала, и новые версии (например гейт метаданных
+                # в pre-push) до разработчика не доезжали — обновление toolkit выглядело успешным,
+                # а проверка оставалась старой.
+                if cur == src_hook.read_text(encoding="utf-8", errors="ignore"):
+                    print(f"[ok] {src_hook.name}: уже актуален")
+                    continue
+                print(f"[i] {src_hook.name}: обновляю нашу версию хука")
+            elif is_stock_lfs_hook(src_hook.name, cur):
                 # Штатный хук от `git lfs install` есть почти на каждой машине. Наш pre-push сам
                 # вызывает git lfs pre-push, поэтому замена ничего не ломает, а иначе установка
                 # молча не состоялась бы у всех, у кого настроен LFS.
@@ -88,6 +94,14 @@ def main():
         except OSError:
             pass
         print(f"[ok] поставлен хук {src_hook.name} -> {target}")
+
+    # Гейт метаданных 1С кладём РЯДОМ с хуками: pre-push ищет его в своём каталоге, поэтому защита
+    # работает в любом репозитории с исходниками EDT без настройки в самом репозитории.
+    gate = Path(__file__).resolve().parent / "check_metadata_regression.py"
+    if gate.is_file():
+        shutil.copyfile(gate, dst / gate.name)
+        print(f"[ok] гейт метаданных -> {(dst / gate.name).as_posix()} "
+              f"(выключить в репозитории: git config hooks.metadataGate false)")
 
     print("[готово] коммиты из Claude Code теперь без соавторства/атрибуции Claude. "
           "Идентичность площадок и токен push — см. docs/git.md.")

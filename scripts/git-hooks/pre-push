@@ -8,7 +8,10 @@
 # Порядок:
 #   1. Если в репозитории есть scripts/hooks/pre-push — запускаем его. Это даёт репозиториям свои
 #      pre-push проверки без правок toolkit; специфика остаётся в репозитории.
-#   2. Git LFS. Если git-lfs установлен — вызываем его всегда (в не-LFS репозитории это no-op).
+#   2. Гейт метаданных 1С: в репозитории с исходниками EDT (*.mdo) проверяем, не пропали ли из
+#      метаданных и прав объекты относительно базовой ветки. Подробности — в шапке
+#      check_metadata_regression.py, он лежит рядом с этим хуком.
+#   3. Git LFS. Если git-lfs установлен — вызываем его всегда (в не-LFS репозитории это no-op).
 #      Если НЕ установлен — блокируем push ТОЛЬКО когда репозиторий реально использует LFS
 #      (в .gitattributes есть filter=lfs): иначе push залил бы указатели вместо файлов. В остальных
 #      репозиториях молча выходим — глобальный хук не должен ломать работу тем, кому LFS не нужен.
@@ -27,6 +30,50 @@ if [ -f "$REPO_HOOK" ]; then
         "$REPO_HOOK" "$@" </dev/null || exit 1
     else
         ( . "$REPO_HOOK" ) </dev/null || exit 1
+    fi
+fi
+
+# ── Гейт метаданных 1С ────────────────────────────────────────────────────────────────────────
+# Работает без настройки в каждом репозитории: скрипт кладётся рядом с хуком установщиком.
+# Условия: это репозиторий с исходниками EDT, гейт не выключен, есть базовая ветка для сравнения.
+# Выключить в конкретном репозитории:  git config hooks.metadataGate false
+GATE="$(dirname "$0")/check_metadata_regression.py"
+if [ -f "$GATE" ] \
+   && [ "$(git config --get hooks.metadataGate)" != "false" ] \
+   && [ ! -f "scripts/check_metadata_regression.py" ] \
+   && [ -n "$(git ls-files -- '*.mdo' | head -n 1)" ] \
+   && { git rev-parse --verify --quiet origin/develop >/dev/null 2>&1 \
+        || git rev-parse --verify --quiet origin/main >/dev/null 2>&1; }; then
+    # Поиск интерпретатора. EDT/EGit запускает хуки с УРЕЗАННЫМ PATH, где python недоступен —
+    # тогда проверка молча не работала бы, а метаданные теряются именно при работе из IDE.
+    # Поэтому не находя python — останавливаем push, а не пропускаем.
+    GATE_PY=""
+    PY_CFG=$(git config --get hooks.metadataGatePython 2>/dev/null || true)
+    if [ -n "$METADATA_GATE_PYTHON" ] && [ -x "$METADATA_GATE_PYTHON" ]; then
+        GATE_PY="$METADATA_GATE_PYTHON"
+    elif [ -n "$PY_CFG" ] && [ -x "$PY_CFG" ]; then
+        GATE_PY="$PY_CFG"
+    elif command -v python3 >/dev/null 2>&1; then
+        GATE_PY="python3"
+    elif command -v python >/dev/null 2>&1; then
+        GATE_PY="python"
+    elif command -v py >/dev/null 2>&1; then
+        GATE_PY="py -3"
+    else
+        for c in "$HOME/AppData/Local/Programs/Python/Python3"*/python.exe \
+                 "$HOME/AppData/Local/Microsoft/WindowsApps/python.exe" \
+                 "/c/Program Files/Python3"*/python.exe /usr/bin/python3
+        do
+            [ -x "$c" ] && GATE_PY="$c" && break
+        done
+    fi
+    if [ -z "$GATE_PY" ]; then
+        printf >&2 "\n%s\n\n" "[metadata-gate] PUSH ОСТАНОВЛЕН: не найден python, проверку метаданных выполнить нечем. Так бывает при push из IDE — она запускает хуки с урезанным PATH. Укажите интерпретатор: git config --global hooks.metadataGatePython '/путь/к/python.exe'. Обойти разово: git push --no-verify"
+        exit 1
+    fi
+    if ! PYTHONIOENCODING=utf-8 $GATE_PY "$GATE" </dev/null; then
+        printf >&2 "\n%s\n\n" "[metadata-gate] PUSH ОСТАНОВЛЕН: из метаданных или прав что-то пропало (список выше). Причина почти всегда одна — IDE перезаписала файл из устаревшей модели. Разберитесь по списку; если удаление осознанное — прогоните проверку с --allow и пушьте с --no-verify."
+        exit 1
     fi
 fi
 
