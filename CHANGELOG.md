@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Added
+- `scripts/build_ai_debug_cfe.py`: сборка `ai_debug.cfe` из XML одной командой (пустая файловая
+  база-контейнер, `/LoadConfigFromFiles` → `/DumpCfg`), sha256 и `--upload <tag>` в GitHub Release.
+  Ручной шаг из RELEASING.md не выполнялся ни в одном релизе — `.cfe` впервые приложен к v2.3.5.
+
 ## [2.3.5] - 2026-09-17
 
 ### Fixed
