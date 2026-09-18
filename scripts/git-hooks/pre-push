@@ -35,18 +35,21 @@ fi
 
 # ── Гейт метаданных 1С ────────────────────────────────────────────────────────────────────────
 # Работает без настройки в каждом репозитории: скрипт кладётся рядом с хуком установщиком.
-# Условия: это репозиторий с исходниками EDT, гейт не выключен, есть базовая ветка для сравнения.
-# Выключить в конкретном репозитории:  git config hooks.metadataGate false
+# Включается САМ только там, где он уместен: репозиторий содержит исходники в формате EDT (*.mdo).
+# Работаете в Конфигураторе (выгрузка XML) или это вообще не 1С — блок не выполняется, хук ведёт себя
+# как раньше. Настройки репозитория:
+#   git config hooks.metadataGate false   — выключить здесь совсем
+#   git config hooks.metadataGate true    — требовать проверку: без python push не пройдёт
 GATE="$(dirname "$0")/check_metadata_regression.py"
+GATE_MODE=$(git config --get hooks.metadataGate 2>/dev/null || true)
 if [ -f "$GATE" ] \
-   && [ "$(git config --get hooks.metadataGate)" != "false" ] \
+   && [ "$GATE_MODE" != "false" ] \
    && [ ! -f "scripts/check_metadata_regression.py" ] \
    && [ -n "$(git ls-files -- '*.mdo' | head -n 1)" ] \
    && { git rev-parse --verify --quiet origin/develop >/dev/null 2>&1 \
         || git rev-parse --verify --quiet origin/main >/dev/null 2>&1; }; then
     # Поиск интерпретатора. EDT/EGit запускает хуки с УРЕЗАННЫМ PATH, где python недоступен —
     # тогда проверка молча не работала бы, а метаданные теряются именно при работе из IDE.
-    # Поэтому не находя python — останавливаем push, а не пропускаем.
     GATE_PY=""
     PY_CFG=$(git config --get hooks.metadataGatePython 2>/dev/null || true)
     if [ -n "$METADATA_GATE_PYTHON" ] && [ -x "$METADATA_GATE_PYTHON" ]; then
@@ -68,10 +71,15 @@ if [ -f "$GATE" ] \
         done
     fi
     if [ -z "$GATE_PY" ]; then
-        printf >&2 "\n%s\n\n" "[metadata-gate] PUSH ОСТАНОВЛЕН: не найден python, проверку метаданных выполнить нечем. Так бывает при push из IDE — она запускает хуки с урезанным PATH. Укажите интерпретатор: git config --global hooks.metadataGatePython '/путь/к/python.exe'. Обойти разово: git push --no-verify"
-        exit 1
-    fi
-    if ! PYTHONIOENCODING=utf-8 $GATE_PY "$GATE" </dev/null; then
+        # Без python проверить нечем. По умолчанию не ломаем чужой push — предупреждаем. Команде,
+        # которая на эту защиту рассчитывает, достаточно включить строгий режим:
+        #   git config hooks.metadataGate true
+        if [ "$GATE_MODE" = "true" ]; then
+            printf >&2 "\n%s\n\n" "[metadata-gate] PUSH ОСТАНОВЛЕН: не найден python, проверку метаданных выполнить нечем (включён строгий режим hooks.metadataGate=true). Так бывает при push из IDE — она запускает хуки с урезанным PATH. Укажите интерпретатор: git config --global hooks.metadataGatePython '/путь/к/python.exe'. Обойти разово: git push --no-verify"
+            exit 1
+        fi
+        printf >&2 "\n%s\n\n" "[metadata-gate] пропущен: не найден python, проверить метаданные нечем. Укажите интерпретатор (git config --global hooks.metadataGatePython '/путь/к/python.exe') или включите строгий режим (git config hooks.metadataGate true), чтобы такой push не проходил молча."
+    elif ! PYTHONIOENCODING=utf-8 $GATE_PY "$GATE" </dev/null; then
         printf >&2 "\n%s\n\n" "[metadata-gate] PUSH ОСТАНОВЛЕН: из метаданных или прав что-то пропало (список выше). Причина почти всегда одна — IDE перезаписала файл из устаревшей модели. Разберитесь по списку; если удаление осознанное — прогоните проверку с --allow и пушьте с --no-verify."
         exit 1
     fi
