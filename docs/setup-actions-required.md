@@ -124,14 +124,18 @@ DisableUnsafeActionProtection=.*_PP.*
 ### Как снять — командой toolkit
 
 ```
-python scripts/onec_verify.py protection --status                       # что сейчас
-python scripts/onec_verify.py protection --disable --mask "*Test*"      # маска поуже
-python scripts/onec_verify.py protection --disable --mask "*.*"         # все базы машины
-python scripts/onec_verify.py protection --enable                       # вернуть защиту
+python scripts/onec_verify.py protection --status                        # что сейчас
+python scripts/onec_verify.py protection --disable --mask ".*_PP.*"      # маска поуже
+python scripts/onec_verify.py protection --disable --mask ".*"           # все базы машины
+python scripts/onec_verify.py protection --enable                        # вернуть защиту
 ```
-Команда правит `conf.cfg` платформы, делает резервную копию рядом и идемпотентна.
-`conf.cfg` лежит в каталоге установки, поэтому **нужны права администратора** — из
-обычной сессии команда честно скажет об этом и ничего не тронет.
+Маски — регулярные выражения: `*Test*` и `*.*` команда примет, но платформа их проигнорирует,
+поэтому `--status` и `doctor` на таких масках дают предупреждение, а не зелёный.
+
+Команда правит `conf.cfg` платформы **той машины, где запущена**, делает резервную копию рядом
+и идемпотентна. Для клиент-серверной базы этого мало — решает `conf.cfg` сервера, см. пункт 1 выше.
+`conf.cfg` лежит в каталоге установки, поэтому **нужны права администратора** — из обычной сессии
+команда честно скажет об этом и ничего не тронет.
 
 ---
 
