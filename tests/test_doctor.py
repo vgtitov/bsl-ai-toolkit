@@ -40,9 +40,20 @@ def test_unsafe_protection_warns_without_mask(monkeypatch, tmp_path):
 
 
 def test_unsafe_protection_ok_with_mask(monkeypatch, tmp_path):
+    # Маска — регулярное выражение: именно такой вид платформа и применяет.
+    _platform(monkeypatch, tmp_path,
+              conf_text="SystemLanguage=RU\nDisableUnsafeActionProtection=.*Test.*\n")
+    assert doctor.check_unsafe_action_protection()[0][0] == doctor.OK
+
+
+def test_unsafe_protection_warns_on_glob_mask(monkeypatch, tmp_path):
+    # `*Test*` как регулярное выражение невалиден, платформа его игнорирует — и зелёный
+    # доктор тут обманывал бы: человек уверен, что защита снята, а окно ждёт его.
     _platform(monkeypatch, tmp_path,
               conf_text="SystemLanguage=RU\nDisableUnsafeActionProtection=*Test*\n")
-    assert doctor.check_unsafe_action_protection()[0][0] == doctor.OK
+    status, _, detail = doctor.check_unsafe_action_protection()[0]
+    assert status == doctor.WARN
+    assert "*Test*" in detail
 
 
 def test_unsafe_protection_warns_when_conf_missing(monkeypatch, tmp_path):
