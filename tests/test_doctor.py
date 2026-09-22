@@ -132,3 +132,12 @@ def test_plan_stdio_jar_after_dash_jar():
             "args": ["-Dfile.encoding=UTF-8", "-jar", "${BSL_PLATFORM_JAR}", "--platform-path", "${P}"]}
     p = doctor.plan_for_server("bsl-platform", spec, {"BSL_PLATFORM_JAR": "/x/bp.jar"})
     assert p["file"] == "/x/bp.jar"
+
+
+def test_unsafe_protection_warns_when_conf_unreadable(monkeypatch, tmp_path):
+    # UTF-16 без BOM: не «масок нет», а «файл не читается» — это разные диагнозы.
+    _platform(monkeypatch, tmp_path, conf_text="")
+    (tmp_path / "1cv8" / "conf" / "conf.cfg").write_bytes("SystemLanguage=RU\n".encode("utf-16-le"))
+    status, _, detail = doctor.check_unsafe_action_protection()[0]
+    assert status == doctor.WARN and "не читается" in detail
+

@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Fixed
+- `protection`: нечитаемый `conf.cfg` (UTF-16 без BOM) больше не выдаётся за «масок нет» — doctor и
+  `onec_verify protection` говорят «файл не читается», предполёт отвечает UNKNOWN; `is_client_server`
+  не зависит от регистра (`srvr=`/`file=`), UNC-путь считается файловой базой; `onec_verify protection
+  --status` предупреждает о glob-масках и различает `LOCAL_ONLY`, как обещано в документации.
+
 ### Added
 - `1c-admin-devops` / `cluster-and-licensing.md`: порт агента кластера не обязательно 1540 (задаётся
   `ragent -port`, на штатном порту может висеть остановленная служба старой версии — «refused» это не

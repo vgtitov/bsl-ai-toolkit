@@ -163,7 +163,7 @@ def test_roundtrip_keeps_encoding_and_newlines(tmp_path):
 
         pr.set_mask(".*_PP.*", cfg_path=cfg)
         raw = cfg.read_bytes()
-        assert raw.startswith(bom), f"{enc}: BOM не сохранён"
+        assert raw[:len(bom)] == bom and (bom or not raw.startswith(b"\xef\xbb\xbf")), f"{enc}: BOM не сохранён"
         text, got_enc, got_nl = pr.read_cfg(cfg)
         assert "SystemLanguage=RU" in text, f"{enc}: соседняя строка потеряна"
         assert "DisableUnsafeActionProtection=.*_PP.*" in text
@@ -221,3 +221,27 @@ def test_no_platform_configured_is_unknown_not_crash(monkeypatch):
     assert pr.conf_cfg_path() is None
     assert pr.masks_from_conf(None) == []
     assert pr.status_for_base("srv\\ERP") == pr.UNKNOWN
+
+
+def test_is_client_server_case_and_unc():
+    assert pr.is_client_server("srv\\ERP_Test")
+    assert pr.is_client_server('Srvr="srv";Ref="ERP";')
+    assert pr.is_client_server('srvr="srv";ref="ERP";')          # регистр не важен
+    assert pr.is_client_server("/S srv\\ERP")
+    assert not pr.is_client_server('file="D:\\bases\\erp";')   # file= в нижнем регистре
+    assert not pr.is_client_server("\\\\srv\\share\\erp")     # UNC — файловая база
+    assert not pr.is_client_server("D:\\bases\\erp")
+    assert not pr.is_client_server("/srv/bases/erp")
+
+
+def test_unreadable_conf_is_not_reported_as_no_masks(tmp_path):
+    """«Файл не читается» и «масок нет» — разные диагнозы: masks_from_conf поднимает
+    ConfEncodingError, а status_for_base честно отвечает UNKNOWN."""
+    root = tmp_path / "1cv8"
+    (root / "8.3.27.2214" / "bin").mkdir(parents=True)
+    (root / "conf").mkdir()
+    (root / "conf" / "conf.cfg").write_bytes("SystemLanguage=RU\n".encode("utf-16-le"))  # UTF-16 без BOM
+    with pytest.raises(pr.ConfEncodingError):
+        pr.masks_from_conf(pr.conf_cfg_path(root))
+    assert pr.status_for_base("srv\\ERP_Test", root) == pr.UNKNOWN
+
