@@ -99,12 +99,9 @@ def masks_from_conf(cfg: Path | None) -> list[str]:
     Файла нет / параметра нет → пусто."""
     if cfg is None or not Path(cfg).is_file():
         return []
-    try:
-        text = read_cfg(Path(cfg))[0]
-    except ConfEncodingError:
-        # Предполёт и doctor не должны падать из-за чужого файла: пусть считают, что масок нет,
-        # это безопасная сторона ошибки (будет предупреждение вместо молчания).
-        return []
+    # Нечитаемый файл — ConfEncodingError наружу: «масок нет» и «файл не читается» — разные
+    # диагнозы, и второй нельзя прятать за первым (doctor/предполёт ловят его сами).
+    text = read_cfg(Path(cfg))[0]
     out = []
     for line in text.splitlines():
         m = re.match(r"\s*DisableUnsafeActionProtection\s*=\s*(.*)$", line, re.IGNORECASE)
@@ -151,9 +148,14 @@ def is_client_server(base: str) -> bool:
     и локальная проверка про него ничего не знает.
     """
     b = base.strip()
-    if "File=" in b or b.startswith("/") or ":" in b.split("\\")[0][1:]:
+    low = b.casefold()
+    if re.match(r"/s[\s\"]", low) or "srvr=" in low:      # флаг /S или строка соединения
+        return True
+    if re.match(r"/f[\s\"]", low) or "file=" in low:
         return False
-    return "Srvr=" in b or "\\" in b
+    if b.startswith("\\\\") or b.startswith("/") or ":" in b.split("\\")[0][1:]:
+        return False                      # UNC, POSIX-путь, диск — файловая база
+    return "\\" in b
 
 
 def status_for_base(base: str, platform_root: str | Path | None = None) -> str:
@@ -163,7 +165,11 @@ def status_for_base(base: str, platform_root: str | Path | None = None) -> str:
     LOCAL_ONLY   — покрыта локально, но база клиент-серверная: решает conf.cfg сервера;
     UNKNOWN      — не покрыта, всё зависит от флага у пользователя ИБ.
     """
-    for mask in masks_from_conf(conf_cfg_path(platform_root)):
+    try:
+        masks = masks_from_conf(conf_cfg_path(platform_root))
+    except ConfEncodingError:
+        return UNKNOWN                    # нечитаемый conf.cfg = про маску ничего не известно
+    for mask in masks:
         if mask in UNIVERSAL_MASKS or _matches(base, mask):
             return LOCAL_ONLY if is_client_server(base) else OFF_BY_MASK
     return UNKNOWN

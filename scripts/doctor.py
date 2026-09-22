@@ -143,8 +143,13 @@ def check_unsafe_action_protection(base: str | None = None):
     hint = ("батч-прогоны (ступень 2) повиснут на модальном окне, если у пользователя ИБ "
             "не снят флаг. Способы — docs/setup-actions-required.md §1")
     cfg = protection.conf_cfg_path(root)
-    masks = protection.masks_from_conf(cfg)
     res = []
+    try:
+        masks = protection.masks_from_conf(cfg)
+    except protection.ConfEncodingError as e:
+        # «Файл не читается» и «масок нет» — разные диагнозы; первый нельзя прятать за вторым.
+        return [(WARN, name, f"conf.cfg не читается (кодировка без BOM / не UTF): {e}. "
+                             "Маски не проверены; править файл только в его кодировке")]
     bad = protection.invalid_masks(masks)
     if bad:
         # Маска, которая не является регулярным выражением, платформой молча игнорируется:

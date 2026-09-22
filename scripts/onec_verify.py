@@ -153,13 +153,23 @@ def _protection(a):
         print(f"[ok] защита возвращена, параметр убран из {cfg}")
 
     cfg = pr.conf_cfg_path()
-    masks = pr.masks_from_conf(cfg)
     print(f"conf.cfg: {cfg or 'не найден'}")
+    try:
+        masks = pr.masks_from_conf(cfg)
+    except pr.ConfEncodingError as e:
+        print(f"[warn] conf.cfg не читается: {e}")
+        return
     print("маски: " + ("; ".join(masks) if masks else "нет — защита включена"))
+    bad = pr.invalid_masks(masks)
+    if bad:
+        print(f"[warn] не регулярные выражения, платформа их игнорирует: {'; '.join(bad)} "
+              "(нужен вид .*Test.*, а не *Test*)")
     if a.base:
-        covered = pr.status_for_base(a.base) == pr.OFF_BY_MASK
-        print(f"база {a.base}: " + ("под маской, окна не будет" if covered
-                                    else "маска не покрывает"))
+        status = pr.status_for_base(a.base)
+        print(f"база {a.base}: " + {
+            pr.OFF_BY_MASK: "под маской, окна не будет",
+            pr.LOCAL_ONLY: "локально под маской, но база клиент-серверная — решает conf.cfg СЕРВЕРА 1С",
+        }.get(status, "маска не покрывает"))
 
 
 def _serve(a):
