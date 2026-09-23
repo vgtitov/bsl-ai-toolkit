@@ -14,7 +14,7 @@
           {
             "type": "command",
             "timeout": 60,
-            "command": "python3 \"${CLAUDE_PROJECT_DIR:-.}/scripts/posttool_guard.py\" 2>/dev/null || python \"${CLAUDE_PROJECT_DIR:-.}/scripts/posttool_guard.py\""
+            "command": "P=$(for c in python3 python; do \"$c\" -c '' >/dev/null 2>&1 && { echo \"$c\"; break; }; done); ${P:-uv run --quiet --no-project --python 3.12 python} \"${CLAUDE_PROJECT_DIR:-.}/scripts/posttool_guard.py\""
           }
         ]
       }
@@ -24,7 +24,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"${CLAUDE_PROJECT_DIR:-.}\" && { python3 scripts/repo_freshness.py 2>/dev/null || python scripts/repo_freshness.py 2>/dev/null; } || true",
+            "command": "cd \"${CLAUDE_PROJECT_DIR:-.}\" && { P=$(for c in python3 python; do \"$c\" -c '' >/dev/null 2>&1 && { echo \"$c\"; break; }; done); ${P:-uv run --quiet --no-project --python 3.12 python} scripts/repo_freshness.py 2>/dev/null; } || true",
             "timeout": 30
           }
         ]

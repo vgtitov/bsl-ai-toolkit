@@ -141,3 +141,25 @@ def test_unsafe_protection_warns_when_conf_unreadable(monkeypatch, tmp_path):
     status, _, detail = doctor.check_unsafe_action_protection()[0]
     assert status == doctor.WARN and "не читается" in detail
 
+
+
+def test_prereqs_java_and_claude_not_fatal_when_not_needed(monkeypatch):
+    # Профиль analyst: в .mcp.json нет java-сервера, CLI не нужен приложению — не должно быть FAIL.
+    monkeypatch.setattr(doctor.shutil, "which", lambda c: None if c in ("java", "claude") else "/x/" + c)
+    res = {name: status for status, name, _ in doctor.check_prereqs(needs_java=False)}
+    assert res["prereq java"] == doctor.WARN
+    assert res["prereq claude"] == doctor.WARN
+    res = {name: status for status, name, _ in doctor.check_prereqs(needs_java=True)}
+    assert res["prereq java"] == doctor.BAD
+
+
+@pytest.mark.parametrize("body", ['{"mcpServers": []}', '{"mcpServers": {"x": null}}', '{"mcpServers": null}'])
+def test_malformed_mcp_json_reports_fail_not_crash(tmp_path, monkeypatch, capsys, body):
+    cfg = tmp_path / ".mcp.json"
+    cfg.write_text(body, encoding="utf-8")
+    monkeypatch.setattr(doctor.sys, "argv", ["doctor", "--config", str(cfg)])
+    with pytest.raises(SystemExit):
+        doctor.main()
+    out = capsys.readouterr().out
+    assert "[FAIL] .mcp.json" in out
+    assert "[FAIL] prereq java" not in out
