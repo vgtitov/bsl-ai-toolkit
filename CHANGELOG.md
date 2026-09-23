@@ -4,10 +4,18 @@
 
 ## [Unreleased]
 
+## [2.3.8] - 2026-09-23
+
 ### Fixed
 - Хук `PostToolUse` молча не проверял правки: брал путь из `$CLAUDE_FILE_PATHS`, которой в Claude Code нет.
   Новый `scripts/posttool_guard.py` читает путь из JSON на STDIN (`tool_input.file_path`), гоняет `bsl_guard` и
   `rights_guard` и отдаёт находки агенту через `hookSpecificOutput.additionalContext`.
+- Хуки `PostToolUse` и `SessionStart` на Windows без Python молча не работали: `python3` и `python` там —
+  заглушки Microsoft Store. Теперь хук выбирает живой интерпретатор (`-c ''`), иначе запускает через
+  `uv run --no-project --python 3.12`. Цепочка `||` больше не перезапускает скрипт без STDIN.
+- `doctor`: Java — ошибка, только если её требует сервер из `.mcp.json` (у аналитика её нет); отсутствие CLI
+  `claude` — предупреждение, приложению он не нужен. Битый `.mcp.json` (`mcpServers` не объект) даёт
+  `[FAIL] .mcp.json`, а не падение.
 
 ## [2.3.7] - 2026-09-23
 

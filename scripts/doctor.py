@@ -225,15 +225,22 @@ def check_com_connector():
     return [(OK, name, f"CLSID и TypeLib зарегистрированы ({dll or clsid})")]
 
 
-def check_prereqs():
+def check_prereqs(needs_java=True):
+    """java — BAD только если её требует сервер из .mcp.json (у профиля analyst bsl-platform нет);
+    claude CLI — всегда WARN: десктоп-приложению он не нужен, только работе из терминала."""
     res = []
-    for c, hint in [("git", "winget install Git.Git"), ("uv", "https://astral.sh/uv"),
-                    ("java", "нужен JRE/JDK (EDT его ставит)"), ("claude", "Claude Code CLI"),
-                    ("rg", "ripgrep: winget install BurntSushi.ripgrep.MSVC")]:
+    for c, hint, required in [
+            ("git", "winget install Git.Git", True), ("uv", "https://astral.sh/uv", True),
+            ("java", "нужен JRE/JDK (EDT его ставит)", needs_java),
+            ("claude", "Claude Code CLI — нужен только для работы из терминала, приложению не нужен", False),
+            ("rg", "ripgrep: winget install BurntSushi.ripgrep.MSVC", True)]:
         if shutil.which(c):
             res.append((OK, f"prereq {c}", "найден"))
-        else:
+        elif required:
             res.append((BAD, f"prereq {c}", f"НЕ найден — {hint}"))
+        else:
+            why = "" if c == "claude" else " (текущему .mcp.json не нужна)"
+            res.append((WARN, f"prereq {c}", f"не найден{why} — {hint}"))
     # git-lfs — нужен НЕ всем: только репозиториям с LFS (filter=lfs в .gitattributes). Глобальный
     # pre-push (scripts/git-hooks/pre-push) в таком репозитории остановит push без git-lfs, иначе
     # уехали бы указатели вместо файлов. Поэтому WARN, а не BAD: на машине без LFS-репозиториев
@@ -294,16 +301,27 @@ def main():
     env = dict(os.environ)
     results = []
 
-    results += check_prereqs()
+    cfg = Path(ns.config) if ns.config else Path.cwd() / ".mcp.json"
+    servers, cfg_err = {}, None
+    if cfg.exists():
+        try:
+            servers = json.loads(cfg.read_text(encoding="utf-8")).get("mcpServers", {})
+            if not isinstance(servers, dict) or not all(isinstance(v, dict) for v in servers.values()):
+                raise ValueError("mcpServers должен быть объектом {имя: {command, args, env}}")
+        except Exception as e:
+            servers, cfg_err = {}, e
+    needs_java = any(Path(str(s.get("command", ""))).stem.lower() == "java" for s in servers.values())
+
+    results += check_prereqs(needs_java)
     results += check_unsafe_action_protection(ns.base)
     results += check_com_connector()
 
-    cfg = Path(ns.config) if ns.config else Path.cwd() / ".mcp.json"
     if not cfg.exists():
         results.append((BAD, ".mcp.json", f"не найден в {cfg} — запусти onboard или перейди в рабочий каталог"))
+    elif cfg_err is not None:
+        results.append((BAD, ".mcp.json", f"не разобран: {cfg_err}"))
     else:
         try:
-            servers = json.loads(cfg.read_text(encoding="utf-8")).get("mcpServers", {})
             for nm, spec in servers.items():
                 results.append(check_server(plan_for_server(nm, spec, env), env))
             results.append((OK, ".mcp.json", f"{len(servers)} серверов: {', '.join(servers)}"))
