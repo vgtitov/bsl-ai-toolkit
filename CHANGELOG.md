@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [2.3.6] - 2026-09-23
+
 ### Added
 - `scripts/repo_freshness.py` + хук `SessionStart` в `adapters/claude/settings.json`: раз в сутки `git fetch`
   с таймаутом; если клон отстал от upstream, в контекст сессии попадает строка «предложи обновиться». Pull сам
