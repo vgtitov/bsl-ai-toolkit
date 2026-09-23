@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Added
+- `scripts/repo_freshness.py` + хук `SessionStart` в `adapters/claude/settings.json`: раз в сутки `git fetch`
+  с таймаутом; если клон отстал от upstream, в контекст сессии попадает строка «предложи обновиться». Pull сам
+  не делает, на пин-теге молчит. Работает и в клоне ядра, и в Team-репо (конфиг — `team-localization-template.md`).
+- `docs/team-localization-template.md`: инициализация Team-репо прогоном агента по источникам организации
+  (кластеры, пробы SSH, Git, база знаний, трекер) с одним пакетом вопросов человеку; «Правило №0» заменено хуком.
+
 ### Fixed
 - `protection`: нечитаемый `conf.cfg` (UTF-16 без BOM) больше не выдаётся за «масок нет» — doctor и
   `onec_verify protection` говорят «файл не читается», предполёт отвечает UNKNOWN; `is_client_server`
