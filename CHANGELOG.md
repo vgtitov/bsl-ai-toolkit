@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Fixed
+- Хук `PostToolUse` молча не проверял правки: брал путь из `$CLAUDE_FILE_PATHS`, которой в Claude Code нет.
+  Новый `scripts/posttool_guard.py` читает путь из JSON на STDIN (`tool_input.file_path`), гоняет `bsl_guard` и
+  `rights_guard` и отдаёт находки агенту через `hookSpecificOutput.additionalContext`.
+
 ## [2.3.7] - 2026-09-23
 
 ### Fixed
