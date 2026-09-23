@@ -23,7 +23,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"${CLAUDE_PROJECT_DIR:-.}\" && { python3 scripts/repo_freshness.py 2>/dev/null || python scripts/repo_freshness.py 2>/dev/null; } || true"
+            "command": "cd \"${CLAUDE_PROJECT_DIR:-.}\" && { python3 scripts/repo_freshness.py 2>/dev/null || python scripts/repo_freshness.py 2>/dev/null; } || true",
+            "timeout": 30
           }
         ]
       }

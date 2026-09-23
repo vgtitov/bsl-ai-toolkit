@@ -68,26 +68,34 @@ def check(repo: Path, every_hours: float = 20, fetch_timeout: int = 15, hint: st
     stamp = (repo / gitdir if not os.path.isabs(gitdir) else Path(gitdir)) / "repo-freshness.stamp"
     fetched = True
     if every_hours > 0 and stamp.exists() and time.time() - stamp.stat().st_mtime < every_hours * 3600:
-        fetched = False                             # недавно проверяли — сравниваем с тем, что есть
+        fetched = False                             # недавно пробовали — сравниваем с тем, что есть
     else:
+        # Метка ПОПЫТКИ, а не успеха: без сети/VPN иначе каждая сессия (и resume/compact) снова ждала бы
+        # таймаут fetch. Не вышло сейчас — попробуем через every_hours, а сравним с последним удачным.
+        try:
+            stamp.touch()
+        except OSError:
+            pass
         code, _ = _git(repo, "fetch", "--quiet", "--no-tags", timeout=fetch_timeout)
-        if code == 0:
-            try:
-                stamp.touch()
-            except OSError:
-                pass
-        else:
-            fetched = False                         # сеть/доступ — не ошибка сессии, просто старые данные
+        fetched = code == 0
 
-    code, behind = _git(repo, "rev-list", "--count", f"HEAD..{upstream}")
-    if code or not behind.isdigit() or int(behind) == 0:
+    code, counts = _git(repo, "rev-list", "--left-right", "--count", f"HEAD...{upstream}")
+    parts = counts.split()
+    if code or len(parts) != 2 or not all(x.isdigit() for x in parts):
+        return ""
+    ahead, behind = int(parts[0]), int(parts[1])
+    if behind == 0:
         return ""
     _, last = _git(repo, "log", "-1", "--format=%cs %s", upstream)
-    what = hint or f"git -C \"{repo}\" pull --ff-only"
     note = "" if fetched else " (по последней удачной проверке)"
-    return (f"[свежесть] {repo.name}: ветка {branch} отстаёт от {upstream} на {behind} коммит(ов){note}; "
-            f"последний там: {last}. Правила и знания в этой сессии могут быть устаревшими — "
-            f"предложи человеку обновиться до начала работы: {what}")
+    head = (f"[свежесть] {repo.name}: ветка {branch} отстаёт от {upstream} на {behind} коммит(ов){note}; "
+            f"последний там: {last}. Правила и знания в этой сессии могут быть устаревшими — ")
+    if ahead:
+        # pull --ff-only здесь заведомо упадёт: у человека свои коммиты. Решение за ним.
+        return head + (f"и в ней {ahead} своих коммит(ов), ветка разошлась с upstream. Скажи об этом "
+                       f"человеку до начала работы и не обновляй сам: нужен rebase/merge с его решением")
+    what = hint or f"git -C \"{repo}\" pull --ff-only"
+    return head + f"предложи человеку обновиться до начала работы: {what}"
 
 
 def main(argv=None) -> int:
