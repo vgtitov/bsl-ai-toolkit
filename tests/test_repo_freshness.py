@@ -48,3 +48,21 @@ def test_detached_head_on_pin_tag_is_silent(tmp_path):
 def test_not_a_repo_and_cache_never_fail(tmp_path):
     assert rf.check(tmp_path / "nowhere", every_hours=0) == ""
     assert rf.main(["--repo", str(tmp_path)]) == 0
+
+
+def test_failed_fetch_still_marks_attempt(tmp_path):
+    """Без сети каждая сессия не должна заново ждать таймаут fetch."""
+    origin, clone = _pair(tmp_path)
+    _run(clone, "remote", "set-url", "origin", str(tmp_path / "gone"))
+    stamp = clone / ".git" / "repo-freshness.stamp"
+    assert rf.check(clone, every_hours=5) == "" and stamp.exists()
+
+
+def test_diverged_branch_does_not_suggest_ff_pull(tmp_path):
+    origin, clone = _pair(tmp_path)
+    (origin / "a.txt").write_text("2"); _run(origin, "commit", "-qam", "там")
+    _run(clone, "fetch", "-q")
+    (clone / "b.txt").write_text("x"); _run(clone, "add", "."); _run(clone, "commit", "-qm", "тут")
+    msg = rf.check(clone, every_hours=0, hint="скажи: подтяни")
+    assert "разошлась" in msg and "скажи: подтяни" not in msg
+

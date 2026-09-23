@@ -86,7 +86,7 @@
 {
   "hooks": {
     "SessionStart": [{ "hooks": [{ "type": "command",
-      "command": "cd \"${CLAUDE_PROJECT_DIR:-.}\" && { python3 \"$ONEC_TOOLKIT_DIR/scripts/repo_freshness.py\" --hint \"скажи: подтяни изменения\" 2>/dev/null || python \"$ONEC_TOOLKIT_DIR/scripts/repo_freshness.py\" --hint \"скажи: подтяни изменения\" 2>/dev/null; } || true" }] }]
+      "command": "cd \"${CLAUDE_PROJECT_DIR:-.}\" && { python3 \"$ONEC_TOOLKIT_DIR/scripts/repo_freshness.py\" --hint \"скажи: подтяни изменения\" 2>/dev/null || python \"$ONEC_TOOLKIT_DIR/scripts/repo_freshness.py\" --hint \"скажи: подтяни изменения\" 2>/dev/null; } || true", "timeout": 30 }] }]
   }
 }
 ```
@@ -95,6 +95,10 @@
   через поднятие пина в Team, а это Team-коммит, который хук и увидит.
 - В клоне самого ядра тот же хук уже есть в `adapters/claude/settings.json` → `.claude/settings.json`.
 - Первый запуск Claude Code спросит, доверять ли хукам проекта. Это одноразовое согласие человека.
+- Хук вызывается и при resume/clear/compact. Без сети fetch пробуется не чаще раза в сутки (метка попытки,
+  а не успеха), `timeout: 30` страхует от зависшего дочернего процесса.
+- Уже существующие клоны сами хук не получат: он приезжает тем же обновлением. Один раз команде надо
+  сказать «подтяни изменения», дальше напоминает хук.
 
 ## Инициализация Team-репо — сбор контекста агентами, а не заполнение шаблона руками
 
