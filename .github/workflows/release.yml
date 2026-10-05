@@ -37,6 +37,15 @@ jobs:
           mkdir -p dist
           cd extensions/ai_debug && zip -r ../../dist/ai_debug-src.zip src README.md
 
+      # Описание релиза = раздел CHANGELOG.md этой версии: его читают люди на странице релиза,
+      # каталоги проектов и поисковики; дежурная фраза «см. CHANGELOG» им ничего не говорит.
+      - name: Build release notes from CHANGELOG
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          python scripts/release_guard.py notes "$TAG" > dist/notes.md
+          printf '\n\n---\nВ архиве `ai_debug-src.zip` — исходник расширения (импорт в 1C:EDT). Собранный `ai_debug.cfe` прикладывается с машины, где есть платформа 1С: `scripts/build_ai_debug_cfe.py --upload <tag>` (см. `docs/RELEASING.md`).\n' >> dist/notes.md
+
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -45,4 +54,4 @@ jobs:
           gh release create "$TAG" dist/ai_debug-src.zip \
             --repo "$GITHUB_REPOSITORY" \
             --title "$TAG" \
-            --notes "Изменения — в CHANGELOG.md. В архиве ai_debug-src.zip — исходник расширения (импорт в 1C:EDT). Собранный ai_debug.cfe прикладывается с машины, где есть платформа 1С: scripts/build_ai_debug_cfe.py --upload <tag> (см. docs/RELEASING.md)."
+            --notes-file dist/notes.md

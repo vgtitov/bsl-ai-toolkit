@@ -337,3 +337,20 @@ def test_release_workflow_runs_tests_and_guard_before_release():
     assert guard in workflow
     assert workflow.index(full_tests) < workflow.index(guard)
     assert workflow.index(guard) < workflow.index(publish)
+
+
+def test_changelog_section_returns_only_that_release(tmp_path):
+    (tmp_path / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## [Unreleased]\n\n## [1.2.0] - 2026-01-02\n\n### Added\n- новое\n\n"
+        "## [1.1.0] - 2026-01-01\n\n### Fixed\n- старое\n", encoding="utf-8")
+    assert release_guard.changelog_section(tmp_path, "v1.2.0") == "### Added\n- новое"
+    assert release_guard.changelog_section(tmp_path, "v1.1.0") == "### Fixed\n- старое"
+    with pytest.raises(release_guard.ReleaseError):
+        release_guard.changelog_section(tmp_path, "v9.9.9")
+
+
+def test_changelog_section_refuses_empty_section(tmp_path):
+    (tmp_path / "CHANGELOG.md").write_text(
+        "## [1.2.0] - 2026-01-02\n\n## [1.1.0] - 2026-01-01\n- старое\n", encoding="utf-8")
+    with pytest.raises(release_guard.ReleaseError):
+        release_guard.changelog_section(tmp_path, "v1.2.0")

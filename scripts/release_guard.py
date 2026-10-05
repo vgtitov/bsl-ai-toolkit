@@ -57,6 +57,21 @@ def _require_changelog(root: Path, version: str) -> None:
             f"CHANGELOG.md has no dated section for {number}")
 
 
+def changelog_section(root: Path, version: str) -> str:
+    """Тело раздела CHANGELOG.md для версии — оно идёт в описание GitHub Release."""
+    _require_changelog(root, version)
+    number = re.escape(version.removeprefix("v"))
+    text = (root / "CHANGELOG.md").read_text(encoding="utf-8")
+    match = re.search(
+        rf"^## \[{number}\] - [^\n]*\n(.*?)(?=^## \[|\Z)",
+        text, re.MULTILINE | re.DOTALL)
+    body = match.group(1).strip() if match else ""
+    if not body:
+        raise ReleaseError(
+            f"CHANGELOG.md section for {version.removeprefix('v')} is empty")
+    return body
+
+
 def _run_git(root: Path, *args: str) -> str:
     result = subprocess.run(
         ["git", *args],
@@ -252,6 +267,10 @@ def _parser() -> argparse.ArgumentParser:
     validate = commands.add_parser(
         "validate-tag", help="validate a pushed tag in release CI")
     _add_release_location(validate)
+
+    notes = commands.add_parser(
+        "notes", help="print the CHANGELOG.md section for a release")
+    notes.add_argument("version")
     return parser
 
 
@@ -280,6 +299,8 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 f"OK: created local annotated tag {args.version}; "
                 f"review it, then push it explicitly")
+        elif args.command == "notes":
+            print(changelog_section(root, args.version))
         else:
             validate_pushed_tag(
                 root, args.version, args.remote, args.branch)
