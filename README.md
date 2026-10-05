@@ -37,6 +37,7 @@ git clone https://github.com/vgtitov/bsl-ai-toolkit ; cd bsl-ai-toolkit
 > 1С-исходники, ввести секреты и опубликовать тест-базу).
 
 - **Установка инструментов ИИ (гайд + грабли)** — [docs/AI_INSTALL_GUIDE.md](docs/AI_INSTALL_GUIDE.md).
+- **Клон сделан до 05.10.2026?** История репозитория переписана — см. [UPDATING.md](UPDATING.md).
 - **Версионирование и обновление** — [docs/AI_UPDATE.md](docs/AI_UPDATE.md) (ядро пинится semver-тегом; ИИ обновляется сам).
 - **Здоровье окружения** — `python scripts/doctor.py` (пререквизиты + MCP из `.mcp.json` + доступы).
 
