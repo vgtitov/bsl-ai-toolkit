@@ -1,4 +1,4 @@
-# bsl-ai-toolkit — AI-first разработка 1С:Предприятие (мульти-агентный контур)
+# bsl-ai-toolkit — ИИ-агент пишет на 1С по реальному коду, а не по памяти
 
 [![CI](https://github.com/vgtitov/bsl-ai-toolkit/actions/workflows/tests.yml/badge.svg)](https://github.com/vgtitov/bsl-ai-toolkit/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-00B9BF.svg)](LICENSE)
@@ -8,15 +8,41 @@
 [![MCP](https://img.shields.io/badge/MCP-servers-5b21b6.svg)](https://modelcontextprotocol.io/)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg)](https://www.python.org/)
 
-Переиспользуемый набор **правил + скиллов + MCP-серверов + byte-perfect движка правки метаданных + методологии** для
-AI-ассистированной разработки на **1С:Предприятие 8.3 (BSL)**. **Не привязан к конкретному AI** — работает под разные
-AI-агенты (Claude Code, Cursor, Copilot, Gemini CLI, Codex, Cline, Windsurf, Aider) через единое ядро и тонкие адаптеры.
-Не привязан к конкретной организации — адаптируется под любую конфигурацию/расширение. Принцип: **AI не угадывает 1С,
-а работает по РЕАЛЬНОМУ коду и справке, по стандартам, доводит код до production-ready.**
+Набор **правил, скиллов и MCP-серверов** для разработки на **1С:Предприятие 8.3 (BSL)** с ИИ-агентом. Агент ищет по
+коду вашей конфигурации и расширений, получает диагностики BSL Language Server после каждой правки и меняет метаданные
+(формы, СКД, реквизиты) детерминированным движком с проверкой в тестовой базе. Эталонная реализация — Claude Code;
+Cursor, Copilot, Gemini CLI, Codex, Cline, Windsurf и Aider подключаются адаптерами из общего ядра. Лицензия MIT,
+привязки к конкретной организации нет.
 
-> **Claude Code — первая (эталонная) реализация.** Остальные агенты подключаются минимальной адаптацией из общего
-> ядра (`core/`) — см. `adapters/`. Три оси переносимости: **AGENTS.md** (правила) + **SKILL.md** (навыки) + **MCP**
-> (инструменты). Не 1С-Битрикс (это CMS на PHP — [отдельный toolkit](https://github.com/vgtitov/bitrix-ai-toolkit)).
+## Быстрый старт
+```bash
+git clone https://github.com/vgtitov/bsl-ai-toolkit && cd bsl-ai-toolkit
+bash onboard/onboard.sh          # macOS/Linux; исходники 1С — из ONEC_SRC_DIR или --srcdir <путь>
+```
+```powershell
+git clone https://github.com/vgtitov/bsl-ai-toolkit ; cd bsl-ai-toolkit
+.\onboard\onboard.ps1            # Windows; исходники 1С — из ONEC_SRC_DIR или -SrcDir <путь>
+```
+**Понадобится:** `git`, `uv`, `java`, `rg`, Claude Code (или другой агент — `sh build.sh <agent>`, на Windows `build.ps1`,
+см. `adapters/README.md`) и выгрузка вашей конфигурации в файлы (EDT или Конфигуратор-XML). onboard сам проверит
+пререквизиты, разложит скиллы, профиль `.mcp.json` и правила, задаст env, поставит git-хуки и сделает самотест. Дальше
+перезапусти агента и подтверди MCP-серверы; здоровье окружения — `python scripts/doctor.py`.
+
+> **Безопасность.** Правки метаданных проверяются только в ТЕСТ-базе. Доступ к данным живой базы (`onec-data`) —
+> read-only под исследуемым пользователем, с маскированием ПДн. Пути и креды — через переменные окружения: не в
+> репозиторий и не в чат с агентом. Подробнее — [SECURITY.md](SECURITY.md).
+
+> **Пусть настроит сам агент.** Можно не настраивать руками — дай ИИ-агенту готовый промпт из
+> [docs/AGENT_SETUP.md](docs/AGENT_SETUP.md), и он развернёт окружение сам (человеку — только склонировать свои
+> 1С-исходники, ввести секреты и опубликовать тест-базу).
+
+- **Установка инструментов ИИ (гайд + грабли)** — [docs/AI_INSTALL_GUIDE.md](docs/AI_INSTALL_GUIDE.md).
+- **Версионирование и обновление** — [docs/AI_UPDATE.md](docs/AI_UPDATE.md) (ядро пинится semver-тегом; ИИ обновляется сам).
+- **Здоровье окружения** — `python scripts/doctor.py` (пререквизиты + MCP из `.mcp.json` + доступы).
+
+> **Три оси переносимости:** **AGENTS.md** (правила) + **SKILL.md** (навыки) + **MCP** (инструменты); остальные агенты
+> подключаются минимальной адаптацией из общего ядра (`core/`) — см. `adapters/`. Не 1С-Битрикс (это CMS на PHP —
+> [отдельный toolkit](https://github.com/vgtitov/bitrix-ai-toolkit)).
 
 ## Идея
 Вся RU-сцена AI-разработки 1С («вайб-кодинг», агенты в EDT/Cursor) упирается в одно: **модель галлюцинирует детали 1С** —
@@ -39,11 +65,10 @@ AI-агенты (Claude Code, Cursor, Copilot, Gemini CLI, Codex, Cline, Windsur
 |---|---|---|
 | `comol/ai_rules_1c`, `cursor_rules_1c` | правила/rules для LLM | у нас правила + **исполнение через MCP на реальном коде**, а не только текст-инструкции |
 | `Nikolay-Shirokov/cc-1c-skills` | скиллы Claude Code для 1С | у нас скиллы **+ движок метаданных + эксплуатация + мульти-агент** |
-| VibeFlow1C, Shotgun | фреймворк/пайплайн вайб-кодинга | мы **инфраструктурный слой** (MCP+движок), совместимый, а не конкурирующий |
 | `1c-syntax/bsl-language-server` | синтаксис/диагностики | используем как инструмент (`bsl-ls`), добавляем контекст кода/данных |
 
-Уникальное: **byte-perfect правка метаданных с round-trip** (форм/СКД/реквизитов) — то, что почти вся сцена признаёт
-«последним рубежом» и обходит стороной.
+Главное отличие: **byte-perfect правка метаданных с round-trip-проверкой в ТЕСТ-базе** (формы, СКД, реквизиты).
+Сравнение сделано по описаниям проектов на 05.10.2026, а не по их коду.
 
 ## Состав
 ```
@@ -139,26 +164,6 @@ Toolkit — не только про код: смежные системы SDLC/
 
 Принцип единый: **источник истины — реальный инструмент и измерение** (`rac`, ТЖ, `pg_stat_*`, счётчики), а не память
 модели. Добавить свой коннектор — тонкий скрипт в `scripts/` или инструмент в MCP `onec-ops`; секреты — только через env.
-
-## Установка
-```bash
-git clone https://github.com/vgtitov/bsl-ai-toolkit && cd bsl-ai-toolkit
-bash onboard/onboard.sh          # macOS/Linux
-```
-```powershell
-git clone https://github.com/vgtitov/bsl-ai-toolkit ; cd bsl-ai-toolkit
-.\onboard\onboard.ps1            # Windows
-```
-onboard раскладывает скиллы, профиль `.mcp.json` и правила, задаёт env, ставит git-хуки и делает самотест. Дальше
-перезапусти агента и подтверди MCP-серверы. Под другого агента: `sh build.sh <agent>` (Windows — `build.ps1`; см. `adapters/README.md`).
-
-> **Пусть настроит сам агент.** Можно не настраивать руками — дай ИИ-агенту готовый промпт из
-> [docs/AGENT_SETUP.md](docs/AGENT_SETUP.md), и он развернёт окружение сам (человеку — только склонировать свои
-> 1С-исходники, ввести секреты и опубликовать тест-базу).
-
-- **Установка инструментов ИИ (гайд + грабли)** — [docs/AI_INSTALL_GUIDE.md](docs/AI_INSTALL_GUIDE.md).
-- **Версионирование и обновление** — [docs/AI_UPDATE.md](docs/AI_UPDATE.md) (ядро пинится semver-тегом; ИИ обновляется сам).
-- **Здоровье окружения** — `python scripts/doctor.py` (пререквизиты + MCP из `.mcp.json` + доступы).
 
 ## Адаптация под свою организацию
 Локализация — это **конфиги и отдельный слой поверх**, не правка ядра:
