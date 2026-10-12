@@ -1690,7 +1690,7 @@ try:
         return bsp_apdex_parse(source, default_t=default_t)
 
     @mcp.tool()
-    def zabbix_api_tool(method: str, params: dict = None, url: str = "", token: str = "") -> "list | dict":
+    def zabbix_api_tool(method: str, params: "dict | None" = None, url: str = "", token: str = "") -> "list | dict":
         """Универсальный READ-ONLY вызов Zabbix API (whitelist: только *.get / apiinfo.version /
         *.export). Покрывает всё, чего нет в составных инструментах: host.get, trigger.get,
         item.get, dashboard.get... url/token — или env ZABBIX_URL/ZABBIX_TOKEN."""
@@ -1711,7 +1711,7 @@ try:
         return zabbix_dashboard_items(url, auth=token or None, dashboardid=dashboardid)
 
     @mcp.tool()
-    def zabbix_perf_report_tool(contour: str = "", dashboardid: str = "", hosts: list = None,
+    def zabbix_perf_report_tool(contour: str = "", dashboardid: str = "", hosts: "list | None" = None,
                                 window_hours: float = 0, url: str = "", token: str = "",
                                 licensed_cores: "dict | None" = None, maps_dir: str = "") -> dict:
         """ГЛАВНЫЙ инструмент анализа производительности по Zabbix: дашборд(ы) и/или хосты →
@@ -1756,7 +1756,7 @@ try:
 
     @mcp.tool()
     def event_log_parse_tool(source: str, level: str = "", user: str = "",
-                             events: list = None, top: int = 100, table: str = "") -> dict:
+                             events: "list | None" = None, top: int = 100, table: str = "") -> dict:
         """Анализ журнала регистрации 1С (кейс «доступ только к ЖР»): из Excel-выгрузки отчёта (.xlsx)
         ИЛИ файла .lgd (SQLite). Фильтры level (Ошибка/Предупреждение/Информация/Примечание)/user/events.
         Возвращает summary (by_level/by_user/by_event) + entries + warnings. Read-only."""

@@ -87,3 +87,23 @@ def test_empty_and_missing_paths(tmp_path):
     assert res["summary"]["files"] == 0
     assert res["events"] == []
     assert "warnings" in res
+
+
+def test_optional_tool_args_accept_null(monkeypatch):
+    """Необязательные аргументы с default=None: схема MCP допускает null, а явный null проходит
+    валидацию (раньше list/dict без None давали "default": null при типе, отвергающем null)."""
+    import asyncio
+    import pytest
+    mod = _load()
+    if mod.mcp is None:
+        pytest.skip("пакет mcp не установлен")
+    monkeypatch.delenv("ZABBIX_URL", raising=False)
+    monkeypatch.delenv("ZABBIX_TOKEN", raising=False)
+    tools = {t.name: t for t in asyncio.run(mod.mcp.list_tools())}
+    for name, field in [("zabbix_api_tool", "params"), ("zabbix_perf_report_tool", "hosts"),
+                        ("event_log_parse_tool", "events")]:
+        prop = tools[name].inputSchema["properties"][field]
+        assert {"type": "null"} in prop.get("anyOf", []), (name, field, prop)
+    # явный null доходит до тела инструмента: без url — штатная ошибка конфигурации, не валидации
+    res = asyncio.run(mod.mcp.call_tool("zabbix_api_tool", {"method": "apiinfo.version", "params": None}))
+    assert "ZABBIX_URL" in str(res)
