@@ -11,6 +11,11 @@
 Чистый stdlib, кроссплатформенно. Комментарии и строковые литералы вырезаются,
 поэтому ключевые слова внутри строк/запросов не дают ложных срабатываний.
 
+Осознанное исключение — отметка на строке с обязательной причиной:
+  Х = Шаг(Стр); // bsl-guard: ignore db-call-in-loop - шаги последовательны, пакетом нельзя
+Отдельной строкой отметка действует на следующую строку. Без причины или с
+неизвестным кодом отметка не действует и сама даёт находку bad-ignore.
+
 Запуск:
   python scripts/bsl_guard.py <файл|каталог> ...   # exit 1 если есть находки
   python scripts/bsl_guard.py --json <path>        # находки в JSON
@@ -66,20 +71,26 @@ _PATTERNS = [
 ]
 
 
-def _strip_comments_and_strings(text: str) -> str:
+def _strip_comments_and_strings(text: str, comments: dict = None) -> str:
     """Заменить содержимое строковых литералов и комментариев пробелами,
     сохранив переносы строк (номера строк не смещаются).
 
     BSL: строка `"…"`, `""` внутри — экранированная кавычка; `//` — комментарий
     до конца строки (вне строки). Многострочные строки-запросы (с `|`) гасятся
     целиком до закрывающей кавычки — для нас важно лишь убрать их содержимое.
+    Если передан `comments`, в него кладётся текст комментария по номеру строки.
     """
     out = []
     i, n = 0, len(text)
     in_string = False
     in_comment = False
+    lineno, comment_start = 1, 0
     while i < n:
         ch = text[i]
+        if ch == "\n":
+            if in_comment and comments is not None:
+                comments[lineno] = text[comment_start:i].rstrip("\r")
+            lineno += 1
         if in_comment:
             if ch == "\n":
                 in_comment = False
@@ -105,6 +116,7 @@ def _strip_comments_and_strings(text: str) -> str:
         # обычный код
         if ch == "/" and i + 1 < n and text[i + 1] == "/":
             in_comment = True
+            comment_start = i + 2
             out.append("  ")
             i += 2
             continue
@@ -115,7 +127,43 @@ def _strip_comments_and_strings(text: str) -> str:
             continue
         out.append(ch)
         i += 1
+    if in_comment and comments is not None:
+        comments[lineno] = text[comment_start:].rstrip("\r")
     return "".join(out)
+
+
+_DB_CALL_CODE = "db-call-in-loop"
+_KNOWN_CODES = {code for code, _, _ in _PATTERNS} | {_DB_CALL_CODE}
+_IGNORE_RX = re.compile(r"^\s*bsl-guard:\s*ignore\b(.*)$", re.IGNORECASE)
+_REASON_SEP = re.compile(r"\s+[-–—]\s+")
+
+
+def _ignores(comments, lines, filename):
+    """Отметки `bsl-guard: ignore <код>[, <код>] - <причина>`.
+
+    Возвращает (строка → множество кодов, находки bad-ignore). Отметка в конце
+    строки кода действует на эту строку, отдельной строкой — на следующую.
+    """
+    ignores, bad = {}, []
+    for lineno, comment in comments.items():
+        m = _IGNORE_RX.match(comment)
+        if not m:
+            continue
+        parts = _REASON_SEP.split(m.group(1).strip(), maxsplit=1)
+        codes = {c for c in re.split(r"[,\s]+", parts[0]) if c}
+        reason = parts[1].strip() if len(parts) > 1 else ""
+        unknown = codes - _KNOWN_CODES
+        if not codes or unknown or not reason:
+            what = ("неизвестный код " + ", ".join(sorted(unknown)) if unknown
+                    else "нет кода правила" if not codes else "нет причины")
+            bad.append(Finding(
+                filename, lineno, "bad-ignore",
+                f"отметка bsl-guard не действует: {what} — пиши "
+                "`// bsl-guard: ignore <код> - <почему нельзя пакетно>`"))
+            continue
+        target = lineno if lines[lineno - 1].strip() else lineno + 1
+        ignores.setdefault(target, set()).update(codes)
+    return ignores, bad
 
 
 # Объявление и конец процедуры/функции (для межпроцедурного анализа).
@@ -175,7 +223,8 @@ def scan_text(text: str, filename: str = "<text>") -> list:
     функции СВОЕГО модуля, которая — сама или транзитивно — лезет в БД; боевой
     пропуск: запрос сидел в функции, из цикла звали функцию).
     """
-    clean = _strip_comments_and_strings(text)
+    comments = {}
+    clean = _strip_comments_and_strings(text, comments)
     lines = clean.split("\n")
     procs = _module_procs(lines)
     tainted, call_rx = _db_access_procs(lines, procs)
@@ -199,14 +248,16 @@ def scan_text(text: str, filename: str = "<text>") -> list:
                 for m in call_rx[name].finditer(line):
                     if _eff_depth(m.start()) >= 1:
                         findings.append(Finding(
-                            filename, lineno, "db-call-in-loop",
+                            filename, lineno, _DB_CALL_CODE,
                             f"вызов {name}() в цикле, а внутри неё — обращение "
                             "к БД (напрямую или по цепочке вызовов) — переделай "
                             "на ОДИН пакетный запрос до цикла"))
         depth += len(opens) - len(closes)
         if depth < 0:
             depth = 0
-    return findings
+    ignores, bad = _ignores(comments, lines, filename)
+    findings = [f for f in findings if f.code not in ignores.get(f.line, ())]
+    return sorted(findings + bad, key=lambda f: f.line)
 
 
 def scan_file(path: Path) -> list:

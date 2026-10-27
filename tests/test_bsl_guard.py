@@ -190,3 +190,89 @@ def test_clean_function_call_in_loop_not_flagged():
         "КонецПроцедуры\n"
     )
     assert _codes(text) == []
+
+
+# --- осознанное исключение: отметка на строке с обязательной причиной ----------
+# Боевой кейс: тест выполняет шаги сценария по очереди, каждый в своей
+# откатываемой транзакции — пакетом это не переделать.
+
+_STEP_MODULE = (
+    "Функция ВыполнитьШаг(Шаг)\n"
+    "    Запрос = Новый Запрос;\n"
+    "    Возврат Запрос.Выполнить();\n"
+    "КонецФункции\n"
+    "Процедура Сценарий()\n"
+    "    Для Каждого Шаг Из Шаги Цикл\n"
+    "        {call}\n"
+    "    КонецЦикла;\n"
+    "КонецПроцедуры\n"
+)
+
+
+def test_ignore_with_reason_on_same_line():
+    text = _STEP_MODULE.format(
+        call="Р = ВыполнитьШаг(Шаг); // bsl-guard: ignore db-call-in-loop - "
+             "шаги последовательны, пакетом нельзя")
+    assert _codes(text) == []
+
+
+def test_ignore_on_previous_line():
+    text = _STEP_MODULE.format(
+        call="// bsl-guard: ignore db-call-in-loop — шаги последовательны\n"
+             "        Р = ВыполнитьШаг(Шаг);")
+    assert _codes(text) == []
+
+
+def test_ignore_without_reason_does_not_suppress():
+    text = _STEP_MODULE.format(
+        call="Р = ВыполнитьШаг(Шаг); // bsl-guard: ignore db-call-in-loop")
+    findings = _mod().scan_text(text, "X.bsl")
+    codes = sorted(f.code for f in findings)
+    assert codes == ["bad-ignore", "db-call-in-loop"]
+    bad = next(f for f in findings if f.code == "bad-ignore")
+    assert bad.line == 7 and "нет причины" in bad.message
+
+
+def test_ignore_unknown_code_does_not_suppress():
+    text = _STEP_MODULE.format(
+        call="Р = ВыполнитьШаг(Шаг); // bsl-guard: ignore db-in-loop - опечатка")
+    findings = _mod().scan_text(text, "X.bsl")
+    assert sorted(f.code for f in findings) == ["bad-ignore", "db-call-in-loop"]
+    assert "db-in-loop" in next(f for f in findings if f.code == "bad-ignore").message
+
+
+def test_ignore_covers_only_named_code():
+    # отметка про db-call-in-loop не глушит запрос в цикле на той же строке
+    text = (
+        "Для Каждого С Из Т Цикл\n"
+        "    Р = Запрос.Выполнить(); // bsl-guard: ignore db-call-in-loop - не то правило\n"
+        "КонецЦикла;\n"
+    )
+    assert _codes(text) == ["query-exec-in-loop"]
+
+
+def test_ignore_several_codes():
+    text = (
+        "Для Каждого С Из Т Цикл\n"
+        "    // bsl-guard: ignore new-query-in-loop, query-exec-in-loop - разовый замер\n"
+        "    Р = Новый Запрос(Т).Выполнить();\n"
+        "КонецЦикла;\n"
+    )
+    assert _codes(text) == []
+
+
+def test_ignore_inside_string_is_not_a_mark():
+    text = _STEP_MODULE.format(
+        call='Р = ВыполнитьШаг("// bsl-guard: ignore db-call-in-loop - нет");')
+    assert _codes(text) == ["db-call-in-loop"]
+
+
+def test_ignore_reaches_only_next_line():
+    text = (
+        "Для Каждого С Из Т Цикл\n"
+        "    // bsl-guard: ignore query-exec-in-loop - только следующая строка\n"
+        "    А = 1;\n"
+        "    Р = Запрос.Выполнить();\n"
+        "КонецЦикла;\n"
+    )
+    assert _codes(text) == ["query-exec-in-loop"]
