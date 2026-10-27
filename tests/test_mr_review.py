@@ -108,3 +108,83 @@ def test_docs_sync_check_warns_and_is_quiet_when_documented(tmp_path):
     (repo / ".env.example").write_text("EXISTING_VAR=\nNEW_SECRET_VAR=\n", encoding="utf-8")
     _git(repo, "add", "-A")
     assert dsc.check(repo) == []
+
+
+def test_remote_project_parses_ssh_and_https():
+    assert mr_review.remote_project("git@gitlab.askona.ru:sng-1c/feedsvc.git") == ("gitlab.askona.ru", "sng-1c/feedsvc")
+    assert mr_review.remote_project("https://gitlab.askona.ru/sng-1c/feedsvc.git") == ("gitlab.askona.ru", "sng-1c/feedsvc")
+    assert mr_review.remote_project("ssh://git@gitlab.example:2222/g/p.git") == ("gitlab.example", "g/p")
+    assert mr_review.remote_project("deploy@gitlab.example:g/p.git") == ("gitlab.example", "g/p")
+
+
+def test_fetch_mr_reads_description_diff_and_pipeline():
+    calls = []
+
+    def fake(url, token):
+        calls.append(url)
+        if url.endswith("/merge_requests/12"):
+            return {"title": "T", "description": "Что: x. Зачем: y.", "state": "opened", "head_pipeline": None,
+                    "source_branch": "a", "target_branch": "b"}
+        return {"changes": [{"new_path": "src/a.py", "diff": "@@\n+x\n+y\n-z\n"}]}
+
+    mr = mr_review.fetch_mr("gitlab.example", "g/p", 12, "tok", get=fake)
+    assert mr["description"].startswith("Что")
+    assert mr["files"] == ["src/a.py"] and mr["added"] == 2 and mr["removed"] == 1
+    assert mr["pipeline"] is None
+    assert "/projects/g%2Fp/merge_requests/12" in calls[0]
+
+
+def test_mr_findings_flag_missing_ci_and_description_gaps():
+    mr = {"description": "только что", "files": ["a.py"], "added": 1, "removed": 0, "pipeline": None}
+    out = mr_review.mr_findings(mr)
+    assert any("CI" in what for _, _, what in out)
+    failed = mr_review.mr_findings({**mr, "pipeline": {"status": "failed"}})
+    assert any(p == "P1" and "failed" in what for p, _, what in failed)
+    assert any("overflow" in what for _, _, what in mr_review.mr_findings({**mr, "overflow": True}))
+    assert any("описание" in where for _, where, _ in out)
+
+
+def test_prompt_is_generic_without_bsl():
+    assert "1С" not in mr_review.second_opinion_prompt(None, False, generic=True)
+    assert "1С" in mr_review.second_opinion_prompt(None, False)
+
+
+def test_mr_number_must_be_positive():
+    import pytest
+    with pytest.raises(SystemExit):
+        mr_review.main(["--mr", "0"])
+
+
+def test_redirect_handler_blocks_redirects():
+    import urllib.request
+    assert mr_review._NoRedirect().redirect_request(urllib.request.Request("https://a"), None, 302, "x", {}, "https://evil") is None
+
+
+def test_host_validation_blocks_userinfo_and_paths():
+    for good in ("gitlab.askona.ru", "gitlab.example:8443", "localhost"):
+        assert mr_review.valid_host(good), good
+    for bad in ("gitlab.company@gitlab.evil", "a.b/x", "a.b?x=1", "a.b#f", "", "http://a.b", "a b", "a.b:port"):
+        assert not mr_review.valid_host(bad), bad
+    import pytest
+    with pytest.raises(ValueError):
+        mr_review.fetch_mr("gitlab.company@gitlab.evil", "g/p", 1, "tok", get=lambda *a: {})
+
+
+def test_mr_cli_reports_http_errors_without_traceback(monkeypatch, capsys):
+    import urllib.error
+    monkeypatch.setenv("GITLAB_TOKEN", "t")
+    monkeypatch.setenv("GITLAB_HOST", "gitlab.example")
+
+    def boom(*a, **k):
+        raise urllib.error.HTTPError("https://gitlab.example", 401, "x", {}, None)
+    monkeypatch.setattr(mr_review, "_gitlab_get", boom)
+    monkeypatch.setattr(mr_review, "fetch_mr", lambda h, p, n, t, get=boom: get("u", t))
+    assert mr_review.main(["--mr", "5", "--project", "g/p", "--no-second-opinion"]) == 2
+    out = capsys.readouterr().out
+    assert "HTTP 401" in out
+
+
+def test_mr_cli_refuses_bad_host(monkeypatch, capsys):
+    monkeypatch.setenv("GITLAB_TOKEN", "secret-token")
+    assert mr_review.main(["--mr", "5", "--project", "g/p", "--host", "gitlab.company@evil.example", "--no-second-opinion"]) == 2
+    assert "secret-token" not in capsys.readouterr().out
