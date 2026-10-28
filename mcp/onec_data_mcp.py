@@ -187,7 +187,7 @@ _VALUE_PII = [
     re.compile(r"(?<![A-Za-z0-9])[A-Z]{2}\d{7}(?!\d)"),          # паспорт РБ «MP1234567»
     # ФИО: «Фамилия Имя Отчество» (отчество по окончанию), «Фамилия И.О.», «И.О. Фамилия»
     re.compile(r"(?<![А-Яа-яЁё])[А-ЯЁ][а-яё]+(?:-[А-ЯЁ][а-яё]+)?\s+[А-ЯЁ][а-яё]+\s+"
-               r"[А-ЯЁ][а-яё]+(?:вич|вна|чна|ична|оглы|кызы)(?![а-яё])"),
+               r"[А-ЯЁ][а-яё]+(?:ич|вна|чна|ична|оглы|кызы)(?![а-яё])"),
     re.compile(r"(?<![А-Яа-яЁё])[А-ЯЁ][а-яё]+\s+[А-ЯЁ]\.\s?[А-ЯЁ]\."),
     re.compile(r"(?<![А-Яа-яЁё])[А-ЯЁ]\.\s?[А-ЯЁ]\.\s?[А-ЯЁ][а-яё]+"),
 ]
@@ -222,7 +222,9 @@ def _mask_err(msg):
     """Сообщения об ошибках тоже могут нести ПДн (текст запроса, имя в ответе сервера)."""
     if not _mask_tokens():
         return msg
-    return _mask_scalar(msg) if isinstance(msg, str) else msg
+    if not isinstance(msg, str):
+        msg = json.dumps(msg, ensure_ascii=False)
+    return _mask_scalar(msg)
 
 
 def _pii_key(key, tokens):
@@ -232,8 +234,12 @@ def _pii_key(key, tokens):
     return any(t in k for t in tokens)
 
 
+_REF_KEYS = {"_ref", "uuid", "presentation", "_type", "type"}
+
+
 def _is_ref(d):
-    return isinstance(d, dict) and ("presentation" in d or "uuid" in d or "_ref" in d)
+    """Ссылка — словарь только из полей ссылки; строка результата с прочими полями ссылкой не считается."""
+    return isinstance(d, dict) and bool(d) and set(d) <= _REF_KEYS and ("presentation" in d or "uuid" in d)
 
 
 def _mask_ref(d):

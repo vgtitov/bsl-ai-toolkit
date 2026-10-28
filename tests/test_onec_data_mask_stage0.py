@@ -92,3 +92,18 @@ def test_mask_off_keeps_everything(mod, monkeypatch):
     monkeypatch.setenv("ONEC_DATA_MASK_OFF", "1")
     row = {"Сотрудник": {"uuid": GUID, "presentation": FIO}}
     assert mod.mask_rows([row]) == [row]
+
+
+def test_patronymic_ich_forms_masked(mod):
+    out = dump(mod.mask_rows([{"Кто": "Иванов Иван Ильич", "Ещё": "Кузнецов Пётр Кузьмич", "Тот": "Орлов Олег Никитич"}]))
+    assert "Иванов" not in out and "Кузнецов" not in out and "Орлов" not in out
+
+
+def test_row_with_presentation_and_other_fields_masks_by_field(mod):
+    out = mod.mask_rows([{"presentation": FIO, "Количество": 10}])[0]
+    assert out["Количество"] == 10 and FIO not in dump(out)
+
+
+def test_error_object_is_filtered(mod):
+    res = mod._err(500, {"error": {"message": FIO}}, "ai_debug/x")
+    assert FIO not in res["error"]
