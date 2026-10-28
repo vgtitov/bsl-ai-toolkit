@@ -212,3 +212,29 @@ def test_dedupe_uses_the_name_that_is_uploaded(tmp_path):
     p.write_bytes(b"x")
     name, _ = sd.read_attachment(p)
     assert name == "ab.txt" == sd.build_attach(p)["attach"]["file"]
+
+
+def test_request_number_is_canonical_and_validated(env, capsys):
+    tmp, p = env
+    c = sd.SDClient("https://sd.example", "KEY", transport=Fake())
+    assert sd.main(["attach", "--request", "abc", "--file", str(p)], client=c) == 2
+    assert sd.main(["attach", "--request", "0", "--file", str(p)], client=c) == 2
+    payload = sd.build_attach(p)
+    f = decision(tmp, payload, "requests/5/upload")
+    t = Fake(GET_BEFORE, UPLOAD_OK, GET_BEFORE, PUT_OK, GET_AFTER)
+    c = sd.SDClient("https://sd.example", "KEY", transport=t)
+    with sd._SendLock(payload, key="attach:5"):          # 005 и 5 один замок
+        assert sd.main(["attach", "--request", "005", "--file", str(p), "--send", "--approve-file", str(f)], client=c) == 2
+    assert not t.calls
+
+
+def test_any_failure_after_upload_reports_attachment_id(env, capsys):
+    class Boom(Fake):
+        def __call__(self, method, url, headers, data=None):
+            if len(self.calls) == 2:                      # повторное чтение списка перед PUT
+                self.calls.append(None)
+                raise TimeoutError("t")
+            return super().__call__(method, url, headers, data)
+    t = Boom(GET_BEFORE, UPLOAD_OK)
+    assert run(env, t) == 2
+    assert "509621" in capsys.readouterr().err

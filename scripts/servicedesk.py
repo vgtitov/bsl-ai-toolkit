@@ -802,6 +802,9 @@ def main(argv=None, client: SDClient | None = None) -> int:
             print(f"заметка добавлена к заявке {a.request}")
             return 0
         if a.cmd == "attach":
+            if not str(a.request).isdigit() or int(a.request) <= 0:
+                raise SDError("номер заявки должен быть положительным целым числом")
+            a.request = str(int(a.request))                  # 0123 и 123 один замок и один адрес
             name, data = read_attachment(a.file)
             payload = attach_payload(name, data)
             target = f"requests/{urllib.parse.quote(str(a.request), safe='')}/upload"
@@ -829,21 +832,28 @@ def main(argv=None, client: SDClient | None = None) -> int:
                         release_claim(mark)
                     raise
                 aid = attachment_id(res)
-                known = []                                      # список читаем заново прямо перед PUT и берём только его: удалённое другим не возвращаем
-                for b in current_attachments(c, a.request):
-                    if str(b["id"]) not in known:
-                        known.append(str(b["id"]))
-                if aid not in known:
-                    known.append(aid)
-                try:
-                    c.put(f"requests/{urllib.parse.quote(str(a.request), safe='')}",
-                          {"request": {"attachments": [{"id": i} for i in known]}})
+                try:                                             # любой сбой после upload сообщает id загруженного вложения
+                    known = []                                      # список читаем заново прямо перед PUT и берём только его: удалённое другим не возвращаем
+                    for b in current_attachments(c, a.request):
+                        if str(b["id"]) not in known:
+                            known.append(str(b["id"]))
+                    if aid not in known:
+                        known.append(aid)
+                    try:
+                        c.put(f"requests/{urllib.parse.quote(str(a.request), safe='')}",
+                              {"request": {"attachments": [{"id": i} for i in known]}})
+                    except SDError as e:
+                        raise SDError(f"файл загружен (id вложения {aid}), но не привязан к заявке: {e}") from None
+                    seen = {str(b["id"]) for b in current_attachments(c, a.request)}
+                    missing = [i for i in known if i not in seen]
+                    if missing:
+                        raise SDError(f"после привязки в заявке не видно вложений: {', '.join(missing)} (новое: {aid}); проверьте заявку")
                 except SDError as e:
-                    raise SDError(f"файл загружен (id вложения {aid}), но не привязан к заявке: {e}") from None
-                seen = {str(b["id"]) for b in current_attachments(c, a.request)}
-                missing = [i for i in known if i not in seen]
-                if missing:
-                    raise SDError(f"после привязки в заявке не видно вложений: {', '.join(missing)} (новое: {aid}); проверьте заявку")
+                    if str(aid) in str(e):
+                        raise
+                    raise SDError(f"вложение {aid} загружено, но привязка не подтверждена: {e}") from None
+                except (OSError, TimeoutError) as e:
+                    raise SDError(f"вложение {aid} загружено, но привязка не подтверждена ({type(e).__name__})") from None
             print(f"вложение видно в заявке {a.request}: {name} (id {aid})")
             return 0
         if a.cmd == "update":
