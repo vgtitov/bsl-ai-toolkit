@@ -181,3 +181,10 @@ def test_long_error_masks_before_truncation(mod):
 def test_mixed_case_fio_masked(mod):
     out = dump(mod.mask_rows([{"A": "ПЕТРОВ Пётр Петрович", "B": "Петров ПЁТР ПЕТРОВИЧ", "C": "ПЕТРОВ П.П."}]))
     assert "ПЕТРОВ" not in out and "Петров" not in out
+
+
+def test_huge_error_message_is_fast(mod):
+    import time
+    t = time.time()
+    res = mod._err(500, {"error": "x" * 1_000_000}, "w")
+    assert time.time() - t < 2 and len(res["error"]) < 600

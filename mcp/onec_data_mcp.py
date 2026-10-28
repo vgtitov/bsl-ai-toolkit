@@ -224,7 +224,7 @@ def _mask_err(msg):
         return msg
     if not isinstance(msg, str):
         msg = json.dumps(mask_deep(msg), ensure_ascii=False)
-    return _mask_scalar(msg)
+    return _mask_scalar(msg[:2000])      # длинный хвост не нужен: показывается не больше 500 знаков
 
 
 def _pii_key(key, tokens):
