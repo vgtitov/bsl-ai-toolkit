@@ -187,4 +187,9 @@ def test_huge_error_message_is_fast(mod):
     import time
     t = time.time()
     res = mod._err(500, {"error": "x" * 1_000_000}, "w")
-    assert time.time() - t < 2 and len(res["error"]) < 600
+    assert time.time() - t < 2 and len(res["error"]) < 600 and "xxxx" not in res["error"]
+
+
+def test_long_error_with_name_at_boundary_hidden(mod):
+    res = mod._err(500, {"error": ("user@example.org " * 117) + FIO}, "w")
+    assert "Пётр" not in res["error"]
