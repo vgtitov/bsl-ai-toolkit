@@ -140,3 +140,9 @@ def test_uppercase_fio_masked(mod):
 def test_explicit_mask_field_overrides_technical_exception(mod, monkeypatch):
     monkeypatch.setenv("ONEC_DATA_MASK_FIELDS", "имяфайла")
     assert mod.mask_rows([{"ИмяФайла": "secret.txt"}])[0]["ИмяФайла"] == "***"
+
+
+def test_person_typed_reference_with_extra_keys(mod):
+    row = {"Автор": {"_ref": "Справочник.Сотрудники", "uuid": GUID, "presentation": "Иванов Иван", "Код": "001"}}
+    out = mod.mask_rows([row])[0]["Автор"]
+    assert out["uuid"] == "***" and out["presentation"] == "***" and out["Код"] == "001"

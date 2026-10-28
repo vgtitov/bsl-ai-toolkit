@@ -265,6 +265,9 @@ def _mask_value(key, value, tokens):
     if _is_ref(value) and (_PERSON_KEY.search(str(key).lower()) or _person_type(value)
                            or _mask_scalar(value.get("presentation")) != value.get("presentation")):
         return _mask_ref(value)
+    if isinstance(value, dict) and _person_type(value) and ("uuid" in value or "presentation" in value):
+        return {k: (MASK_VALUE if k in ("uuid", "presentation") else _mask_value(k, v, tokens))
+                for k, v in value.items()}
     # 3) иначе — рекурсия по составным и маскирование по значению для скаляров
     if isinstance(value, dict):
         doc = any(_DOC_SIBLING_KEY.search(str(k).lower()) for k in value)
