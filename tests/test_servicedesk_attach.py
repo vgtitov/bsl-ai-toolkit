@@ -207,6 +207,7 @@ def test_attachment_deleted_by_someone_else_is_not_restored(env):
     assert [x["id"] for x in json.loads(body)["request"]["attachments"]] == ["509621"]
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="в Windows нельзя создать файл с табуляцией в имени")
 def test_dedupe_uses_the_name_that_is_uploaded(tmp_path):
     p = tmp_path / "a\tb.txt"          # табуляция в имени: уйдёт как «ab.txt»
     p.write_bytes(b"x")
