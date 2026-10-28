@@ -439,10 +439,15 @@ def build_create(cfg: dict, template: str, subject: str, description: str = "", 
 MAX_ATTACH_BYTES = 20 * 1024 * 1024        # потолок коннектора; лимит портала не проверялся (самый большой проверенный файл 54 КБ)
 
 
+def clean_filename(name: str) -> str:
+    """Имя файла, как оно уйдёт на портал: без управляющих символов, слэши заменены (одно имя для хеша, проверки дубля и загрузки)."""
+    return "".join(ch for ch in name if ch >= " " and ch != "\x7f").replace("\\", "_").replace("/", "_") or "file"
+
+
 def multipart_file(name: str, data: bytes) -> tuple[bytes, str]:
     """Тело multipart/form-data с одним полем input_file. Имя очищается от управляющих символов и кавычек;
     не-ASCII имя уходит в filename* (UTF-8), в filename остаётся ASCII-замена."""
-    clean = "".join(ch for ch in name if ch >= " " and ch != "\x7f").replace("\\", "_").replace("/", "_") or "file"
+    clean = clean_filename(name)
     ascii_name = "".join(ch if (ch.isascii() and ch != '"') else "_" for ch in clean)
     disp = f'form-data; name="input_file"; filename="{ascii_name}"'
     if ascii_name != clean:
@@ -472,7 +477,7 @@ def read_attachment(path) -> tuple[str, bytes]:
         raise SDError(f"{p.name or p}: файл не прочитан ({type(e).__name__})") from None
     if not 1 <= len(data) <= MAX_ATTACH_BYTES:
         raise SDError(f"{p.name}: размер прочитанного вне допустимого (1..{MAX_ATTACH_BYTES}), файл менялся во время чтения")
-    return p.name, data
+    return clean_filename(p.name), data
 
 
 def _att_size(att: dict):

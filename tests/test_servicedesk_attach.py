@@ -205,3 +205,10 @@ def test_attachment_deleted_by_someone_else_is_not_restored(env):
     assert run(env, t) == 0
     body = urllib.parse.parse_qs(t.calls[3][3].decode())["input_data"][0]
     assert [x["id"] for x in json.loads(body)["request"]["attachments"]] == ["509621"]
+
+
+def test_dedupe_uses_the_name_that_is_uploaded(tmp_path):
+    p = tmp_path / "a\tb.txt"          # табуляция в имени: уйдёт как «ab.txt»
+    p.write_bytes(b"x")
+    name, _ = sd.read_attachment(p)
+    assert name == "ab.txt" == sd.build_attach(p)["attach"]["file"]
