@@ -188,8 +188,8 @@ _VALUE_PII = [
     # ФИО: «Фамилия Имя Отчество» (отчество по окончанию), «Фамилия И.О.», «И.О. Фамилия»
     re.compile(r"(?<![А-Яа-яЁё])[А-ЯЁ][а-яё]+(?:-[А-ЯЁ][а-яё]+)?\s+[А-ЯЁ][а-яё]+\s+"
                r"[А-ЯЁ][а-яё]+(?:ич|вна|чна|ична|оглы|кызы)(?![а-яё])"),
-    re.compile(r"(?<![А-Яа-яЁё])[А-ЯЁ][а-яё]+\s+[А-ЯЁ]\.\s?[А-ЯЁ]\."),
-    re.compile(r"(?<![А-Яа-яЁё])[А-ЯЁ]\.\s?[А-ЯЁ]\.\s?[А-ЯЁ][а-яё]+"),
+    re.compile(r"(?<![А-Яа-яЁё-])[А-ЯЁ][а-яё]+(?:-[А-ЯЁ][а-яё]+)?\s+[А-ЯЁ]\.\s?[А-ЯЁ]\."),
+    re.compile(r"(?<![А-Яа-яЁё])[А-ЯЁ]\.\s?[А-ЯЁ]\.\s?[А-ЯЁ][а-яё]+(?:-[А-ЯЁ][а-яё]+)?"),
 ]
 
 # Технические имена, содержащие «имя», но не персональные: ИмяФайла, ИмяПоля и т. п.
@@ -223,7 +223,7 @@ def _mask_err(msg):
     if not _mask_tokens():
         return msg
     if not isinstance(msg, str):
-        msg = json.dumps(msg, ensure_ascii=False)
+        msg = json.dumps(mask_deep(msg), ensure_ascii=False)
     return _mask_scalar(msg)
 
 
@@ -242,10 +242,15 @@ def _is_ref(d):
     return isinstance(d, dict) and bool(d) and set(d) <= _REF_KEYS and ("presentation" in d or "uuid" in d)
 
 
+def _person_type(d):
+    """Тип ссылки указывает на человека: Справочник.Сотрудники, Справочник.ФизическиеЛица."""
+    return any(isinstance(d.get(k), str) and _PERSON_KEY.search(d[k].lower()) for k in ("_ref", "_type", "type"))
+
+
 def _mask_ref(d):
     """Ссылка на человека: представление и GUID скрываются, тип ссылки остаётся."""
-    return {k: (v if k == "_ref" and not (isinstance(v, str) and _GUID_RX.search(v)) else MASK_VALUE)
-            for k, v in d.items()}
+    return {k: (v if k in ("_ref", "_type", "type") and not (isinstance(v, str) and _GUID_RX.search(v))
+                else MASK_VALUE) for k, v in d.items()}
 
 
 def _mask_value(key, value, tokens):
@@ -254,7 +259,7 @@ def _mask_value(key, value, tokens):
     if _pii_key(key, tokens):
         return MASK_VALUE
     # 2) ссылка на человека (по имени поля или по форме представления)
-    if _is_ref(value) and (_PERSON_KEY.search(str(key).lower())
+    if _is_ref(value) and (_PERSON_KEY.search(str(key).lower()) or _person_type(value)
                            or _mask_scalar(value.get("presentation")) != value.get("presentation")):
         return _mask_ref(value)
     # 3) иначе — рекурсия по составным и маскирование по значению для скаляров

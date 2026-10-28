@@ -107,3 +107,26 @@ def test_row_with_presentation_and_other_fields_masks_by_field(mod):
 def test_error_object_is_filtered(mod):
     res = mod._err(500, {"error": {"message": FIO}}, "ai_debug/x")
     assert FIO not in res["error"]
+
+
+def test_reference_to_person_by_type_under_alias(mod):
+    row = {"Автор": {"_ref": "Справочник.Сотрудники", "uuid": GUID, "presentation": "Иванов Иван"}}
+    out = dump(mod.mask_rows([row]))
+    assert GUID not in out and "Иванов" not in out and "Справочник.Сотрудники" in out
+
+
+def test_ref_type_and_underscore_type_kept(mod):
+    row = {"Сотрудник": {"type": "Справочник.Сотрудники", "_type": "СправочникСсылка", "uuid": GUID, "presentation": "Иванов"}}
+    out = mod.mask_rows([row])[0]["Сотрудник"]
+    assert out["type"] == "Справочник.Сотрудники" and out["_type"] == "СправочникСсылка"
+    assert out["uuid"] == "***" and out["presentation"] == "***"
+
+
+def test_hyphenated_surname_with_initials_masked(mod):
+    out = dump(mod.mask_rows([{"A": "Иванов-Петров И.И.", "B": "И.И. Иванов-Петров"}]))
+    assert "Иванов" not in out and "Петров" not in out
+
+
+def test_error_object_masks_by_field_name(mod):
+    res = mod._err(500, {"error": {"Фамилия": "Петров", "Оклад": 1500}}, "x")
+    assert "Петров" not in res["error"] and "1500" not in res["error"]
