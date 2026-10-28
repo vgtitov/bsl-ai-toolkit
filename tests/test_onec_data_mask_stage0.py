@@ -146,3 +146,13 @@ def test_person_typed_reference_with_extra_keys(mod):
     row = {"Автор": {"_ref": "Справочник.Сотрудники", "uuid": GUID, "presentation": "Иванов Иван", "Код": "001"}}
     out = mod.mask_rows([row])[0]["Автор"]
     assert out["uuid"] == "***" and out["presentation"] == "***" and out["Код"] == "001"
+
+
+def test_person_key_reference_with_extra_keys(mod):
+    out = mod.mask_rows([{"Сотрудник": {"uuid": GUID, "presentation": "Иванов", "Код": "001"}}])[0]["Сотрудник"]
+    assert out["uuid"] == "***" and out["presentation"] == "***" and out["Код"] == "001"
+
+
+def test_guid_inside_ref_string_masked(mod):
+    out = mod.mask_rows([{"Автор": {"_ref": "Справочник.Сотрудники/" + GUID, "uuid": GUID, "presentation": "И", "Код": "1"}}])
+    assert GUID not in dump(out)

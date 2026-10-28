@@ -237,23 +237,23 @@ def _pii_key(key, tokens):
     return any((t in k_plain) if t == "имя" else (t in k) for t in tokens)
 
 
-_REF_KEYS = {"_ref", "uuid", "presentation", "_type", "type"}
-
-
-def _is_ref(d):
-    """Ссылка — словарь только из полей ссылки; строка результата с прочими полями ссылкой не считается."""
-    return isinstance(d, dict) and bool(d) and set(d) <= _REF_KEYS and ("presentation" in d or "uuid" in d)
-
-
 def _person_type(d):
     """Тип ссылки указывает на человека: Справочник.Сотрудники, Справочник.ФизическиеЛица."""
     return any(isinstance(d.get(k), str) and _PERSON_KEY.search(d[k].lower()) for k in ("_ref", "_type", "type"))
 
 
-def _mask_ref(d):
-    """Ссылка на человека: представление и GUID скрываются, тип ссылки остаётся."""
-    return {k: (v if k in ("_ref", "_type", "type") and not (isinstance(v, str) and _GUID_RX.search(v))
-                else MASK_VALUE) for k, v in d.items()}
+def _mask_person_ref(d, tokens):
+    """Ссылка на человека: uuid и представление скрываются, тип ссылки остаётся (если в нём нет GUID),
+    прочие поля проходят обычную маску."""
+    out = {}
+    for k, v in d.items():
+        if k in ("uuid", "presentation"):
+            out[k] = MASK_VALUE
+        elif k in ("_ref", "_type", "type"):
+            out[k] = MASK_VALUE if isinstance(v, str) and _GUID_RX.search(v) else v
+        else:
+            out[k] = _mask_value(k, v, tokens)
+    return out
 
 
 def _mask_value(key, value, tokens):
@@ -261,13 +261,11 @@ def _mask_value(key, value, tokens):
     #    ссылка {_ref,uuid,presentation}, структура ДанныеПаспорта={Серия,Номер} и т.п.)
     if _pii_key(key, tokens):
         return MASK_VALUE
-    # 2) ссылка на человека (по имени поля или по форме представления)
-    if _is_ref(value) and (_PERSON_KEY.search(str(key).lower()) or _person_type(value)
-                           or _mask_scalar(value.get("presentation")) != value.get("presentation")):
-        return _mask_ref(value)
-    if isinstance(value, dict) and _person_type(value) and ("uuid" in value or "presentation" in value):
-        return {k: (MASK_VALUE if k in ("uuid", "presentation") else _mask_value(k, v, tokens))
-                for k, v in value.items()}
+    # 2) ссылка на человека (по имени поля, по типу ссылки или по форме представления)
+    if isinstance(value, dict) and ("uuid" in value or "presentation" in value) and (
+            _PERSON_KEY.search(str(key).lower()) or _person_type(value)
+            or _mask_scalar(value.get("presentation")) != value.get("presentation")):
+        return _mask_person_ref(value, tokens)
     # 3) иначе — рекурсия по составным и маскирование по значению для скаляров
     if isinstance(value, dict):
         doc = any(_DOC_SIBLING_KEY.search(str(k).lower()) for k in value)
