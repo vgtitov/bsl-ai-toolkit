@@ -176,3 +176,8 @@ def test_explicit_mask_for_type_key_applies_to_person_ref(mod, monkeypatch):
 def test_long_error_masks_before_truncation(mod):
     res = mod._err(500, {"error": "x" * 485 + " " + FIO}, "w")
     assert "Петров" not in res["error"] and "Пётр" not in res["error"]
+
+
+def test_mixed_case_fio_masked(mod):
+    out = dump(mod.mask_rows([{"A": "ПЕТРОВ Пётр Петрович", "B": "Петров ПЁТР ПЕТРОВИЧ", "C": "ПЕТРОВ П.П."}]))
+    assert "ПЕТРОВ" not in out and "Петров" not in out
