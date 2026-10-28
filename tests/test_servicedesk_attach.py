@@ -196,3 +196,12 @@ def test_path_swapped_after_open_is_refused(env, monkeypatch):
     monkeypatch.setattr(os, "lstat", lambda path, *a, **k: real(other))     # путь теперь указывает на другой файл
     with pytest.raises(sd.SDError):
         sd.read_attachment(env[1])
+
+
+def test_attachment_deleted_by_someone_else_is_not_restored(env):
+    gone = (200, json.dumps({"request": {"attachments": []}}))
+    after = (200, json.dumps({"request": {"attachments": [{"id": "509621"}]}}))
+    t = Fake(GET_BEFORE, UPLOAD_OK, gone, PUT_OK, after)
+    assert run(env, t) == 0
+    body = urllib.parse.parse_qs(t.calls[3][3].decode())["input_data"][0]
+    assert [x["id"] for x in json.loads(body)["request"]["attachments"]] == ["509621"]

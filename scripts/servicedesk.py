@@ -824,8 +824,8 @@ def main(argv=None, client: SDClient | None = None) -> int:
                         release_claim(mark)
                     raise
                 aid = attachment_id(res)
-                known = []                                      # список читаем заново прямо перед PUT: чужое вложение, добавленное за это время, не теряем
-                for b in current_attachments(c, a.request) + before:
+                known = []                                      # список читаем заново прямо перед PUT и берём только его: удалённое другим не возвращаем
+                for b in current_attachments(c, a.request):
                     if str(b["id"]) not in known:
                         known.append(str(b["id"]))
                 if aid not in known:
