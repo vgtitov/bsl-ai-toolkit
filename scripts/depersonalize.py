@@ -179,23 +179,30 @@ def normalize(text: str) -> str:
     return t.replace("\r\n", "\n")
 
 
+def _low(s: str) -> str:
+    """lower() с сохранением длины: единственный символ, у которого нижний регистр длиннее (U+0130, İ), заменяется на i; позиции из такого вида применяются к исходному тексту."""
+    if "\u0130" in s:
+        s = s.replace("\u0130", "i")
+    return s.lower()
+
+
 @functools.lru_cache(maxsize=6)
 def _skel_big(s: str) -> str:
-    return s.lower().replace("ё", "е").translate(_LAT2CYR)
+    return _low(s).replace("ё", "е").translate(_LAT2CYR)
 
 
 def skel(s: str) -> str:
     """Длина сохраняется: нижний регистр, ё=е, латинские двойники кириллицы приведены к кириллице. Большие тексты кэшируются (один и тот же текст нормализуется много раз)."""
-    return _skel_big(s) if len(s) > 20000 else s.lower().replace("ё", "е").translate(_LAT2CYR)
+    return _skel_big(s) if len(s) > 20000 else _low(s).replace("ё", "е").translate(_LAT2CYR)
 
 
 @functools.lru_cache(maxsize=4)
 def _lat_big(s: str) -> str:
-    return s.lower().translate(_CYR2LAT)
+    return _low(s).translate(_CYR2LAT)
 
 
 def _lat(s: str) -> str:
-    return _lat_big(s) if len(s) > 20000 else s.lower().translate(_CYR2LAT)
+    return _lat_big(s) if len(s) > 20000 else _low(s).translate(_CYR2LAT)
 
 
 # ---------------------------------------------------------------- проверки идентификаторов
@@ -377,6 +384,15 @@ def _split_top_args(args: str) -> list:
     return out
 
 
+def _big_number(arg: str) -> bool:
+    """Числовой литерал со значащей частью: десятичный от четырёх цифр, шестнадцатеричный от шести знаков (разделители _ , . не считаются)."""
+    a = arg.strip().lstrip("+-")
+    m = re.fullmatch(r"0[xX]([0-9a-fA-F_]+)", a)
+    if m:
+        return len(m.group(1).replace("_", "")) >= 6
+    return re.fullmatch(r"\d[\d_.,]*", a) is not None and len(re.sub(r"\D", "", a)) >= 4
+
+
 def _code_expr_safe(expr: str) -> bool:
     """Выражение кода (до ;): ссылка, вызов, пустая строка, плейсхолдер. Вызов вида Цепочка.Идентификаторов(…): литерал внутри аргументов
     допустим, если это имя (слово или идентификатор без цифр и символов): Хранилище.Получить(Ключ, "Токен"); форма пароля (цифры, символы,
@@ -391,6 +407,7 @@ def _code_expr_safe(expr: str) -> bool:
                                             r"encrypt|decrypt|hash\w*|md5|sha\w*|secret\w*|token\w*|password\w*|пароль\w*|секрет\w*|токен\w*)$", call.group(1)))
     reader = call is not None and not forces_secret          # вызов, который сам кодирует или задаёт секрет (str, Base64, Строка, Format), литерал не оправдывает
     known_reader = bool(call and re.search(_READERS, call.group(1)))      # известное чтение настроек или хранилища: имя ключа любым словом
+    getattr_style = bool(call and re.search(r"(?i)(?:^|\.)getattr$", call.group(1)))
     default_style = bool(call and re.search(r"(?i)(?:^|\.)(?:getenv|get|getattr|environ|setdefault|pop|getordefault|\w*default\w*|\w*ИлиУстановить|\w*ПоУмолчанию\w*)$", call.group(1)))   # Python/JS: второй аргумент это значение по умолчанию
     outer, args = _strip_first_call_args(v)
     ok = lambda lit: (not lit.strip() or any(r.fullmatch(lit.strip()) for r in _SAFE_VAL[:5] + _SAFE_VAL[8:])      # noqa: E731
@@ -405,11 +422,13 @@ def _code_expr_safe(expr: str) -> bool:
             return False
     if args is not None:
         for n, arg in enumerate(_split_top_args(args)):
+            if _big_number(arg):
+                return False                                # число из четырёх и более знаков аргументом любого вызова (str(123456), int, Base64): значение секрета
             for lit in lits(arg):
                 nm = lit.strip()
                 word = len(nm) <= 41 and re.fullmatch(r"[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё_. ]{0,40}", nm) is not None
                 key2 = len(nm) <= 32 and len(re.findall(r"[A-ZА-ЯЁ][^A-ZА-ЯЁ_]*|[a-zа-яё]+", nm)) <= 3 and re.fullmatch(r"(?:[A-Z][a-z]+){2,}|(?:[А-ЯЁ][а-яё]+){2,}|[a-z]+(?:_[a-z]+)+|[A-Z]+(?:_[A-Z]+)+|[a-z]+(?:[A-Z][a-z]+)+", nm) is not None
-                if ok(lit) or (reader and (n == 0 or not default_style) and ((word and known_reader) or key2)):
+                if ok(lit) or (reader and (n == 0 or not default_style or (getattr_style and n == 1)) and ((word and known_reader) or key2)):
                     continue
                 return False                                # литерал-имя (слово, идентификатор) безопасен в любом аргументе вызова; по форме пароль (цифры, символы) или значение по умолчанию getenv/get секрет
     return True
@@ -1262,12 +1281,14 @@ class Session:
         d = _state("maps")
         name = f"{self.id}.json"
         with _lock(d / f"{self.id}.lock"):
+            with self._mu:
+                items_copy = dict(self.items)                # копия внутри блокировки карты и под замком сессии: параллельные save() и token() не теряют записи
             p = d / name
             if p.exists() and json.loads(p.read_text(encoding="utf-8"))["revision"] != self._loaded_rev:
                 raise OSError("map_conflict")
             self.revision += 1
             meta = {"format_version": FORMAT_VERSION, "created": time.time(), "ttl": self.ttl, "revision": self.revision,
-                    "items": {ph: {"kind": k, "key": key, "orig": o} for (k, key), (ph, o) in self.items.items()}}
+                    "items": {ph: {"kind": k, "key": key, "orig": o} for (k, key), (ph, o) in items_copy.items()}}
             data = json.dumps(meta, ensure_ascii=False).encode("utf-8")
             if not p.exists():
                 _publish(d, name, data, "map")
@@ -1588,6 +1609,7 @@ def _chunked(text, chunk, timeout, sess, kw) -> Result:
     t0 = time.monotonic()
     bom = text.startswith("\ufeff")
     body = text[1:] if bom else text
+    sess.reserve(body)                                       # метки вида [EMAIL_1] из исходного текста резервируются до разбиения на куски
     clean, rep_all, leaks_all, mapping, sent = [], None, [], {}, set()
     review_any, warns = False, []
     for i, part in enumerate(_split_chunks(body, kw.get("kind", "text"), kw.get("lang", "generic"), chunk), 1):
