@@ -156,3 +156,12 @@ def test_person_key_reference_with_extra_keys(mod):
 def test_guid_inside_ref_string_masked(mod):
     out = mod.mask_rows([{"Автор": {"_ref": "Справочник.Сотрудники/" + GUID, "uuid": GUID, "presentation": "И", "Код": "1"}}])
     assert GUID not in dump(out)
+
+
+def test_double_first_name_masked(mod):
+    assert "Петрова" not in dump(mod.mask_rows([{"Кто": "Петрова Анна-Мария Ивановна"}]))
+
+
+def test_person_ref_with_passport_siblings(mod):
+    row = {"Сотрудник": {"uuid": GUID, "presentation": "И", "ПаспортСерия": "MP", "Номер": "1234567"}}
+    assert mod.mask_rows([row])[0]["Сотрудник"]["Номер"] == "***"
