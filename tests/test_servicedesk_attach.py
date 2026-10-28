@@ -238,3 +238,7 @@ def test_any_failure_after_upload_reports_attachment_id(env, capsys):
     t = Boom(GET_BEFORE, UPLOAD_OK)
     assert run(env, t) == 2
     assert "509621" in capsys.readouterr().err
+
+
+def test_attachment_id_falls_back_to_id_field():
+    assert sd.attachment_id({"attachment": {"id": "777", "content_url": "/x"}}) == "777"

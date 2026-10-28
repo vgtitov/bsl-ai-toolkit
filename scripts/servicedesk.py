@@ -496,12 +496,14 @@ def build_attach(path) -> dict:
 
 
 def attachment_id(res: dict) -> str:
-    """Id вложения из content_url ответа upload (вида .../attachments/<id>/_download); поле id в ответе upload не используем."""
-    url = ((res.get("attachment") or {}) if isinstance(res, dict) else {}).get("content_url") or ""
-    m = re.search(r"attachments/(\d+)(?:/|$)", str(url))
-    if not m:
-        raise SDError("в ответе upload нет id вложения (content_url), файл мог загрузиться без привязки; проверьте заявку")
-    return m.group(1)
+    """Id вложения из content_url ответа upload (вида .../attachments/<id>/_download); при отсутствии content_url запасной путь, поле id ответа."""
+    att = (res.get("attachment") or {}) if isinstance(res, dict) else {}
+    m = re.search(r"attachments/(\d+)(?:/|$)", str(att.get("content_url") or ""))
+    if m:
+        return m.group(1)
+    if str(att.get("id") or "").isdigit():                      # запасной путь: поле id в ответе upload
+        return str(att["id"])
+    raise SDError("в ответе upload нет id вложения (content_url), файл мог загрузиться без привязки; проверьте заявку")
 
 
 def current_attachments(client: "SDClient", request_id: str) -> list:
