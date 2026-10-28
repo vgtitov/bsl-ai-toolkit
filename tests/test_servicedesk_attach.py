@@ -131,7 +131,8 @@ def test_file_checks(env, tmp_path, capsys):
 
 def test_multipart_escapes_names():
     body, ctype = sd.multipart_file('a"b\r\nx.txt', b"x")
-    assert b'\r\nx.txt"' not in body.split(b"\r\n\r\n")[0] and b'a\\"b' in body or b"a_b" in body
+    head = body.split(b"\r\n\r\n")[0]
+    assert b'\r\nx.txt"' not in head and b'a_bx.txt' in head and head.count(b"\r\n") == 2
     body, _ = sd.multipart_file("отчёт.txt", b"x")
     head = body.split(b"\r\n\r\n")[0]
     assert b"filename*=UTF-8''" + urllib.parse.quote("отчёт.txt").encode() in head
@@ -175,3 +176,23 @@ def test_symlink_swapped_between_check_and_open_is_refused(env, tmp_path, monkey
     with pytest.raises(sd.SDError):
         sd.read_attachment(link)
     monkeypatch.setattr(sd.Path, "is_symlink", real)
+
+
+def test_parallel_attach_to_same_request_is_blocked(env, tmp_path, capsys):
+    tmp, p = env
+    payload = sd.build_attach(p)
+    f = decision(tmp, payload, "requests/5/upload")
+    t = Fake()
+    c = sd.SDClient("https://sd.example", "KEY", transport=t)
+    with sd._SendLock(payload, key="attach:5"):
+        assert sd.main(["attach", "--request", "5", "--file", str(p), "--send", "--approve-file", str(f)], client=c) == 2
+    assert not t.calls
+
+
+def test_path_swapped_after_open_is_refused(env, monkeypatch):
+    other = env[0] / "other.txt"
+    other.write_bytes(b"secret")
+    real = os.lstat
+    monkeypatch.setattr(os, "lstat", lambda path, *a, **k: real(other))     # путь теперь указывает на другой файл
+    with pytest.raises(sd.SDError):
+        sd.read_attachment(env[1])

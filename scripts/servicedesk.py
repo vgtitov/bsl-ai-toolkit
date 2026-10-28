@@ -463,7 +463,7 @@ def read_attachment(path) -> tuple[str, bytes]:
         fd = os.open(p, flags)
         with os.fdopen(fd, "rb") as fh:
             st = os.fstat(fh.fileno())
-            if not stat.S_ISREG(st.st_mode):
+            if not os.path.samestat(os.lstat(p), st) or not stat.S_ISREG(st.st_mode):      # путь подменён после открытия, или не обычный файл
                 raise SDError(f"{p.name or p}: нужен обычный файл (не ссылка и не каталог)")
             if st.st_size == 0 or st.st_size > MAX_ATTACH_BYTES:
                 raise SDError(f"{p.name}: размер {st.st_size} байт вне допустимого (1..{MAX_ATTACH_BYTES})")
@@ -593,9 +593,9 @@ def release_claim(mark: Path) -> None:
 
 class _SendLock:
     """Блокировка на пару заявитель и тема от проверки дубля до конца POST: два параллельных запуска не создадут два дубля."""
-    def __init__(self, payload: dict):
+    def __init__(self, payload: dict, key: str | None = None):
         req = payload.get("request") or {}
-        key = json.dumps([(req.get("requester") or {}).get("id"), req.get("subject")], ensure_ascii=False)
+        key = key or json.dumps([(req.get("requester") or {}).get("id"), req.get("subject")], ensure_ascii=False)
         self.path = ledger_dir() / ("lock-" + hashlib.sha256(key.encode("utf-8")).hexdigest()[:24])
         self.token = uuid.uuid4().hex
 
@@ -809,35 +809,36 @@ def main(argv=None, client: SDClient | None = None) -> int:
                 print("Отправка отменена.")
                 return 1
             c = client or make_client()                     # ошибка окружения до того, как решение погашено
-            before = current_attachments(c, a.request)
-            if not a.allow_duplicate and any(b.get("name") == name and _att_size(b) == str(len(data))
-                                             for b in before):
-                print(f"не отправлено: в заявке уже есть вложение {name} того же размера. Проверьте её, при необходимости --allow-duplicate.",
-                      file=sys.stderr)
-                return 1
-            mark = claim_approval(dec["id"]) if isinstance(dec, dict) else None
-            try:
-                res = c.upload(target, name, data)
-            except BaseException as e:
-                if mark and _definitely_rejected(e):
-                    release_claim(mark)
-                raise
-            aid = attachment_id(res)
-            known = []                                      # список читаем заново прямо перед PUT: чужое вложение, добавленное за это время, не теряем
-            for b in current_attachments(c, a.request) + before:
-                if str(b["id"]) not in known:
-                    known.append(str(b["id"]))
-            if aid not in known:
-                known.append(aid)
-            try:
-                c.put(f"requests/{urllib.parse.quote(str(a.request), safe='')}",
-                      {"request": {"attachments": [{"id": i} for i in known]}})
-            except SDError as e:
-                raise SDError(f"файл загружен (id вложения {aid}), но не привязан к заявке: {e}") from None
-            seen = {str(b["id"]) for b in current_attachments(c, a.request)}
-            missing = [i for i in known if i not in seen]
-            if missing:
-                raise SDError(f"после привязки в заявке не видно вложений: {', '.join(missing)} (новое: {aid}); проверьте заявку")
+            with _SendLock(payload, key="attach:" + str(a.request)):    # проверка дубля, upload и PUT одного запроса не пересекаются с другим запуском
+                before = current_attachments(c, a.request)
+                if not a.allow_duplicate and any(b.get("name") == name and _att_size(b) == str(len(data))
+                                                 for b in before):
+                    print(f"не отправлено: в заявке уже есть вложение {name} того же размера. Проверьте её, при необходимости --allow-duplicate.",
+                          file=sys.stderr)
+                    return 1
+                mark = claim_approval(dec["id"]) if isinstance(dec, dict) else None
+                try:
+                    res = c.upload(target, name, data)
+                except BaseException as e:
+                    if mark and _definitely_rejected(e):
+                        release_claim(mark)
+                    raise
+                aid = attachment_id(res)
+                known = []                                      # список читаем заново прямо перед PUT: чужое вложение, добавленное за это время, не теряем
+                for b in current_attachments(c, a.request) + before:
+                    if str(b["id"]) not in known:
+                        known.append(str(b["id"]))
+                if aid not in known:
+                    known.append(aid)
+                try:
+                    c.put(f"requests/{urllib.parse.quote(str(a.request), safe='')}",
+                          {"request": {"attachments": [{"id": i} for i in known]}})
+                except SDError as e:
+                    raise SDError(f"файл загружен (id вложения {aid}), но не привязан к заявке: {e}") from None
+                seen = {str(b["id"]) for b in current_attachments(c, a.request)}
+                missing = [i for i in known if i not in seen]
+                if missing:
+                    raise SDError(f"после привязки в заявке не видно вложений: {', '.join(missing)} (новое: {aid}); проверьте заявку")
             print(f"вложение видно в заявке {a.request}: {name} (id {aid})")
             return 0
         if a.cmd == "update":
