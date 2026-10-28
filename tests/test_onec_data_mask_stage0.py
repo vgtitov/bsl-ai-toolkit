@@ -165,3 +165,14 @@ def test_double_first_name_masked(mod):
 def test_person_ref_with_passport_siblings(mod):
     row = {"Сотрудник": {"uuid": GUID, "presentation": "И", "ПаспортСерия": "MP", "Номер": "1234567"}}
     assert mod.mask_rows([row])[0]["Сотрудник"]["Номер"] == "***"
+
+
+def test_explicit_mask_for_type_key_applies_to_person_ref(mod, monkeypatch):
+    monkeypatch.setenv("ONEC_DATA_MASK_FIELDS", "type,presentation")
+    out = mod.mask_rows([{"Сотрудник": {"type": "Справочник.Сотрудники", "uuid": GUID, "presentation": "Иванов"}}])[0]["Сотрудник"]
+    assert out["type"] == "***"
+
+
+def test_long_error_masks_before_truncation(mod):
+    res = mod._err(500, {"error": "x" * 485 + " " + FIO}, "w")
+    assert "Петров" not in res["error"] and "Пётр" not in res["error"]

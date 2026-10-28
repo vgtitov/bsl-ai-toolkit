@@ -169,8 +169,8 @@ def _http(method, url, login, password, body=None, timeout=None):
 
 
 def _err(status, data, where):
-    msg = data.get("error") if isinstance(data, dict) else str(data)[:500]
-    return {"error": "%s: HTTP %s — %s" % (where, status, _mask_err(msg))}
+    msg = data.get("error") if isinstance(data, dict) else str(data)
+    return {"error": "%s: HTTP %s — %s" % (where, status, str(_mask_err(msg))[:500])}
 
 
 # ── маскирование и лимиты ─────────────────────────────────────────────────────
@@ -251,7 +251,7 @@ def _mask_person_ref(d, tokens):
         if k in ("uuid", "presentation"):
             out[k] = MASK_VALUE
         elif k in ("_ref", "_type", "type"):
-            out[k] = MASK_VALUE if isinstance(v, str) and _GUID_RX.search(v) else v
+            out[k] = MASK_VALUE if (_pii_key(k, tokens) or (isinstance(v, str) and _GUID_RX.search(v))) else _mask_scalar(v)
         elif doc and _DOC_NUMBER_KEY.match(str(k).lower()):
             out[k] = MASK_VALUE
         else:
