@@ -1,3 +1,4 @@
+# DISCIPLINE_ALLOW_TEST_EDIT — ключ тела заметки request_note → note (портал отвечал 4012 на request_note, проверено живым вызовом)
 """servicedesk.py: сборка list_info, пагинация, разбор ошибок, приватность вывода, сухой прогон и подтверждение. Без сети."""
 import json
 import os
@@ -437,7 +438,7 @@ def test_description_newlines_become_html_so_points_do_not_merge():
     h = sd.to_html("Что сделать.\n1. Первое\n2. Второе <5\n\nГотово когда & срок")
     assert h == "<p>Что сделать.<br>1. Первое<br>2. Второе &lt;5</p><p>Готово когда &amp; срок</p>"
     assert sd.to_html("<p>уже html</p>") == "<p>уже html</p>"
-    assert sd.build_note("1", "a\nb")["request_note"]["description"] == "<p>a<br>b</p>"
+    assert sd.build_note("1", "a\nb")["note"]["description"] == "<p>a<br>b</p>"
     assert sd.build_create({}, "t", "s", "a\nb")["request"]["description"] == "<p>a<br>b</p>"
 
 
