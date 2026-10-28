@@ -40,6 +40,7 @@ import json
 import math
 import os
 import re
+import stat
 import sys
 import time
 import uuid
@@ -452,21 +453,33 @@ def multipart_file(name: str, data: bytes) -> tuple[bytes, str]:
 
 
 def read_attachment(path) -> tuple[str, bytes]:
-    """Читает файл для вложения один раз (то, что подтвердил человек, и то, что уйдёт, это одни и те же байты)."""
+    """Читает файл для вложения один раз и из одного дескриптора (то, что подтвердил человек, и то, что уйдёт, одни и те же
+    байты; подмена файла ссылкой между проверкой и чтением не проходит)."""
     p = Path(path)
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
     try:
-        if p.is_symlink() or not p.is_file():
+        if p.is_symlink():
             raise SDError(f"{p.name or p}: нужен обычный файл (не ссылка и не каталог)")
-        size = p.stat().st_size
-        if size == 0 or size > MAX_ATTACH_BYTES:
-            raise SDError(f"{p.name}: размер {size} байт вне допустимого (1..{MAX_ATTACH_BYTES})")
-        with open(p, "rb") as fh:
+        fd = os.open(p, flags)
+        with os.fdopen(fd, "rb") as fh:
+            st = os.fstat(fh.fileno())
+            if not stat.S_ISREG(st.st_mode):
+                raise SDError(f"{p.name or p}: нужен обычный файл (не ссылка и не каталог)")
+            if st.st_size == 0 or st.st_size > MAX_ATTACH_BYTES:
+                raise SDError(f"{p.name}: размер {st.st_size} байт вне допустимого (1..{MAX_ATTACH_BYTES})")
             data = fh.read(MAX_ATTACH_BYTES + 1)
     except OSError as e:
         raise SDError(f"{p.name or p}: файл не прочитан ({type(e).__name__})") from None
-    if len(data) > MAX_ATTACH_BYTES:
-        raise SDError(f"{p.name}: файл вырос во время чтения, выше {MAX_ATTACH_BYTES} байт")
+    if not 1 <= len(data) <= MAX_ATTACH_BYTES:
+        raise SDError(f"{p.name}: размер прочитанного вне допустимого (1..{MAX_ATTACH_BYTES}), файл менялся во время чтения")
     return p.name, data
+
+
+def _att_size(att: dict):
+    """Размер вложения: портал отдаёт {"value": N, ...}; число или строка тоже принимаем, непонятное это None."""
+    sz = att.get("size")
+    sz = sz.get("value") if isinstance(sz, dict) else sz
+    return str(sz) if isinstance(sz, (int, str)) and str(sz).isdigit() else None
 
 
 def attach_payload(name: str, data: bytes) -> dict:
@@ -797,7 +810,7 @@ def main(argv=None, client: SDClient | None = None) -> int:
                 return 1
             c = client or make_client()                     # ошибка окружения до того, как решение погашено
             before = current_attachments(c, a.request)
-            if not a.allow_duplicate and any(b.get("name") == name and str((b.get("size") or {}).get("value")) == str(len(data))
+            if not a.allow_duplicate and any(b.get("name") == name and _att_size(b) == str(len(data))
                                              for b in before):
                 print(f"не отправлено: в заявке уже есть вложение {name} того же размера. Проверьте её, при необходимости --allow-duplicate.",
                       file=sys.stderr)
@@ -810,13 +823,21 @@ def main(argv=None, client: SDClient | None = None) -> int:
                     release_claim(mark)
                 raise
             aid = attachment_id(res)
-            ids = [{"id": str(b["id"])} for b in before] + [{"id": aid}]
+            known = []                                      # список читаем заново прямо перед PUT: чужое вложение, добавленное за это время, не теряем
+            for b in current_attachments(c, a.request) + before:
+                if str(b["id"]) not in known:
+                    known.append(str(b["id"]))
+            if aid not in known:
+                known.append(aid)
             try:
-                c.put(f"requests/{urllib.parse.quote(str(a.request), safe='')}", {"request": {"attachments": ids}})
+                c.put(f"requests/{urllib.parse.quote(str(a.request), safe='')}",
+                      {"request": {"attachments": [{"id": i} for i in known]}})
             except SDError as e:
                 raise SDError(f"файл загружен (id вложения {aid}), но не привязан к заявке: {e}") from None
-            if aid not in {str(b["id"]) for b in current_attachments(c, a.request)}:
-                raise SDError(f"вложение {aid} загружено, но в заявке не видно; проверьте заявку")
+            seen = {str(b["id"]) for b in current_attachments(c, a.request)}
+            missing = [i for i in known if i not in seen]
+            if missing:
+                raise SDError(f"после привязки в заявке не видно вложений: {', '.join(missing)} (новое: {aid}); проверьте заявку")
             print(f"вложение видно в заявке {a.request}: {name} (id {aid})")
             return 0
         if a.cmd == "update":

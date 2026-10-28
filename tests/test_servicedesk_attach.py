@@ -62,21 +62,21 @@ def test_dry_run_sends_nothing(env, capsys):
 
 
 def test_upload_then_put_full_list_then_readback(env, capsys):
-    t = Fake(GET_BEFORE, UPLOAD_OK, PUT_OK, GET_AFTER)
+    t = Fake(GET_BEFORE, UPLOAD_OK, GET_BEFORE, PUT_OK, GET_AFTER)
     assert run(env, t) == 0
     methods = [(m, u.split("/api/v3/")[1]) for m, u, _, _ in t.calls]
-    assert methods == [("GET", "requests/5"), ("POST", "requests/5/upload"), ("PUT", "requests/5"), ("GET", "requests/5")]
+    assert methods == [("GET", "requests/5"), ("POST", "requests/5/upload"), ("GET", "requests/5"), ("PUT", "requests/5"), ("GET", "requests/5")]
     up = t.calls[1]
     assert up[2]["Content-Type"].startswith("multipart/form-data; boundary=")
     assert b'name="input_file"' in up[3] and b'filename="file.txt"' in up[3] and b"hello" in up[3]
     assert up[3].count(b"Content-Disposition") == 1                       # поле только одно, addtoattachment запрещён
-    body = urllib.parse.parse_qs(t.calls[2][3].decode())["input_data"][0]
+    body = urllib.parse.parse_qs(t.calls[3][3].decode())["input_data"][0]
     assert json.loads(body) == {"request": {"attachments": [{"id": "100"}, {"id": "509621"}]}}
     assert "вложение видно в заявке" in capsys.readouterr().out
 
 
 def test_missing_in_readback_fails(env, capsys):
-    t = Fake(GET_BEFORE, UPLOAD_OK, PUT_OK, GET_BEFORE)
+    t = Fake(GET_BEFORE, UPLOAD_OK, GET_BEFORE, PUT_OK, GET_BEFORE)
     assert run(env, t) == 2
     assert "509621" in capsys.readouterr().err
 
@@ -86,7 +86,7 @@ def test_same_name_and_size_already_attached_is_refused(env, capsys):
     t = Fake(same)
     assert run(env, t) == 1 and len(t.calls) == 1
     assert "уже" in capsys.readouterr().err
-    t2 = Fake(same, UPLOAD_OK, PUT_OK, (200, json.dumps({"request": {"attachments": [{"id": "9"}, {"id": "509621"}]}})))
+    t2 = Fake(same, UPLOAD_OK, same, PUT_OK, (200, json.dumps({"request": {"attachments": [{"id": "9"}, {"id": "509621"}]}})))
     assert run(env, t2, ["--allow-duplicate"]) == 0
 
 
@@ -97,7 +97,7 @@ def test_upload_response_without_id_stops_before_put(env, capsys):
 
 
 def test_put_failure_reports_attachment_id(env, capsys):
-    t = Fake(GET_BEFORE, UPLOAD_OK, (500, "{}"))
+    t = Fake(GET_BEFORE, UPLOAD_OK, GET_BEFORE, (500, "{}"))
     assert run(env, t) == 2
     assert "509621" in capsys.readouterr().err
 
@@ -143,3 +143,35 @@ def test_attachment_id_extraction():
     assert sd.attachment_id({"attachment": {"content_url": "/api/v3/requests/5/attachments/77/_download"}}) == "77"
     with pytest.raises(sd.SDError):
         sd.attachment_id({"attachment": {}})
+
+
+def test_attachment_added_concurrently_is_not_lost(env):
+    concurrent = (200, json.dumps({"request": {"attachments": [{"id": "100", "name": "old.txt"}, {"id": "300", "name": "other.txt"}]}}))
+    after = (200, json.dumps({"request": {"attachments": [{"id": "100"}, {"id": "300"}, {"id": "509621"}]}}))
+    t = Fake(GET_BEFORE, UPLOAD_OK, concurrent, PUT_OK, after)
+    assert run(env, t) == 0
+    body = urllib.parse.parse_qs(t.calls[3][3].decode())["input_data"][0]
+    assert [x["id"] for x in json.loads(body)["request"]["attachments"]] == ["100", "300", "509621"]
+
+
+def test_lost_old_attachment_after_put_is_reported(env, capsys):
+    after = (200, json.dumps({"request": {"attachments": [{"id": "509621"}]}}))
+    t = Fake(GET_BEFORE, UPLOAD_OK, GET_BEFORE, PUT_OK, after)
+    assert run(env, t) == 2
+    assert "100" in capsys.readouterr().err
+
+
+def test_size_as_plain_number_does_not_crash(env):
+    plain = (200, json.dumps({"request": {"attachments": [{"id": "9", "name": "x", "size": 5}, {"id": "8", "name": "y", "size": "n/a"}]}}))
+    t = Fake(plain, UPLOAD_OK, plain, PUT_OK, (200, json.dumps({"request": {"attachments": [{"id": "9"}, {"id": "8"}, {"id": "509621"}]}})))
+    assert run(env, t) == 0
+
+
+def test_symlink_swapped_between_check_and_open_is_refused(env, tmp_path, monkeypatch):
+    real = sd.Path.is_symlink
+    link = tmp_path / "swap.txt"
+    link.symlink_to(env[1])
+    monkeypatch.setattr(sd.Path, "is_symlink", lambda self: False)      # проверка «не ссылка» обманута, O_NOFOLLOW должен отказать
+    with pytest.raises(sd.SDError):
+        sd.read_attachment(link)
+    monkeypatch.setattr(sd.Path, "is_symlink", real)
