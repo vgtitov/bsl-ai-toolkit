@@ -461,7 +461,7 @@ def read_attachment(path) -> tuple[str, bytes]:
     """Читает файл для вложения один раз и из одного дескриптора (то, что подтвердил человек, и то, что уйдёт, одни и те же
     байты; подмена файла ссылкой между проверкой и чтением не проходит)."""
     p = Path(path)
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0) | getattr(os, "O_NONBLOCK", 0)   # FIFO без писателя не повесит открытие
     try:
         if p.is_symlink():
             raise SDError(f"{p.name or p}: нужен обычный файл (не ссылка и не каталог)")

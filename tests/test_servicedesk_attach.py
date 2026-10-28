@@ -243,3 +243,13 @@ def test_any_failure_after_upload_reports_attachment_id(env, capsys):
 
 def test_attachment_id_falls_back_to_id_field():
     assert sd.attachment_id({"attachment": {"id": "777", "content_url": "/x"}}) == "777"
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFO есть только в POSIX")
+def test_fifo_is_refused_without_hanging(tmp_path):
+    fifo = tmp_path / "pipe"
+    os.mkfifo(fifo)
+    t0 = time.time()
+    with pytest.raises(sd.SDError):
+        sd.read_attachment(fifo)
+    assert time.time() - t0 < 2
