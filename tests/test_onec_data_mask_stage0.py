@@ -130,3 +130,13 @@ def test_hyphenated_surname_with_initials_masked(mod):
 def test_error_object_masks_by_field_name(mod):
     res = mod._err(500, {"error": {"Фамилия": "Петров", "Оклад": 1500}}, "x")
     assert "Петров" not in res["error"] and "1500" not in res["error"]
+
+
+def test_uppercase_fio_masked(mod):
+    out = dump(mod.mask_rows([{"A": "ИВАНОВ ИВАН ИВАНОВИЧ", "B": "ИВАНОВ И.И.", "C": "И.И. ИВАНОВ"}]))
+    assert "ИВАНОВ" not in out
+
+
+def test_explicit_mask_field_overrides_technical_exception(mod, monkeypatch):
+    monkeypatch.setenv("ONEC_DATA_MASK_FIELDS", "имяфайла")
+    assert mod.mask_rows([{"ИмяФайла": "secret.txt"}])[0]["ИмяФайла"] == "***"
