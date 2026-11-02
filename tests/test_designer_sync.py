@@ -330,7 +330,10 @@ def test_repo_objects_file_unique_per_call(monkeypatch):
     put = {}
     monkeypatch.setattr("onec_metadata.apply.dumpload._put_text",
                         lambda runner, path, text: put.update({path: text}))
+    logs = set()
     for _ in range(2):
-        m.run_repo(_LogRunner(), r"srv\B", "u", "p", (r"C:\R", "ru", "rp"), "lock",
+        r = _LogRunner()
+        m.run_repo(r, r"srv\B", "u", "p", (r"C:\R", "ru", "rp"), "lock",
                    objects=["ОбщийМодуль.X"], workdir=r"C:\w")
-    assert len(put) == 2
+        logs.add(r.run_calls[0].rsplit("/Out ", 1)[1].split()[0])
+    assert len(put) == 2 and len(logs) == 2          # и список объектов, и журнал — свои на вызов

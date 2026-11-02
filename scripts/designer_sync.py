@@ -271,15 +271,20 @@ def run_repo(r, base, user, password, repo, op, ext=None, objects=None, comment=
     objects_file = None
     if op in ("lock", "unlock", "commit") and not objects:
         raise SystemExit(f"repo {op}: нужен --objects (полные имена через запятую)")
-    if objects:
-        # своё имя на вызов: параллельные прогоны в одном workdir не подменяют список объектов
-        objects_file = workdir + rf"\repo_objects_{uuid.uuid4().hex[:8]}.xml"
-        dumpload._put_text(r, objects_file, objects_xml(objects))
     if op == "commit" and not comment:
         raise SystemExit("repo commit: нужен --comment")
+    # своё имя файлов на вызов: параллельные прогоны в одном workdir не подменяют список объектов и журнал
+    run_id = uuid.uuid4().hex[:8]
+    if objects:
+        objects_file = workdir + rf"\repo_objects_{run_id}.xml"
+        dumpload._put_text(r, objects_file, objects_xml(objects))
     action, args = repo_action(op, ext, objects_file, comment, force)
-    dumpload._run_designer(r, base, user, password, repo_conn(*repo) + " " + action, args,
-                           workdir + rf"\repo_{op}.log")
+    try:
+        dumpload._run_designer(r, base, user, password, repo_conn(*repo) + " " + action, args,
+                               workdir + rf"\repo_{op}_{run_id}.log")
+    finally:
+        if objects_file:
+            r.remove(objects_file)
 
 
 def update_db(r, base, user, password, ext=None, workdir=None):
