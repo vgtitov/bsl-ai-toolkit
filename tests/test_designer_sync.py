@@ -288,3 +288,10 @@ def test_password_with_space_is_one_arg_and_fully_masked():
     assert '/ConfigurationRepositoryP "ef gh"' in conn
     out = mask_password(cmd + " " + conn)
     assert "ab" not in out.replace("/DisableStartup", "") and "cd" not in out and "ef" not in out and "gh" not in out
+
+
+def test_repo_update_objects_and_force_explicit():
+    m = _load()
+    assert m.repo_action("update") == ("/ConfigurationRepositoryUpdateCfg", [])
+    assert m.repo_action("update", objects_file="f.xml", force=True) == \
+        ("/ConfigurationRepositoryUpdateCfg", ["-Objects", "f.xml", "-force"])

@@ -234,7 +234,9 @@ def objects_xml(objects) -> str:
 def repo_action(op, ext=None, objects_file=None, comment=None, force=False):
     """(действие, аргументы) пакетного Конфигуратора для операции с хранилищем."""
     if op == "update":
-        action, args = "/ConfigurationRepositoryUpdateCfg", ["-force"]
+        # -force = согласие на получение новых/удаление объектов; без него пакетное обновление на них остановится
+        action, args = "/ConfigurationRepositoryUpdateCfg", (["-Objects", objects_file] if objects_file else []) \
+            + (["-force"] if force else [])
     elif op == "lock":
         action, args = "/ConfigurationRepositoryLock", ["-Objects", objects_file, "-revised"]
     elif op == "unlock":
@@ -263,9 +265,9 @@ def run_repo(r, base, user, password, repo, op, ext=None, objects=None, comment=
     workdir = workdir or _point_sync_workdir()
     r.makedirs(workdir)
     objects_file = None
-    if op in ("lock", "unlock", "commit"):
-        if not objects:
-            raise SystemExit(f"repo {op}: нужен --objects (полные имена через запятую)")
+    if op in ("lock", "unlock", "commit") and not objects:
+        raise SystemExit(f"repo {op}: нужен --objects (полные имена через запятую)")
+    if objects:
         objects_file = workdir + r"\repo_objects.xml"
         dumpload._put_text(r, objects_file, objects_xml(objects))
     if op == "commit" and not comment:
@@ -320,7 +322,7 @@ def main(argv=None):
     p.add_argument("--repo-key", help="ключ ONEC_REPO_PATH_/USER_/PASS_<КЛЮЧ> (по умолчанию --contour)")
     p.add_argument("--objects", help="полные имена через запятую: ОбщийМодуль.X,Справочник.Y (lock/unlock/commit)")
     p.add_argument("--comment", help="комментарий помещения (commit)")
-    p.add_argument("--force", action="store_true", help="unlock: отменить локальные изменения захваченного")
+    p.add_argument("--force", action="store_true", help="unlock: отменить локальные изменения захваченного; update: согласие на новые/удалённые объекты")
     p = sub.add_parser("updatedb", parents=[common], help="UpdateDBCfg (основная или --ext)")
     a = ap.parse_args(argv)
 
