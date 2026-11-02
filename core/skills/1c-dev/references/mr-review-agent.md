@@ -38,7 +38,7 @@
 | Защита ветки | protected branches | branch protection или rulesets |
 | Шаблон описания | `.gitlab/merge_request_templates/Default.md` | `.github/pull_request_template.md` |
 
-Публикация (только по явной команде ревьюера): GitLab через API `POST /projects/:id/merge_requests/:iid/discussions` с `position` (или `glab`); GitHub через `gh pr review` или `gh api repos/<owner>/<repo>/pulls/<N>/comments`; несколько комментариев как один отложенный review (pending review, затем submit).
+Публикация (только по явной команде ревьюера): GitLab через API `POST /projects/:id/merge_requests/:iid/discussions` с `position` (или `glab`); GitHub: построчные замечания одним review через `gh api repos/<owner>/<repo>/pulls/<N>/reviews` с массивом `comments` (path, line, body) и `commit_id`; `gh pr review --comment` только для сводного комментария. Перед отправкой сверить репозиторий, номер PR, `commit_id` и актуальность строк.
 
 ## Шаблон описания MR
 Пример для копирования в `.gitlab/merge_request_templates/Default.md` (GitLab) или `.github/pull_request_template.md` (GitHub) своего проекта: `docs/templates/merge_request_description.md`.

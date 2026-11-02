@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.parse
@@ -52,8 +53,16 @@ def github_queue(run=subprocess.run) -> list[dict]:
              "author": (p.get("author") or {}).get("login", ""), "url": p["url"]} for p in json.loads(r.stdout or "[]")]
 
 
+_CTRL = re.compile(r"[\x00-\x1f\x7f-\x9f\u200e\u200f\u202a-\u202e\u2066-\u2069]")
+
+
+def clean(v) -> str:
+    """Заголовки и логины чужие: управляющие символы (ANSI/OSC, \\r, bidi) не доходят до терминала."""
+    return _CTRL.sub(" ", str(v))
+
+
 def render(items: list[dict]) -> str:
-    return "\n".join(f"{i['src']:6} {i['ref']:28} {i['author']:16} {i['title']}\n       {i['url']}" for i in items) or "Ревью на вас нет."
+    return "\n".join(f"{clean(i['src']):6} {clean(i['ref']):28} {clean(i['author']):16} {clean(i['title'])}\n       {clean(i['url'])}" for i in items) or "Ревью на вас нет."
 
 
 def self_test() -> None:
@@ -75,6 +84,8 @@ def self_test() -> None:
     except ValueError:
         pass
     assert render([]) == "Ревью на вас нет."
+    bad = render([{"src": "gitlab", "ref": "!1", "author": "a", "title": "x\x1b]52;c;QQ\x07\r\u202ey", "url": "u"}])
+    assert "\x1b" not in bad and "\r" not in bad and "\u202e" not in bad and "\x07" not in bad, bad
     print("self-test ok")
 
 
