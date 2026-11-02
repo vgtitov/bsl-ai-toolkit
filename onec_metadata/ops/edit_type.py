@@ -86,13 +86,15 @@ def _merge_number(old_qual, order, named: dict) -> list:
     Схема платформы закрыта: только скалярные `order`; иной дочерний узел (с содержимым, атрибутами
     или неизвестный) не переписываем молча, а отказываем: потеря данных хуже ошибки."""
     cur = {}
+    if len(old_qual) > 1:
+        raise ValueError("несколько числовых квалификаторов в типе, правка типа отменена")
     if old_qual:
         for el in old_qual[0]:
             if not isinstance(el.tag, str):
-                continue
+                raise ValueError("комментарий внутри числового квалификатора, правка типа отменена")
             name = etree.QName(el).localname
-            if name not in order or len(el) or el.attrib:
-                raise ValueError(f"числовой квалификатор содержит неожиданный узел {name!r}, правка типа отменена")
+            if name not in order or name in cur or len(el) or el.attrib:
+                raise ValueError(f"числовой квалификатор содержит неожиданный или повторный узел {name!r}, правка типа отменена")
             cur[name] = (el.text or "").strip()
     cur.update({k: v for k, v in named.items() if v is not None})
     return [(k, cur[k]) for k in order if k in cur]

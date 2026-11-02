@@ -62,3 +62,23 @@ def test_unexpected_node_refuses_and_keeps_file_edt(tmp_path):
     with pytest.raises(ValueError):
         edit_type(work, "Ревизия", "Number", precision=20)
     assert work.read_text(encoding="utf-8") == before
+
+
+def _refuses(tmp_path, old, new):
+    import pytest
+    work = _copy(tmp_path, "number_nonneg.mdo")
+    txt = work.read_text(encoding="utf-8")
+    assert old in txt
+    work.write_text(txt.replace(old, new), encoding="utf-8")
+    before = work.read_text(encoding="utf-8")
+    with pytest.raises(ValueError):
+        edit_type(work, "Ревизия", "Number", precision=20)
+    assert work.read_text(encoding="utf-8") == before
+
+
+def test_comment_inside_qualifier_refuses_edt(tmp_path):
+    _refuses(tmp_path, "<nonNegative>true</nonNegative>", "<nonNegative>true</nonNegative><!-- note -->")
+
+
+def test_duplicate_scalar_refuses_edt(tmp_path):
+    _refuses(tmp_path, "<nonNegative>true</nonNegative>", "<nonNegative>true</nonNegative><nonNegative>false</nonNegative>")
