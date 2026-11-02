@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added
+- Порядок работы с issue и PR (`docs/ISSUES_AND_PRS.md`): сроки ответа 2 и 3 рабочих дня, метки, milestone, `Fixes #N`, комментарий «выпущено в vX.Y.Z», граница публичного содержимого; `scripts/public_check.py` проверяет текст перед публикацией (почта, телефоны, IP, внутренние хосты, ключи, личные пути, приватный стоп-лист вне репозитория); карточка roadmap.
+- Ревью MR агентом: `references/mr-review-agent.md` (замечания `блокер:`/`желательно:` по строкам, показ ревьюеру до публикации, агент не одобряет и не вливает), шаблон описания MR `docs/templates/merge_request_description.md`, `scripts/review_inbox.py` (очередь ревью на вас: GitLab to-do и MR, GitHub review-requested; только чтение), соответствие GitLab и GitHub, порядок «что мне на ревью», раздел «Комментарии и обсуждения» в `docs/MR_REVIEW.md`.
+
 ## [2.7.3] - 2026-10-29
 
 ### Fixed
