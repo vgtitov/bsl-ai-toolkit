@@ -83,14 +83,19 @@ def _mk(tag_q: str, text: str | None = None):
 
 def _merge_number(old_qual, order, named: dict) -> list:
     """Дети числового квалификатора: прежние значения сохраняются, названные в команде заменяются.
-    Порядок: канонический (`order`), неизвестные узлы после него в прежнем порядке."""
+    Схема платформы закрыта: только скалярные `order`; иной дочерний узел (с содержимым, атрибутами
+    или неизвестный) не переписываем молча, а отказываем: потеря данных хуже ошибки."""
     cur = {}
     if old_qual:
         for el in old_qual[0]:
-            if isinstance(el.tag, str):
-                cur[etree.QName(el).localname] = (el.text or "").strip()
+            if not isinstance(el.tag, str):
+                continue
+            name = etree.QName(el).localname
+            if name not in order or len(el) or el.attrib:
+                raise ValueError(f"числовой квалификатор содержит неожиданный узел {name!r}, правка типа отменена")
+            cur[name] = (el.text or "").strip()
     cur.update({k: v for k, v in named.items() if v is not None})
-    return [(k, cur[k]) for k in order if k in cur] + [(k, v) for k, v in cur.items() if k not in order]
+    return [(k, cur[k]) for k in order if k in cur]
 
 
 def _build_qualifier(anchor, qual_el, children, nl: str, lead: str, unit: str,
