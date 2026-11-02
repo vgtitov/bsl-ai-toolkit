@@ -1,0 +1,45 @@
+"""edit_type: смена точности или масштаба числа не теряет квалификаторы, которые команда не назвала
+(знак «неотрицательное», незаданный масштаб). Фикстуры синтетические."""
+import shutil
+from pathlib import Path
+
+from onec_metadata.ops.edit_type import edit_type
+
+FIX = Path(__file__).parent / "fixtures"
+
+
+def _copy(tmp_path, name):
+    work = tmp_path / name
+    shutil.copy(FIX / name, work)
+    return work
+
+
+def test_precision_keeps_nonnegative_edt(tmp_path):
+    work = _copy(tmp_path, "number_nonneg.mdo")
+    edit_type(work, "Ревизия", "Number", precision=20)
+    txt = work.read_text(encoding="utf-8")
+    assert "<precision>20</precision>" in txt and "<nonNegative>true</nonNegative>" in txt
+    assert txt.index("<precision>") < txt.index("<nonNegative>")
+
+
+def test_scale_keeps_precision_and_sign_edt(tmp_path):
+    work = _copy(tmp_path, "number_nonneg.mdo")
+    edit_type(work, "Ревизия", "Number", scale=2)
+    txt = work.read_text(encoding="utf-8")
+    assert "<precision>18</precision>" in txt and "<scale>2</scale>" in txt and "<nonNegative>true</nonNegative>" in txt
+
+
+def test_precision_keeps_sign_and_scale_cfg(tmp_path):
+    work = _copy(tmp_path, "number_nonneg.xml")
+    edit_type(work, "Ревизия", "xs:decimal", precision=20)
+    txt = work.read_text(encoding="utf-8")
+    assert "<v8:Digits>20</v8:Digits>" in txt
+    assert "<v8:FractionDigits>0</v8:FractionDigits>" in txt
+    assert "<v8:AllowedSign>Nonnegative</v8:AllowedSign>" in txt
+
+
+def test_switch_from_number_to_string_drops_number_qualifiers_edt(tmp_path):
+    work = _copy(tmp_path, "number_nonneg.mdo")
+    edit_type(work, "Ревизия", "xs:string", length=10)
+    txt = work.read_text(encoding="utf-8")
+    assert "nonNegative" not in txt and "<length>10</length>" in txt

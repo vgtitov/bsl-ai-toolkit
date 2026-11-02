@@ -81,6 +81,18 @@ def _mk(tag_q: str, text: str | None = None):
     return el
 
 
+def _merge_number(old_qual, order, named: dict) -> list:
+    """Дети числового квалификатора: прежние значения сохраняются, названные в команде заменяются.
+    Порядок: канонический (`order`), неизвестные узлы после него в прежнем порядке."""
+    cur = {}
+    if old_qual:
+        for el in old_qual[0]:
+            if isinstance(el.tag, str):
+                cur[etree.QName(el).localname] = (el.text or "").strip()
+    cur.update({k: v for k, v in named.items() if v is not None})
+    return [(k, cur[k]) for k in order if k in cur] + [(k, v) for k, v in cur.items() if k not in order]
+
+
 def _build_qualifier(anchor, qual_el, children, nl: str, lead: str, unit: str,
                      tag_fn) -> None:
     """Собрать квалификатор с детьми и вставить после `anchor` (текст типа),
@@ -155,7 +167,9 @@ def _edit_configurator(path, member, type_refs, length, precision, scale) -> Non
             type_el.tail = nl + lead_p[:-len(unit)] if lead_p.endswith(unit) else nl
         type_el.text = nl + lead_p + unit
 
-    # квалификаторы снять (у составного их нет; у одиночного — пересоберём)
+    # квалификаторы снять (у составного их нет; у одиночного — пересоберём); числовой читаем до снятия:
+    # то, что команда не назвала (знак, масштаб), остаётся как было
+    old_num = type_el.xpath("v8:NumberQualifiers", namespaces=cfg.NS)
     cfg.remove_children(type_el, type_el.xpath(
         "v8:StringQualifiers | v8:NumberQualifiers | v8:DateQualifiers", namespaces=cfg.NS))
     last = _ensure_types(type_el, "v8:Type", cfg.NS, type_refs,
@@ -166,11 +180,9 @@ def _edit_configurator(path, member, type_refs, length, precision, scale) -> Non
         _build_qualifier(last, _mk(cfg.q("v8", "StringQualifiers")),
                          [("Length", str(length))], nl, lead_p, unit, tag_v8)
     elif len(type_refs) == 1 and (precision is not None or scale is not None):
-        ch = []
-        if precision is not None:
-            ch.append(("Digits", str(precision)))
-        if scale is not None:
-            ch.append(("FractionDigits", str(scale)))
+        ch = _merge_number(old_num, ("Digits", "FractionDigits", "AllowedSign"),
+                           {"Digits": None if precision is None else str(precision),
+                            "FractionDigits": None if scale is None else str(scale)})
         _build_qualifier(last, _mk(cfg.q("v8", "NumberQualifiers")),
                          ch, nl, lead_p, unit, tag_v8)
 
@@ -210,6 +222,7 @@ def _edit_edt(path, member, type_refs, length, precision, scale) -> None:
             type_el.tail = nl + lead_c[:-len(unit)] if lead_c.endswith(unit) else nl
         type_el.text = nl + lead_c + unit
 
+    old_num = type_el.xpath("numberQualifiers")
     cfg.remove_children(type_el, type_el.xpath(
         "stringQualifiers | numberQualifiers | dateQualifiers"))
     last = _ensure_types(type_el, "types", None, type_refs,
@@ -220,11 +233,9 @@ def _edit_edt(path, member, type_refs, length, precision, scale) -> None:
         _build_qualifier(last, etree.Element("stringQualifiers"),
                          [("length", str(length))], nl, lead_c, unit, tag_plain)
     elif len(type_refs) == 1 and (precision is not None or scale is not None):
-        ch = []
-        if precision is not None:
-            ch.append(("precision", str(precision)))
-        if scale is not None:
-            ch.append(("scale", str(scale)))
+        ch = _merge_number(old_num, ("precision", "scale", "nonNegative"),
+                           {"precision": None if precision is None else str(precision),
+                            "scale": None if scale is None else str(scale)})
         _build_qualifier(last, etree.Element("numberQualifiers"),
                          ch, nl, lead_c, unit, tag_plain)
 
