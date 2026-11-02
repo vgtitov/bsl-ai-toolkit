@@ -103,3 +103,13 @@ def test_undated_after_dated(tmp_path):
             {"task": "A", "est_date": "2026-09-01", "fact": 5}]
     got, _ = ec.load(write(tmp_path, rows))
     assert len(got) == 1  # первая датированная годна, недатированная вторая
+
+
+def test_flags_strict_and_bad_date_and_status(tmp_path):
+    rows = [{"scope_changed": ""}, {"out_of_plan": "возможно"}, {"fact_complete": "хз"},
+            {"task": "D", "est_date": "01.09.2026"}]
+    got, q = ec.load(write(tmp_path, rows))
+    assert q["флаг не распознан (нужно да или нет)"] == 3 and len(got) == 1
+    assert any("дата оценки" in k for k in q)
+    rr = ec.coefficient([], "M", "dev", "права", risky_min=1.2)
+    assert rr["coef"] == 1.2 and "повышен настройкой до 1.20" in rr["status"]

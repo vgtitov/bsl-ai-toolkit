@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import datetime
 import json
 import math
 import random
@@ -32,6 +33,7 @@ DEFAULT_RISKY = ("интеграция", "обмен", "права")
 REQUIRED = ("task", "size", "work_type", "role", "est_without_ai", "fact", "close_reason",
             "scope_changed", "out_of_plan", "fact_complete")
 YES = {"да", "yes", "true", "1", "y"}
+NO = {"нет", "no", "false", "0", "n"}
 
 
 def _num(v):
@@ -64,9 +66,19 @@ def load(path):
     for r in rows:
         for c in ("size", "role", "work_type"):
             r[c] = _norm(r[c])
-    # первой считается самая ранняя оценка (ISO-даты в est_date); без даты идут после датированных, в порядке строк
-    rows.sort(key=lambda r: (not (r.get("est_date") or "").strip(), (r.get("est_date") or "").strip()))
     q = defaultdict(int)
+    for r in rows:  # дата строго ГГГГ-ММ-ДД; иная считается отсутствующей (с пометкой)
+        d = (r.get("est_date") or "").strip()
+        try:
+            datetime.date.fromisoformat(d) if d else None
+            if d and len(d) != 10:
+                raise ValueError
+        except ValueError:
+            q["дата оценки не в формате ГГГГ-ММ-ДД (считается отсутствующей)"] += 1
+            d = ""
+        r["_d"] = d
+    # первой считается самая ранняя оценка; без даты идут после датированных, в порядке строк
+    rows.sort(key=lambda r: (not r["_d"], r["_d"]))
     seen, out = set(), []
     for r in rows:
         e, fa = _num(r["est_without_ai"]), _num(r["fact"])
@@ -83,11 +95,13 @@ def load(path):
             q["факт меньше нуля"] += 1
         elif r["close_reason"].strip().lower() != "выполнена":
             q["не выполнена (перенесена или отменена)"] += 1
-        elif r["scope_changed"].strip().lower() in YES:
+        elif any(_norm(r[c]) not in YES | NO for c in ("scope_changed", "out_of_plan", "fact_complete")):
+            q["флаг не распознан (нужно да или нет)"] += 1
+        elif _norm(r["scope_changed"]) in YES:
             q["объём менялся после оценки"] += 1
-        elif r["out_of_plan"].strip().lower() in YES:
+        elif _norm(r["out_of_plan"]) in YES:
             q["в оценку входили работы вне плана"] += 1
-        elif r["fact_complete"].strip().lower() not in YES:
+        elif _norm(r["fact_complete"]) in NO:
             q["списания неполные"] += 1
         elif fa == 0:
             q["нулевой факт"] += 1
@@ -141,6 +155,7 @@ def coefficient(rows, size, role, wtype, prior=None, risky=DEFAULT_RISKY, risky_
         res["model_coef"] = k
         if lo > CLAMP[0] and kc == lo:
             res["raised_to_min"] = lo
+            res["status"] += f"; повышен настройкой до {lo:.2f}"
     for key in ("interval80", "next_task80"):  # интервалы в тех же границах, что и применённый коэффициент
         if key in res:
             res[key] = [min(max(v, lo), CLAMP[1]) for v in res[key]]
