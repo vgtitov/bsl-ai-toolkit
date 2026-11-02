@@ -82,3 +82,7 @@ def test_comment_inside_qualifier_refuses_edt(tmp_path):
 
 def test_duplicate_scalar_refuses_edt(tmp_path):
     _refuses(tmp_path, "<nonNegative>true</nonNegative>", "<nonNegative>true</nonNegative><nonNegative>false</nonNegative>")
+
+
+def test_stray_text_refuses_edt(tmp_path):
+    _refuses(tmp_path, "<nonNegative>true</nonNegative>", "<nonNegative>true</nonNegative>ВАЖНО")

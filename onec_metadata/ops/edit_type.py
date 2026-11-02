@@ -89,7 +89,11 @@ def _merge_number(old_qual, order, named: dict) -> list:
     if len(old_qual) > 1:
         raise ValueError("несколько числовых квалификаторов в типе, правка типа отменена")
     if old_qual:
+        if (old_qual[0].text or "").strip():
+            raise ValueError("текст внутри числового квалификатора, правка типа отменена")
         for el in old_qual[0]:
+            if (el.tail or "").strip():
+                raise ValueError("текст между узлами числового квалификатора, правка типа отменена")
             if not isinstance(el.tag, str):
                 raise ValueError("комментарий внутри числового квалификатора, правка типа отменена")
             name = etree.QName(el).localname
