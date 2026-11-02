@@ -39,7 +39,7 @@ def test_risky_without_history_is_one_and_min(tmp_path):
     p = write(tmp_path, [{"work_type": "интеграция", "fact": 2} for _ in range(3)])
     got, _ = ec.load(p)
     r = ec.coefficient(got, "M", "dev", "интеграция", risky_min=0.8)
-    assert r["coef"] == 1.0 and "истории по типу нет" in r["status"]
+    assert r["coef"] == 1.0 and "истории по типу мало (n=3" in r["status"]
     p5 = write(tmp_path, [{"work_type": "интеграция", "fact": 2} for _ in range(6)])
     many = ec.coefficient(ec.load(p5)[0], "M", "dev", "интеграция", risky_min=0.8)
     assert many["n"] == 6 and math.isclose(many["coef"], 0.8)
@@ -96,3 +96,10 @@ def test_capacity_by_task(tmp_path):
         rows += [{"task": f"T{i}", "role": "dev", "fact": 5}, {"task": f"T{i}", "role": "analyst", "fact": 5}]
     c = ec.capacity(ec.load(write(tmp_path, rows))[0])
     assert c["n"] == 6 and c["interval80"] == [0.5, 0.5]
+
+
+def test_undated_after_dated(tmp_path):
+    rows = [{"task": "A", "est_date": "", "fact": 5, "scope_changed": "да"},
+            {"task": "A", "est_date": "2026-09-01", "fact": 5}]
+    got, _ = ec.load(write(tmp_path, rows))
+    assert len(got) == 1  # первая датированная годна, недатированная вторая

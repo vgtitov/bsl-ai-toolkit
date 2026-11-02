@@ -64,8 +64,8 @@ def load(path):
     for r in rows:
         for c in ("size", "role", "work_type"):
             r[c] = _norm(r[c])
-    # первой считается самая ранняя оценка (ISO-даты в est_date; нет даты, порядок строк)
-    rows.sort(key=lambda r: (r.get("est_date") or "").strip())
+    # первой считается самая ранняя оценка (ISO-даты в est_date); без даты идут после датированных, в порядке строк
+    rows.sort(key=lambda r: (not (r.get("est_date") or "").strip(), (r.get("est_date") or "").strip()))
     q = defaultdict(int)
     seen, out = set(), []
     for r in rows:
@@ -118,7 +118,8 @@ def coefficient(rows, size, role, wtype, prior=None, risky=DEFAULT_RISKY, risky_
     sel = [r for r in rows if r["size"] == size and r["role"] == role and r["work_type"] == wtype]
     n = len(sel)
     if wtype in risky and n < MIN_N_RISKY:
-        k, src = 1.0, f"истории по типу нет (n={n}), коэффициент 1"
+        k = 1.0
+        src = "истории по типу нет, коэффициент 1" if n == 0 else f"истории по типу мало (n={n} < {MIN_N_RISKY}), коэффициент 1"
         res = {"coef": k, "n": n, "status": src}
     elif n == 0:
         k = prior if prior is not None else 1.0
