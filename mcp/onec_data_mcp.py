@@ -78,7 +78,7 @@ def load_dotenv_defaults(*dirs):
 
 # Поля с ПДн, маскируемые по умолчанию (подстрока в имени поля, регистронезависимо).
 DEFAULT_MASK = ("фио,фамилия,имя,отчество,телефон,инн,кпп,снилс,паспорт,email,"
-                "почта,адресэп,датарождения")
+                "почта,адресэп,датарождения,оклад,зарплат,заработн")
 MASK_VALUE = "***"
 
 
@@ -169,8 +169,8 @@ def _http(method, url, login, password, body=None, timeout=None):
 
 
 def _err(status, data, where):
-    msg = data.get("error") if isinstance(data, dict) else str(data)[:500]
-    return {"error": "%s: HTTP %s — %s" % (where, status, msg)}
+    msg = data.get("error") if isinstance(data, dict) else str(data)
+    return {"error": "%s: HTTP %s — %s" % (where, status, str(_mask_err(msg))[:500])}
 
 
 # ── маскирование и лимиты ─────────────────────────────────────────────────────
@@ -183,7 +183,23 @@ _VALUE_PII = [
     re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+"),                    # email
     re.compile(r"(?<!\d)(?:\+7|8)[\s(-]?\d{3}[\s)-]?\d{3}[\s-]?\d{2}[\s-]?\d{2}(?!\d)"),  # телефон РФ
     re.compile(r"\b(?:\d[ -]?){16}\b"),                          # карта 16 цифр
+    re.compile(r"(?<!\d)\d{4}[ ]\d{6}(?!\d)|(?<!\d)\d{2}[ ]\d{2}[ ]\d{6}(?!\d)"),  # паспорт РФ «4512 345678»
+    re.compile(r"(?<![A-Za-z0-9])[A-Z]{2}\d{7}(?!\d)"),          # паспорт РБ «MP1234567»
+    # ФИО в любом регистре частей: «Фамилия Имя Отчество» (отчество по окончанию), «Фамилия И.О.», «И.О. Фамилия»
+    re.compile(r"(?<![А-Яа-яЁё])[А-ЯЁ][а-яёА-ЯЁ]+(?:-[А-ЯЁ][а-яёА-ЯЁ]+)?\s+[А-ЯЁ][а-яёА-ЯЁ]+(?:-[А-ЯЁ][а-яёА-ЯЁ]+)?\s+"
+               r"[А-ЯЁ][а-яёА-ЯЁ]*(?i:ич|вна|чна|ична|оглы|кызы)(?![А-Яа-яЁё])"),
+    re.compile(r"(?<![А-Яа-яЁё-])[А-ЯЁ][а-яёА-ЯЁ]+(?:-[А-ЯЁ][а-яёА-ЯЁ]+)?\s+[А-ЯЁ]\.\s?[А-ЯЁ]\."),
+    re.compile(r"(?<![А-Яа-яЁё])[А-ЯЁ]\.\s?[А-ЯЁ]\.\s?[А-ЯЁ][а-яёА-ЯЁ]+(?:-[А-ЯЁ][а-яёА-ЯЁ]+)?"),
 ]
+
+# Технические имена, содержащие «имя», но не персональные: ИмяФайла, ИмяПоля и т. п.
+_TECH_NAME = re.compile(r"имя(?:файла|поля|параметра|объекта|реквизита|таблицы|колонки|свойства|метода|"
+                        r"процедуры|события|макета|формы|команды)")
+# Ссылка на человека по имени поля; рядом с серией паспорта маскируется номер документа.
+_PERSON_KEY = re.compile(r"сотрудник|физлиц|физическ|работник")
+_DOC_SIBLING_KEY = re.compile(r"паспорт")
+_DOC_NUMBER_KEY = re.compile(r"^(?:номер|номердокумента|кемвыдан|выдан|датавыдачи)$")
+_GUID_RX = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 
 
 def _mask_tokens():
@@ -202,14 +218,60 @@ def _mask_scalar(value):
     return value
 
 
+def _mask_err(msg):
+    """Сообщения об ошибках тоже могут нести ПДн (текст запроса, имя в ответе сервера)."""
+    if not _mask_tokens():
+        return msg
+    if not isinstance(msg, str):
+        msg = json.dumps(mask_deep(msg), ensure_ascii=False)
+    if len(msg) > 2000:                  # длинное сообщение не режем (граница могла бы рассечь ФИО), прячем целиком
+        return "(текст ошибки длиннее 2000 знаков скрыт)"
+    return _mask_scalar(msg)
+
+
+def _pii_key(key, tokens):
+    k = str(key).lower()
+    k_plain = _TECH_NAME.sub("", k)          # исключение только для стандартного токена «имя»
+    return any((t in k_plain) if t == "имя" else (t in k) for t in tokens)
+
+
+def _person_type(d):
+    """Тип ссылки указывает на человека: Справочник.Сотрудники, Справочник.ФизическиеЛица."""
+    return any(isinstance(d.get(k), str) and _PERSON_KEY.search(d[k].lower()) for k in ("_ref", "_type", "type"))
+
+
+def _mask_person_ref(d, tokens):
+    """Ссылка на человека: uuid и представление скрываются, тип ссылки остаётся (если в нём нет GUID),
+    прочие поля проходят обычную маску."""
+    out = {}
+    doc = any(_DOC_SIBLING_KEY.search(str(k).lower()) for k in d)
+    for k, v in d.items():
+        if k in ("uuid", "presentation"):
+            out[k] = MASK_VALUE
+        elif k in ("_ref", "_type", "type"):
+            out[k] = MASK_VALUE if (_pii_key(k, tokens) or (isinstance(v, str) and _GUID_RX.search(v))) else _mask_scalar(v)
+        elif doc and _DOC_NUMBER_KEY.match(str(k).lower()):
+            out[k] = MASK_VALUE
+        else:
+            out[k] = _mask_value(k, v, tokens)
+    return out
+
+
 def _mask_value(key, value, tokens):
     # 1) имя поля совпало с ПДн-токеном → маскируем ЦЕЛИКОМ (любой тип, включая dict/list:
     #    ссылка {_ref,uuid,presentation}, структура ДанныеПаспорта={Серия,Номер} и т.п.)
-    if any(t in str(key).lower() for t in tokens):
+    if _pii_key(key, tokens):
         return MASK_VALUE
-    # 2) иначе — рекурсия по составным и маскирование по значению для скаляров
+    # 2) ссылка на человека (по имени поля, по типу ссылки или по форме представления)
+    if isinstance(value, dict) and ("uuid" in value or "presentation" in value) and (
+            _PERSON_KEY.search(str(key).lower()) or _person_type(value)
+            or _mask_scalar(value.get("presentation")) != value.get("presentation")):
+        return _mask_person_ref(value, tokens)
+    # 3) иначе — рекурсия по составным и маскирование по значению для скаляров
     if isinstance(value, dict):
-        return {k: _mask_value(k, v, tokens) for k, v in value.items()}
+        doc = any(_DOC_SIBLING_KEY.search(str(k).lower()) for k in value)
+        return {k: (MASK_VALUE if doc and _DOC_NUMBER_KEY.match(str(k).lower()) else _mask_value(k, v, tokens))
+                for k, v in value.items()}
     if isinstance(value, list):
         return [_mask_value(key, v, tokens) for v in value]
     return _mask_scalar(value)
@@ -228,8 +290,7 @@ def mask_rows(rows):
     tokens = _mask_tokens()
     if not tokens:
         return rows
-    return [{k: _mask_value(k, v, tokens) for k, v in r.items()} if isinstance(r, dict)
-            else _mask_scalar(r) for r in rows]
+    return [_mask_value("", r, tokens) if isinstance(r, dict) else _mask_scalar(r) for r in rows]
 
 
 def _clamp_rows(rows, top=0):

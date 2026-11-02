@@ -9,6 +9,7 @@
   (отправка без терминала: --approve-file РЕШЕНИЕ.json, см. docs/SERVICEDESK.md)
   python scripts/servicedesk.py note --request НОМЕР --text "текст" [--send]
   python scripts/servicedesk.py update --request НОМЕР [--description "текст"] [--due|--start|--end ГГГГ-ММ-ДД] [--send]
+  python scripts/servicedesk.py attach --request НОМЕР --file ПУТЬ [--allow-duplicate] [--send]
   python scripts/servicedesk.py meta [--what templates|technicians|observed|all] [--name ЧАСТЬ_ИМЕНИ]
 
 Окружение (.env, не коммитить): SD_BASE_URL — адрес портала до /api/v3 (для облака вместе с /app/<портал>),
@@ -39,6 +40,7 @@ import json
 import math
 import os
 import re
+import stat
 import sys
 import time
 import uuid
@@ -153,6 +155,13 @@ class SDClient:
         data = urllib.parse.urlencode({"input_data": json.dumps(input_data, ensure_ascii=False)}).encode()
         status, body = self.transport("PUT", f"{self.base}/api/v3/{path}", h, data)
         return self._parse(status, body)
+
+    def upload(self, path: str, name: str, data: bytes) -> dict:
+        """Загрузка одного файла в заявку: multipart, единственное поле input_file (остальные поля портал отвергает, 4001)."""
+        h = self._headers()
+        body, h["Content-Type"] = multipart_file(name, data)
+        status, resp = self.transport("POST", f"{self.base}/api/v3/{path}", h, body)
+        return self._parse(status, resp)
 
     @staticmethod
     def _parse(status: int, body: str) -> dict:
@@ -427,9 +436,84 @@ def build_create(cfg: dict, template: str, subject: str, description: str = "", 
     return {"request": req}
 
 
+MAX_ATTACH_BYTES = 20 * 1024 * 1024        # потолок коннектора; лимит портала не проверялся (самый большой проверенный файл 54 КБ)
+
+
+def clean_filename(name: str) -> str:
+    """Имя файла, как оно уйдёт на портал: без управляющих символов, слэши заменены (одно имя для хеша, проверки дубля и загрузки)."""
+    return "".join(ch for ch in name if ch >= " " and ch != "\x7f").replace("\\", "_").replace("/", "_") or "file"
+
+
+def multipart_file(name: str, data: bytes) -> tuple[bytes, str]:
+    """Тело multipart/form-data с одним полем input_file. Имя очищается от управляющих символов и кавычек;
+    не-ASCII имя уходит в filename* (UTF-8), в filename остаётся ASCII-замена."""
+    clean = clean_filename(name)
+    ascii_name = "".join(ch if (ch.isascii() and ch != '"') else "_" for ch in clean)
+    disp = f'form-data; name="input_file"; filename="{ascii_name}"'
+    if ascii_name != clean:
+        disp += "; filename*=UTF-8''" + urllib.parse.quote(clean, safe="")
+    boundary = "----sd" + uuid.uuid4().hex
+    head = (f"--{boundary}\r\nContent-Disposition: {disp}\r\nContent-Type: application/octet-stream\r\n\r\n").encode("ascii")
+    return head + data + f"\r\n--{boundary}--\r\n".encode("ascii"), f"multipart/form-data; boundary={boundary}"
+
+
+def read_attachment(path) -> tuple[str, bytes]:
+    """Читает файл для вложения один раз и из одного дескриптора (то, что подтвердил человек, и то, что уйдёт, одни и те же
+    байты; подмена файла ссылкой между проверкой и чтением не проходит)."""
+    p = Path(path)
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0) | getattr(os, "O_NONBLOCK", 0)   # FIFO без писателя не повесит открытие
+    try:
+        if p.is_symlink():
+            raise SDError(f"{p.name or p}: нужен обычный файл (не ссылка и не каталог)")
+        fd = os.open(p, flags)
+        with os.fdopen(fd, "rb") as fh:
+            st = os.fstat(fh.fileno())
+            if not os.path.samestat(os.lstat(p), st) or not stat.S_ISREG(st.st_mode):      # путь подменён после открытия, или не обычный файл
+                raise SDError(f"{p.name or p}: нужен обычный файл (не ссылка и не каталог)")
+            if st.st_size == 0 or st.st_size > MAX_ATTACH_BYTES:
+                raise SDError(f"{p.name}: размер {st.st_size} байт вне допустимого (1..{MAX_ATTACH_BYTES})")
+            data = fh.read(MAX_ATTACH_BYTES + 1)
+    except OSError as e:
+        raise SDError(f"{p.name or p}: файл не прочитан ({type(e).__name__})") from None
+    if not 1 <= len(data) <= MAX_ATTACH_BYTES:
+        raise SDError(f"{p.name}: размер прочитанного вне допустимого (1..{MAX_ATTACH_BYTES}), файл менялся во время чтения")
+    return clean_filename(p.name), data
+
+
+def _att_size(att: dict):
+    """Размер вложения: портал отдаёт {"value": N, ...}; число или строка тоже принимаем, непонятное это None."""
+    sz = att.get("size")
+    sz = sz.get("value") if isinstance(sz, dict) else sz
+    return str(sz) if isinstance(sz, (int, str)) and str(sz).isdigit() else None
+
+
+def attach_payload(name: str, data: bytes) -> dict:
+    return {"attach": {"file": name, "size": len(data), "sha256": hashlib.sha256(data).hexdigest()}}
+
+
+def build_attach(path) -> dict:
+    return attach_payload(*read_attachment(path))
+
+
+def attachment_id(res: dict) -> str:
+    """Id вложения из content_url ответа upload (вида .../attachments/<id>/_download); при отсутствии content_url запасной путь, поле id ответа."""
+    att = (res.get("attachment") or {}) if isinstance(res, dict) else {}
+    m = re.search(r"attachments/(\d+)(?:/|$)", str(att.get("content_url") or ""))
+    if m:
+        return m.group(1)
+    if str(att.get("id") or "").isdigit():                      # запасной путь: поле id в ответе upload
+        return str(att["id"])
+    raise SDError("в ответе upload нет id вложения (content_url), файл мог загрузиться без привязки; проверьте заявку")
+
+
+def current_attachments(client: "SDClient", request_id: str) -> list:
+    got = client.get(f"requests/{urllib.parse.quote(str(request_id), safe='')}").get("request") or {}
+    return [a for a in (got.get("attachments") or []) if isinstance(a, dict) and a.get("id") is not None]
+
+
 def build_note(request_id: str, text: str, show_to_requester: bool = False) -> dict:
     """Тело заметки к заявке. По умолчанию заметка внутренняя (заявителю не показывается, уведомлений нет)."""
-    return {"request_note": {"description": to_html(text), "show_to_requester": show_to_requester, "notify_technician": False}}
+    return {"note": {"description": to_html(text), "show_to_requester": show_to_requester, "notify_technician": False}}
 
 
 def confirm_send(payload: dict, isatty=None, ask=input, what: str = "заявку") -> bool:
@@ -516,9 +600,9 @@ def release_claim(mark: Path) -> None:
 
 class _SendLock:
     """Блокировка на пару заявитель и тема от проверки дубля до конца POST: два параллельных запуска не создадут два дубля."""
-    def __init__(self, payload: dict):
+    def __init__(self, payload: dict, key: str | None = None):
         req = payload.get("request") or {}
-        key = json.dumps([(req.get("requester") or {}).get("id"), req.get("subject")], ensure_ascii=False)
+        key = key or json.dumps([(req.get("requester") or {}).get("id"), req.get("subject")], ensure_ascii=False)
         self.path = ledger_dir() / ("lock-" + hashlib.sha256(key.encode("utf-8")).hexdigest()[:24])
         self.token = uuid.uuid4().hex
 
@@ -636,6 +720,12 @@ def main(argv=None, client: SDClient | None = None) -> int:
     nt.add_argument("--visible-to-requester", action="store_true", help="показать заметку заявителю (по умолчанию внутренняя)")
     nt.add_argument("--approve-file", help="файл решения человека вместо ввода в терминале (нужен SD_AGENT_SEND=1)")
     nt.add_argument("--send", action="store_true", help="отправить после ручного подтверждения")
+    at = sub.add_parser("attach", help="прикрепить файл к заявке: upload, затем PUT списка вложений (по умолчанию сухой прогон)")
+    at.add_argument("--request", required=True)
+    at.add_argument("--file", required=True, help="один файл (до 20 МБ); для нескольких запускайте команду по разу")
+    at.add_argument("--allow-duplicate", action="store_true", help="разрешить файл с тем же именем и размером, что уже в заявке")
+    at.add_argument("--approve-file")
+    at.add_argument("--send", action="store_true")
     up = sub.add_parser("update", help="поправить описание и сроки заявки (по умолчанию сухой прогон)")
     up.add_argument("--request", required=True)
     up.add_argument("--description")
@@ -712,6 +802,61 @@ def main(argv=None, client: SDClient | None = None) -> int:
                     release_claim(mark)
                 raise
             print(f"заметка добавлена к заявке {a.request}")
+            return 0
+        if a.cmd == "attach":
+            if not str(a.request).isdigit() or int(a.request) <= 0:
+                raise SDError("номер заявки должен быть положительным целым числом")
+            a.request = str(int(a.request))                  # 0123 и 123 один замок и один адрес
+            name, data = read_attachment(a.file)
+            payload = attach_payload(name, data)
+            target = f"requests/{urllib.parse.quote(str(a.request), safe='')}/upload"
+            if not a.send:
+                print("Сухой прогон, ничего не отправлено. Вложение к заявке " + str(a.request) + ": "
+                      + json.dumps(payload["attach"], ensure_ascii=False) + "\nsha256 цели и тела: " + payload_digest(payload, target))
+                return 0
+            dec = authorize_send(payload, a.approve_file, f"вложение к заявке {a.request}", target)
+            if not dec:
+                print("Отправка отменена.")
+                return 1
+            c = client or make_client()                     # ошибка окружения до того, как решение погашено
+            with _SendLock(payload, key="attach:" + str(a.request)):    # проверка дубля, upload и PUT одного запроса не пересекаются с другим запуском
+                before = current_attachments(c, a.request)
+                if not a.allow_duplicate and any(b.get("name") == name and _att_size(b) == str(len(data))
+                                                 for b in before):
+                    print(f"не отправлено: в заявке уже есть вложение {name} того же размера. Проверьте её, при необходимости --allow-duplicate.",
+                          file=sys.stderr)
+                    return 1
+                mark = claim_approval(dec["id"]) if isinstance(dec, dict) else None
+                try:
+                    res = c.upload(target, name, data)
+                except BaseException as e:
+                    if mark and _definitely_rejected(e):
+                        release_claim(mark)
+                    raise
+                aid = attachment_id(res)
+                try:                                             # любой сбой после upload сообщает id загруженного вложения
+                    known = []                                      # список читаем заново прямо перед PUT и берём только его: удалённое другим не возвращаем
+                    for b in current_attachments(c, a.request):
+                        if str(b["id"]) not in known:
+                            known.append(str(b["id"]))
+                    if aid not in known:
+                        known.append(aid)
+                    try:
+                        c.put(f"requests/{urllib.parse.quote(str(a.request), safe='')}",
+                              {"request": {"attachments": [{"id": i} for i in known]}})
+                    except SDError as e:
+                        raise SDError(f"файл загружен (id вложения {aid}), но не привязан к заявке: {e}") from None
+                    seen = {str(b["id"]) for b in current_attachments(c, a.request)}
+                    missing = [i for i in known if i not in seen]
+                    if missing:
+                        raise SDError(f"после привязки в заявке не видно вложений: {', '.join(missing)} (новое: {aid}); проверьте заявку")
+                except SDError as e:
+                    if str(aid) in str(e):
+                        raise
+                    raise SDError(f"вложение {aid} загружено, но привязка не подтверждена: {e}") from None
+                except (OSError, TimeoutError) as e:
+                    raise SDError(f"вложение {aid} загружено, но привязка не подтверждена ({type(e).__name__})") from None
+            print(f"вложение видно в заявке {a.request}: {name} (id {aid})")
             return 0
         if a.cmd == "update":
             payload = build_update(a.description, a.due, a.start, a.end)
