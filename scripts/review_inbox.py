@@ -8,7 +8,8 @@
 Только чтение. Токен GitLab (read_api) берётся из env GITLAB_TOKEN или GITLAB_PERSONAL_ACCESS_TOKEN
 и уходит только на GITLAB_HOST/--host. Для GitHub нужен gh с входом (scope repo); токен в репозиторий не кладём.
 --issues добавляет чужие открытые issue и PR репозитория (--repo owner/name или текущий каталог) без ответа
-и помечает просрочку: issue 2 рабочих дня, чужой PR и ревью на вас 3 (понедельник-пятница, праздники не учитываются).
+и помечает просрочку: issue 2 рабочих дня, чужой PR 3, ревью на вас 3 по дате to-do GitLab (понедельник-пятница, праздники не учитываются).
+Ответом считается комментарий или ревью владельца, участника или соавтора репозитория (authorAssociation OWNER, MEMBER, COLLABORATOR). Срок ревью, назначенного на GitHub, не считается (дата назначения недоступна). В выборку идёт до 100 открытых issue и 100 PR; если их больше, скрипт предупреждает.
 Код выхода: 0 очередь получена (пустая тоже), 1 есть просроченное, 2 источник недоступен.
 """
 from __future__ import annotations
@@ -27,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from mr_review import _gitlab_get, valid_host  # noqa: E402  # тот же клиент: без редиректов, хост только явный
 
 
+MAINTAINER = ("OWNER", "MEMBER", "COLLABORATOR")
 LIMITS = {"issue": 2, "pr": 3, "review": 3}  # рабочих дней до первого ответа
 
 
@@ -58,7 +60,7 @@ def gitlab_queue(host: str, token: str, get=_gitlab_get) -> list[dict]:
     for m in get(f"{api}/merge_requests?{q}", token):
         u = m.get("web_url", "")
         out.setdefault(u, {"src": "gitlab", "kind": "mr", "ref": f"!{m.get('iid')}", "title": m.get("title", ""),
-                           "author": (m.get("author") or {}).get("username", ""), "url": u, "since": m.get("created_at", ""), "limit": "review"})
+                           "author": (m.get("author") or {}).get("username", ""), "url": u, "since": "", "limit": "review"})  # дата назначения неизвестна без to-do: срок не считаем
     return list(out.values())
 
 
@@ -91,16 +93,19 @@ def github_attention(repo: str | None = None, run=subprocess.run) -> list[dict]:
     out = []
     for kind, cmd, fields in (("issue", "issue", "number,title,url,author,createdAt,comments,labels"),
                               ("pr", "pr", "number,title,url,author,createdAt,comments,reviews,isDraft")):
-        for x in json.loads(gh(cmd, "list", "--state", "open", "--limit", "100", "--json", fields, *extra) or "[]"):
+        rows = json.loads(gh(cmd, "list", "--state", "open", "--limit", "100", "--json", fields, *extra) or "[]")
+        if len(rows) >= 100:
+            print(f"предупреждение: открытых {cmd} 100 или больше, список неполный", file=sys.stderr)
+        for x in rows:
             who = (x.get("author") or {}).get("login", "")
             if who == me or x.get("isDraft"):
                 continue
             talk = (x.get("comments") or []) + (x.get("reviews") or [])
 
-            def human_other(c):
+            def maintainer_reply(c):
                 au = c.get("author") or {}
-                return au.get("login") not in (None, who) and not au.get("is_bot") and not au["login"].endswith("[bot]")
-            if any(human_other(c) for c in talk):
+                return c.get("authorAssociation") in MAINTAINER and au.get("login") != who and not au.get("is_bot")
+            if any(maintainer_reply(c) for c in talk):
                 continue
             out.append({"src": "github", "kind": kind, "ref": f"{kind}#{x['number']}", "title": x["title"], "author": who,
                         "url": x["url"], "since": x["createdAt"], "limit": kind})
@@ -146,21 +151,23 @@ def self_test() -> None:
     assert workdays("2026-10-31T10:00:00Z", now) == 1  # суббота -> понедельник
     assert overdue({"since": "2026-10-27T10:00:00Z", "limit": "issue"}, now) == 2
     assert overdue({"since": "2026-10-29T10:00:00Z", "limit": "pr"}, now) == 0
-    ans = lambda name, bot=False: {"author": {"login": name, "is_bot": bot}}
+    ans = lambda name, assoc="OWNER", bot=False: {"author": {"login": name, "is_bot": bot}, "authorAssociation": assoc}
     def fake_run(cmd, **k):
         a = " ".join(cmd)
         out = {"api user": "me\n",
                "issue list": json.dumps([
                    {"number": 1, "title": "t", "url": "u1", "author": {"login": "x"}, "createdAt": "2026-10-27T10:00:00Z", "comments": [], "labels": []},
                    {"number": 2, "title": "t", "url": "u2", "author": {"login": "x"}, "createdAt": "2026-10-27T10:00:00Z", "comments": [ans("me")], "labels": []},
-                   {"number": 3, "title": "t", "url": "u3", "author": {"login": "x"}, "createdAt": "2026-10-27T10:00:00Z", "comments": [ans("dependabot", True)], "labels": []},
+                   {"number": 3, "title": "t", "url": "u3", "author": {"login": "x"}, "createdAt": "2026-10-27T10:00:00Z", "comments": [ans("dependabot", "NONE", True)], "labels": []},
+                   {"number": 5, "title": "t", "url": "u5", "author": {"login": "x"}, "createdAt": "2026-10-27T10:00:00Z", "comments": [ans("z", "NONE")], "labels": []},
                    {"number": 4, "title": "t", "url": "u4", "author": {"login": "me"}, "createdAt": "2026-10-27T10:00:00Z", "comments": [], "labels": []}]),
                "pr list": json.dumps([{"number": 9, "title": "p", "url": "u9", "author": {"login": "y"}, "createdAt": "2026-10-27T10:00:00Z",
                                       "comments": [], "reviews": [ans("me")], "isDraft": False}])}
         key = next(k for k in out if k in a)
         return subprocess.CompletedProcess(cmd, 0, out[key], "")
     att = github_attention(None, fake_run)
-    assert [i["ref"] for i in att] == ["issue#1", "issue#3"], att
+    assert [i["ref"] for i in att] == ["issue#1", "issue#3", "issue#5"], att
+    assert overdue({"since": "", "limit": "review"}, now) == 0
     bad = render([{"src": "gitlab", "ref": "!1", "author": "a", "title": "x\x1b]52;c;QQ\x07\r\u202ey", "url": "u"}])
     assert "\x1b" not in bad and "\r" not in bad and "\u202e" not in bad and "\x07" not in bad, bad
     print("self-test ok")

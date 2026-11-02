@@ -10,7 +10,7 @@
 лежит ВНЕ репозитория: путь в --stoplist или env PUBLIC_STOPLIST, по слову или /регулярному выражению/ на строку,
 `#` комментарий. В репозиторий список не кладём: он сам был бы утечкой.
 Это не замена чтению: темы, которые скрипт не увидит (анализ других систем, сравнения, болевые вопросы),
-перечислены в чек-листе в конце вывода. Код выхода: 0 чисто, 1 есть находки, 2 ошибка запуска.
+перечислены в чек-листе в конце вывода. Код выхода: 0 чисто, 1 есть находки, 2 ошибка запуска или не задан стоп-лист (без --allow-no-stoplist).
 """
 from __future__ import annotations
 
@@ -80,6 +80,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("file", nargs="?", help="файл или - для stdin")
     ap.add_argument("--stoplist")
+    ap.add_argument("--allow-no-stoplist", action="store_true", help="разрешить запуск без стоп-листа (имена организаций и людей не проверяются)")
     ap.add_argument("--self-test", action="store_true")
     a = ap.parse_args(argv)
     if a.self_test:
@@ -93,8 +94,10 @@ def main(argv=None) -> int:
     except OSError as e:
         print(f"ошибка: {e}", file=sys.stderr)
         return 2
-    if not stop:
-        print("стоп-лист не задан (--stoplist или PUBLIC_STOPLIST): имена организаций и людей скрипт не ищет.", file=sys.stderr)
+    if not stop and not a.allow_no_stoplist:
+        print("стоп-лист не задан (--stoplist или PUBLIC_STOPLIST): имена организаций и людей скрипт не ищет, публикацию не разрешаю. "
+              "Без списка проверяйте глазами и запускайте с --allow-no-stoplist.", file=sys.stderr)
+        return 2
     found = check(text, stop)
     for n, kind in found:
         print(f"строка {n}: {kind}")
