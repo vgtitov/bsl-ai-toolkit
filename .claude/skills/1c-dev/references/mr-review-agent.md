@@ -2,6 +2,14 @@
 
 Для случая, когда человек просит проверить чужой merge request. Чек-лист и приоритеты: `review-checklist.md`, первый проход: `scripts/mr_review.py`.
 
+## Что мне на ревью: порядок поиска
+На вопрос «что мне на ревью» агент идёт так: сначала задачи и уведомления платформы, потом почта, потом чаты.
+1. Быстрый путь: `python scripts/review_inbox.py` (GitLab и GitHub вместе, только чтение).
+2. GitLab вручную: to-do `GET /todos?state=pending&action=review_requested`, список `GET /merge_requests?reviewer_username=<логин>&state=opened&scope=all`.
+3. GitHub вручную: `gh search prs --review-requested=@me --state=open`, `gh pr list --search "review-requested:@me"`, `gh api notifications`.
+4. Почта. Письмо «was added as a reviewer» (GitLab) и «requested your review» (GitHub) малоинформативно: одна строка и ссылка. Описание, ветки и автор в соседнем письме «created a merge request» или в самом MR.
+5. Чаты: сообщение автора в мессенджере не автоматическое, на него как на источник очереди не полагаться.
+
 ## Порядок
 1. Прочитать MR целиком: дифф, описание, тех-проект задачи, постановку. Не по памяти и не по пересказу автора. Чего не получил (нет ссылки, дифф обрезан), перечислить и не писать «проверено полностью».
 2. Составить список замечаний. У каждого: уровень, файл и строка, причина, как исправить.
@@ -14,10 +22,23 @@
 
 ## Чего агент не делает
 - Не одобряет MR и не вливает.
-- Не закрывает никакие обсуждения, даже свои: предлагает это ревьюеру и не меняет настройки проекта.
+- Не закрывает никакие обсуждения (resolve) ни на GitLab, ни на GitHub, даже свои: предлагает это ревьюеру
+- Не делает approve и merge, не меняет настройки репозитория или проекта и не меняет настройки проекта.
 - Не пишет автору в личку вместо комментария в MR.
 - Ничего не публикует в MR (комментарии, файлы, ссылки) без явной команды ревьюера.
 - Не считает обсуждение с `блокер:` закрытым: его закрывает ревьюер.
 
+## GitLab и GitHub: соответствие и публикация
+| Понятие | GitLab | GitHub |
+|---|---|---|
+| Запрос на слияние | MR | PR |
+| Комментарий по строке | discussion с position | review comment |
+| Закрытие треда | resolve thread | resolve conversation |
+| Очередь ревью | to-do `review_requested` | review-requested, уведомления |
+| Защита ветки | protected branches | branch protection или rulesets |
+| Шаблон описания | `.gitlab/merge_request_templates/Default.md` | `.github/pull_request_template.md` |
+
+Публикация (только по явной команде ревьюера): GitLab через API `POST /projects/:id/merge_requests/:iid/discussions` с `position` (или `glab`); GitHub через `gh pr review` или `gh api repos/<owner>/<repo>/pulls/<N>/comments`; несколько комментариев как один отложенный review (pending review, затем submit).
+
 ## Шаблон описания MR
-Пример для копирования в `.gitlab/merge_request_templates/Default.md` своего проекта: `docs/templates/merge_request_description.md`.
+Пример для копирования в `.gitlab/merge_request_templates/Default.md` (GitLab) или `.github/pull_request_template.md` (GitHub) своего проекта: `docs/templates/merge_request_description.md`.

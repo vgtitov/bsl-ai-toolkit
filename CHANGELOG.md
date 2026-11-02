@@ -5,7 +5,7 @@
 ## [Unreleased]
 
 ### Added
-- Ревью MR агентом: `references/mr-review-agent.md` (замечания `блокер:`/`желательно:` по строкам, показ ревьюеру до публикации, агент не одобряет и не вливает), шаблон описания MR `docs/templates/merge_request_description.md`, раздел «Комментарии и обсуждения» в `docs/MR_REVIEW.md`.
+- Ревью MR агентом: `references/mr-review-agent.md` (замечания `блокер:`/`желательно:` по строкам, показ ревьюеру до публикации, агент не одобряет и не вливает), шаблон описания MR `docs/templates/merge_request_description.md`, `scripts/review_inbox.py` (очередь ревью на вас: GitLab to-do и MR, GitHub review-requested; только чтение), соответствие GitLab и GitHub, порядок «что мне на ревью», раздел «Комментарии и обсуждения» в `docs/MR_REVIEW.md`.
 
 ## [2.7.3] - 2026-10-29
 
