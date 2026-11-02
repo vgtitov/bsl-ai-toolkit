@@ -10,7 +10,7 @@
   python scripts/estimate_calibration.py history.csv                      # таблица групп
   python scripts/estimate_calibration.py history.csv --size M --role dev --type форма [--prior 0.8]
   python scripts/estimate_calibration.py history.csv --capacity           # ёмкость: сумма факта к сумме оценок
-Код выхода 0.
+Код выхода 0; 3, если в истории нет сопоставимых пар.
 """
 from __future__ import annotations
 
@@ -42,6 +42,17 @@ def _num(v):
     return x if math.isfinite(x) else None
 
 
+def _norm(v):
+    return " ".join(str(v).split()).lower()
+
+
+def _pos_finite(v):
+    x = float(v)
+    if not math.isfinite(x) or x <= 0:
+        raise argparse.ArgumentTypeError("нужно конечное число больше нуля")
+    return x
+
+
 def load(path):
     """Читает CSV; возвращает (строки, показатели качества данных)."""
     with open(path, encoding="utf-8-sig", newline="") as f:
@@ -50,17 +61,26 @@ def load(path):
         if miss:
             raise SystemExit(f"в истории нет колонок: {', '.join(miss)}")
         rows = list(rd)
+    for r in rows:
+        for c in ("size", "role", "work_type"):
+            r[c] = _norm(r[c])
+    # первой считается самая ранняя оценка (ISO-даты в est_date; нет даты, порядок строк)
+    rows.sort(key=lambda r: (r.get("est_date") or "").strip())
     q = defaultdict(int)
     seen, out = set(), []
     for r in rows:
         e, fa = _num(r["est_without_ai"]), _num(r["fact"])
         key = (r["task"], r["role"])
+        if key in seen:
+            q["вторая оценка на ту же задачу и роль (не берём)"] += 1
+            continue
+        seen.add(key)  # первая запись занимает пару, даже если сама не годится
         if e is None or e <= 0:
             q["оценка не число или не больше нуля"] += 1
-        elif fa is None or fa < 0:
+        elif fa is None:
             q["факт не число"] += 1
-        elif key in seen:
-            q["вторая оценка на ту же задачу и роль (не берём)"] += 1
+        elif fa < 0:
+            q["факт меньше нуля"] += 1
         elif r["close_reason"].strip().lower() != "выполнена":
             q["не выполнена (перенесена или отменена)"] += 1
         elif r["scope_changed"].strip().lower() in YES:
@@ -72,7 +92,6 @@ def load(path):
         elif fa == 0:
             q["нулевой факт"] += 1
         else:
-            seen.add(key)
             if e == 1:
                 q["оценка-заглушка 1 ч (в расчёте, помечена)"] += 1
             out.append({**r, "e": e, "f": fa, "y": math.log(fa / e)})
@@ -87,6 +106,7 @@ def fit(ys):
     med = statistics.median(ys)
     mad = statistics.median(abs(y - med) for y in ys) * 1.4826 if n > 1 else 0.0
     sigma = max(SIGMA_MIN, mad)
+    ys = [min(max(y, med - 3 * sigma), med + 3 * sigma) for y in ys]  # выброс не тянет среднее
     prec = n / sigma**2 + 1 / PRIOR_SD**2
     mu = (sum(ys) / sigma**2) / prec
     return mu, math.sqrt(1 / prec), sigma
@@ -94,6 +114,7 @@ def fit(ys):
 
 def coefficient(rows, size, role, wtype, prior=None, risky=DEFAULT_RISKY, risky_min=None):
     """Коэффициент для группы с источником и статусом. rows — сопоставимые пары из load()."""
+    size, role, wtype = _norm(size), _norm(role), _norm(wtype)
     sel = [r for r in rows if r["size"] == size and r["role"] == role and r["work_type"] == wtype]
     n = len(sel)
     if wtype in risky and n < MIN_N_RISKY:
@@ -111,11 +132,19 @@ def coefficient(rows, size, role, wtype, prior=None, risky=DEFAULT_RISKY, risky_
                "interval80": [math.exp(mu - Z80 * sd), math.exp(mu + Z80 * sd)],
                "next_task80": [math.exp(mu - Z80 * pred), math.exp(mu + Z80 * pred)],
                "p80_next": math.exp(mu + 0.8416 * pred)}
-    kc = min(max(k, CLAMP[0]), CLAMP[1])
+    lo = CLAMP[0]
+    if wtype in risky and risky_min is not None:
+        lo = min(max(risky_min, CLAMP[0]), CLAMP[1])
+    kc = min(max(k, lo), CLAMP[1])
     if kc != k:
-        res["clamped_from"] = k
-    if wtype in risky and risky_min is not None and kc < risky_min:
-        res["raised_to_min"], kc = risky_min, risky_min
+        res["model_coef"] = k
+        if lo > CLAMP[0] and kc == lo:
+            res["raised_to_min"] = lo
+    for key in ("interval80", "next_task80"):  # интервалы в тех же границах, что и применённый коэффициент
+        if key in res:
+            res[key] = [min(max(v, lo), CLAMP[1]) for v in res[key]]
+    if "p80_next" in res:
+        res["p80_next"] = min(max(res["p80_next"], lo), CLAMP[1])
     res["coef"] = kc
     return res
 
@@ -124,12 +153,17 @@ def capacity(rows, boots=2000, seed=1):
     """Ёмкость месяца: сумма факта к сумме оценок, 80% интервал бутстрепом по задачам."""
     if not rows:
         return None
-    ratio = sum(r["f"] for r in rows) / sum(r["e"] for r in rows)
+    by = defaultdict(lambda: [0.0, 0.0])  # задача целиком: роли одной задачи связаны
+    for r in rows:
+        by[r["task"]][0] += r["e"]
+        by[r["task"]][1] += r["f"]
+    tasks = list(by.values())
+    ratio = sum(t[1] for t in tasks) / sum(t[0] for t in tasks)
     rnd = random.Random(seed)
     bs = sorted(
-        sum(x["f"] for x in s) / sum(x["e"] for x in s)
-        for s in ([rnd.choice(rows) for _ in rows] for _ in range(boots)))
-    return {"ratio": ratio, "n": len(rows), "interval80": [bs[int(boots * .1)], bs[int(boots * .9)]],
+        sum(x[1] for x in s) / sum(x[0] for x in s)
+        for s in ([rnd.choice(tasks) for _ in tasks] for _ in range(boots)))
+    return {"ratio": ratio, "n": len(tasks), "interval80": [bs[int(boots * .1)], bs[int(boots * .9)]],
             "note": "оптимистично: затянувшиеся незакрытые задачи не входят"}
 
 
@@ -137,14 +171,17 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("history")
     ap.add_argument("--size"), ap.add_argument("--role"), ap.add_argument("--type", dest="wtype")
-    ap.add_argument("--prior", type=float, help="предварительный коэффициент для групп без истории")
+    ap.add_argument("--prior", type=_pos_finite, help="предварительный коэффициент для групп без истории")
     ap.add_argument("--risky", default=",".join(DEFAULT_RISKY), help="рискованные типы работ через запятую")
-    ap.add_argument("--risky-min", type=float, help="повышенный минимум коэффициента для рискованных типов")
+    ap.add_argument("--risky-min", type=_pos_finite, help="повышенный минимум коэффициента для рискованных типов")
     ap.add_argument("--capacity", action="store_true")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
     rows, quality = load(a.history)
-    risky = tuple(x.strip() for x in a.risky.split(",") if x.strip())
+    risky = tuple(_norm(x) for x in a.risky.split(",") if x.strip())
+    if not rows:
+        print("недостаточно данных: в истории нет сопоставимых пар", "; ".join(f"{k}: {v}" for k, v in quality.items()))
+        return 3
     if a.capacity:
         out = {"capacity": capacity(rows), "quality": quality}
     elif a.size and a.role and a.wtype:
