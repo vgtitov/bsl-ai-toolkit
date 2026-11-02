@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+### Added
+- `designer_sync.py repo {update|lock|unlock|commit}` — работа с хранилищем пакетным Конфигуратором (локально или `--host`); креды `ONEC_REPO_PATH_/USER_/PASS_<КЛЮЧ>`, файл `-Objects` собирается из `--objects`. `designer_sync.py updatedb` — `UpdateDBCfg` с рабочим порядком ключей.
+- Грабли из живых прогонов: ложный успех точечной загрузки/выгрузки (`ConfigDumpInfo`, формы без событий, `Configuration.xml` без `Ext` стирает модуль сеанса) в `dev-workflow.md`; несуществующий метод проходит BSL LS и `/CheckConfig` без `-ExtendedModulesCheck` (`testing-ladder.md`, `ai-pitfalls.md` №17); строка фиксированной длины и переменная с именем реквизита (`ai-pitfalls.md` №18–19); четыре случая ложного успеха смоука (`smoke-runner-gotchas.md`).
+
+### Fixed
+- `designer_sync.resolve_cred`: логин по ключу `ONEC_<kind>_USER_<КЛЮЧ>` (фолбэк общий) — dev-базы со своим логином больше не получают общий и ложное «Пользователь ИБ не идентифицирован».
+- `runner.designer_cmd`: аргументы с пробелом берутся в кавычки; `mask_password` скрывает `/P"…"`, `/P пароль` и `/ConfigurationRepositoryP`.
+- `external.check_config`: docstring больше не обещает, что набор по умолчанию ловит несуществующие методы.
+
 ## [2.7.3] - 2026-10-29
 
 ### Fixed

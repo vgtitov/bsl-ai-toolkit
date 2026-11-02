@@ -25,6 +25,15 @@
   deploy-extension --base ... --host <алиас> --ext Имя --src <каталог исходников>
        — полный деплой расширения (Load+UpdateDBCfg) через SSH; для доступа к данным
          (onec-data/ai_debug) см. docs/data-access-verification-runbook.md
+  repo {update|lock|unlock|commit} --base ... [--host] [--contour] [--repo-key КЛЮЧ]
+       [--objects "ОбщийМодуль.X"] [--comment "TICKET-1"] [--force] [--ext Имя]
+       — хранилище; креды ONEC_REPO_PATH_/USER_/PASS_<КЛЮЧ>. lock/commit — только с явного
+         разрешения разработчика (захват блокирует коллег).
+  updatedb --base ... [--host] [--contour] [--ext Имя]  — UpdateDBCfg (с разрешения)
+
+Учётка ИБ: логин ONEC_IB_USER_<КЛЮЧ> (фолбэк ONEC_IB_USER). Цикл правки модуля в базе с
+хранилищем: repo lock → dump → правка → load → ПОВТОРНЫЙ dump и сверка (load exit=0 бывает
+ложным) → updatedb → smoke → repo commit.
 
 База: существующий каталог = файловая (/F), иначе «сервер\\база» (/S).
 Интерактивный Конфигуратор на той же базе должен быть закрыт. Кроссплатформенно (stdlib).
@@ -50,16 +59,16 @@ sys.path.insert(0, str(SCRIPTS_DIR.parent))               # onec_metadata (--hos
 
 
 def resolve_cred(kind: str, keys, env=None):
-    """(user, pass) для kind IB|STORAGE: логин един (ONEC_<kind>_USER); пароль — первый
-    заданный ONEC_<kind>_PASS_<КЛЮЧ> по списку ключей (имя хранилища, контур, ...),
-    фолбэк ONEC_<kind>_PASS. Пароли бывают разные и по контурам, и по хранилищам."""
+    """(user, pass) для kind IB|STORAGE|REPO: пароль — первый заданный ONEC_<kind>_PASS_<КЛЮЧ>
+    по списку ключей (имя хранилища, контур, ...), фолбэк ONEC_<kind>_PASS. Логин — так же
+    ONEC_<kind>_USER_<КЛЮЧ>, фолбэк общий ONEC_<kind>_USER: в dev-базах логин бывает свой
+    (с пробелом, кириллицей), и общий логин давал ложное «Пользователь ИБ не идентифицирован»."""
     env = os.environ if env is None else env
-    user = env.get(f"ONEC_{kind}_USER") or None
-    password = None
+    user = password = None
     for key in ([keys] if isinstance(keys, str) else (keys or [])):
-        password = env.get(f"ONEC_{kind}_PASS_{key.upper()}") or None
-        if password:
-            break
+        user = user or env.get(f"ONEC_{kind}_USER_{key.upper()}") or None
+        password = password or env.get(f"ONEC_{kind}_PASS_{key.upper()}") or None
+    user = user or env.get(f"ONEC_{kind}_USER") or None
     password = password or env.get(f"ONEC_{kind}_PASS") or None
     return user, password
 
@@ -211,6 +220,72 @@ def remote_deploy_extension(r, base, user, password, ext, src_dir, workdir=None)
                             update_dbcfg=True)
 
 
+def objects_xml(objects) -> str:
+    """Файл -Objects для захвата/отпускания/помещения: полные имена в дот-нотации."""
+    from xml.sax.saxutils import quoteattr
+    rows = "".join(f"\t<Object fullName={quoteattr(o)} includeChildObjects=\"false\"/>\n"
+                   for o in objects)
+    return ('<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<Objects xmlns="http://v8.1c.ru/8.3/config/objects" version="1.0">\n'
+            f"{rows}</Objects>\n")
+
+
+def repo_action(op, ext=None, objects_file=None, comment=None, force=False):
+    """(действие, аргументы) пакетного Конфигуратора для операции с хранилищем."""
+    if op == "update":
+        action, args = "/ConfigurationRepositoryUpdateCfg", ["-force"]
+    elif op == "lock":
+        action, args = "/ConfigurationRepositoryLock", ["-Objects", objects_file, "-revised"]
+    elif op == "unlock":
+        action, args = "/ConfigurationRepositoryUnLock", ["-Objects", objects_file] + (["-force"] if force else [])
+    elif op == "commit":
+        action, args = "/ConfigurationRepositoryCommit", ["-Objects", objects_file, "-comment", comment]
+    else:
+        raise SystemExit(f"неизвестная операция с хранилищем: {op}")
+    return action, args + (["-Extension", ext] if ext else [])
+
+
+def repo_conn(path, user, password) -> str:
+    """Параметры соединения с хранилищем — ставятся ПЕРЕД действием, как в рабочих прогонах."""
+    from onec_metadata.apply.runner import quote_arg
+    return " ".join(["/ConfigurationRepositoryF", quote_arg(path),
+                     "/ConfigurationRepositoryN", f'"{user}"',
+                     "/ConfigurationRepositoryP", password])
+
+
+def run_repo(r, base, user, password, repo, op, ext=None, objects=None, comment=None,
+             force=False, workdir=None):
+    """Захват/отпускание/помещение/обновление из хранилища ЧЕРЕЗ RUNNER. `repo` = (путь, логин, пароль).
+    Успех платформы — не вердикт правки: после lock/load сверять повторной выгрузкой."""
+    from onec_metadata.apply import dumpload
+
+    workdir = workdir or _point_sync_workdir()
+    r.makedirs(workdir)
+    objects_file = None
+    if op in ("lock", "unlock", "commit"):
+        if not objects:
+            raise SystemExit(f"repo {op}: нужен --objects (полные имена через запятую)")
+        objects_file = workdir + r"\repo_objects.xml"
+        dumpload._put_text(r, objects_file, objects_xml(objects))
+    if op == "commit" and not comment:
+        raise SystemExit("repo commit: нужен --comment")
+    action, args = repo_action(op, ext, objects_file, comment, force)
+    dumpload._run_designer(r, base, user, password, repo_conn(*repo) + " " + action, args,
+                           workdir + rf"\repo_{op}.log")
+
+
+def update_db(r, base, user, password, ext=None, workdir=None):
+    """UpdateDBCfg ЧЕРЕЗ RUNNER. Порядок ключей важен: действие последним перед /Out, без chcp
+    (иначе «Пользователь ИБ не идентифицирован» при верных кредах) — так собирает designer_cmd."""
+    from onec_metadata.apply import dumpload
+
+    workdir = workdir or _point_sync_workdir()
+    r.makedirs(workdir)
+    dumpload._run_designer(r, base, user, password, "/UpdateDBCfg",
+                           ["-Extension", ext] if ext else [], workdir + r"\updatedb.log",
+                           timeout=3600)
+
+
 def main(argv=None):
     try:
         from onec_ops_mcp import load_dotenv_defaults
@@ -239,7 +314,37 @@ def main(argv=None):
     p.add_argument("--ext", required=True, help="имя расширения (создаётся, если ещё не существует)")
     p.add_argument("--src", required=True, help="каталог исходников расширения (Configuration.xml внутри)")
     p.add_argument("--contour", help="ключ пароля ONEC_IB_PASS_<КЛЮЧ>")
+    p = sub.add_parser("repo", parents=[common], help="хранилище: update | lock | unlock | commit")
+    p.add_argument("op", choices=["update", "lock", "unlock", "commit"])
+    p.add_argument("--repo-key", help="ключ ONEC_REPO_PATH_/USER_/PASS_<КЛЮЧ> (по умолчанию --contour)")
+    p.add_argument("--objects", help="полные имена через запятую: ОбщийМодуль.X,Справочник.Y (lock/unlock/commit)")
+    p.add_argument("--comment", help="комментарий помещения (commit)")
+    p.add_argument("--force", action="store_true", help="unlock: отменить локальные изменения захваченного")
+    p = sub.add_parser("updatedb", parents=[common], help="UpdateDBCfg (основная или --ext)")
     a = ap.parse_args(argv)
+
+    if a.cmd in ("repo", "updatedb"):
+        from onec_metadata.apply.runner import make_runner
+        user, password = resolve_cred("IB", a.contour)
+        r = make_runner(a.host)
+        if a.cmd == "updatedb":
+            update_db(r, a.base, user, password, a.ext)
+            print(f"[ok] UpdateDBCfg {a.base}" + (f" -Extension {a.ext}" if a.ext else ""))
+            return
+        key = a.repo_key or a.contour
+        path = os.environ.get(f"ONEC_REPO_PATH_{(key or '').upper()}") if key else None
+        ruser, rpass = resolve_cred("REPO", key)
+        if not (path and ruser and rpass):
+            raise SystemExit(f"нет кредов хранилища: ONEC_REPO_PATH_/USER_/PASS_<{key}> в .env")
+        # shortcut: кириллица в командной строке ssh ломается; комментарий — латиницей/номером тикета.
+        # Нужна кириллица — передавать через файл-сценарий на хосте.
+        if a.host and a.comment and not a.comment.isascii():
+            raise SystemExit("repo commit --host: комментарий только ASCII (номер тикета), кириллица по ssh бьётся")
+        objects = [o.strip() for o in (a.objects or "").split(",") if o.strip()] or None
+        run_repo(r, a.base, user, password, (path, ruser, rpass), a.op, a.ext, objects,
+                 a.comment, a.force)
+        print(f"[ok] repo {a.op} {a.base}" + (f" (объекты: {len(objects)})" if objects else ""))
+        return
 
     if a.cmd == "status":
         got = changed_files(a.out)

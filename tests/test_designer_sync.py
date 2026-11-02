@@ -208,3 +208,64 @@ def test_changed_files_via_git(tmp_path):
     got = m.changed_files(str(d))
     assert sorted(got) == ["CommonModules/A.bsl", "CommonModules/B.bsl"]
     assert m.changed_files(str(tmp_path)) is None                  # нет git — None, не падение
+
+
+def test_resolve_cred_user_per_key():
+    # dev-базы со своим логином: логин по ключу первичен, общий — фолбэк
+    m = _load()
+    env = {"ONEC_IB_USER": "common", "ONEC_IB_USER_AZ_DEV": "Иванов И", "ONEC_IB_PASS_AZ_DEV": "p"}
+    assert m.resolve_cred("IB", "az_dev", env) == ("Иванов И", "p")
+    assert m.resolve_cred("IB", "kz", env) == ("common", None)
+
+
+class _LogRunner(_FakeRunner):
+    def __init__(self):
+        super().__init__()
+        self.puts = {}
+
+    def read_text(self, path, timeout=60):
+        return ""
+
+
+def test_repo_lock_puts_objects_file_and_masks_nothing_in_order(monkeypatch):
+    m = _load()
+    r = _LogRunner()
+    put = {}
+    monkeypatch.setattr("onec_metadata.apply.dumpload._put_text",
+                        lambda runner, path, text: put.update({path: text}))
+    m.run_repo(r, r"srv\Base", "u", "p", (r"C:\Repo Store\erp", "Иванов И", "rp"), "lock",
+               objects=["ОбщийМодуль.askСервер"], workdir=r"C:\w")
+    xml = put[r"C:\w\repo_objects.xml"]
+    assert 'fullName="ОбщийМодуль.askСервер"' in xml and 'includeChildObjects="false"' in xml
+    cmd = r.run_calls[0]
+    # соединение с хранилищем — до действия, путь и логин с пробелом — в кавычках
+    assert cmd.index(r'/ConfigurationRepositoryF "C:\Repo Store\erp"') < cmd.index("/ConfigurationRepositoryLock")
+    assert '/ConfigurationRepositoryN "Иванов И"' in cmd
+    assert r"-Objects C:\w\repo_objects.xml -revised" in cmd
+
+
+def test_repo_commit_requires_objects_and_comment():
+    m = _load()
+    import pytest
+    with pytest.raises(SystemExit):
+        m.run_repo(_LogRunner(), "b", "u", "p", ("r", "u", "p"), "commit", objects=["X.Y"], workdir="w")
+    with pytest.raises(SystemExit):
+        m.run_repo(_LogRunner(), "b", "u", "p", ("r", "u", "p"), "lock", workdir="w")
+
+
+def test_updatedb_action_last_before_out():
+    m = _load()
+    r = _LogRunner()
+    m.update_db(r, r"srv\Base", "u", "p", "Ext", workdir=r"C:\w")
+    cmd = r.run_calls[0]
+    assert cmd.index("/UpdateDBCfg -Extension Ext") > cmd.index("/DisableStartupMessages")
+    assert cmd.index("/UpdateDBCfg") < cmd.index("/Out") and "chcp" not in cmd
+
+
+def test_mask_password_all_forms():
+    sys.path.insert(0, str(SCRIPTS_DIR.parent))
+    from onec_metadata.apply.runner import mask_password
+    s = 'x /P"a b" /N"u" /ConfigurationRepositoryP rp2 /P sec3 /Psec4'
+    out = mask_password(s)
+    for secret in ("a b", "rp2", "sec3", "sec4"):
+        assert secret not in out

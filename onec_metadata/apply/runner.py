@@ -171,7 +171,17 @@ def make_runner(host: str | None = None):
 
 
 def mask_password(cmd: str) -> str:
-    return re.sub(r"/P\S+", "/P***", cmd)
+    """Скрыть пароли ИБ и хранилища во всех формах записи: `/Pxxx`, `/P"x y"`, `/P xxx`,
+    `/ConfigurationRepositoryP xxx`. Пароль отдельным аргументом уже уходил в чат."""
+    cmd = re.sub(r'(/ConfigurationRepositoryP)\s*("[^"]*"|\S+)', r"\1 ***", cmd)
+    cmd = re.sub(r'/P\s*"[^"]*"', "/P***", cmd)
+    return re.sub(r"/P(?!\*\*\*)\s*\S+", "/P***", cmd)
+
+
+def quote_arg(a: str) -> str:
+    """Аргумент с пробелом — в кавычки (уже закавыченный не трогаем): командная строка
+    склеивается через пробел, и путь с `Program Files` иначе рвётся на два."""
+    return f'"{a}"' if " " in a and not a.startswith('"') else a
 
 
 def conn_arg(ib: str) -> str:
@@ -212,7 +222,7 @@ def enterprise_cmd(ib: str, user: str, pwd: str, execute_epf: str,
 
 def designer_cmd(ib: str, user: str, pwd: str, action: str,
                  args: list, log: str, bin: str | None = None) -> str:
-    quoted = " ".join(args)
+    quoted = " ".join(quote_arg(a) for a in args)
     parts = [
         f'"{bin or DEFAULT_BIN}" DESIGNER',
         conn_arg(ib),
