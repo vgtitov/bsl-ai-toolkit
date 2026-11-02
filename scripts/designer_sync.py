@@ -329,6 +329,10 @@ def main(argv=None):
     if a.cmd in ("repo", "updatedb"):
         from onec_metadata.apply.runner import make_runner
         user, password = resolve_cred("IB", a.contour)
+        if not (user and password):
+            # иначе в команду уйдут /N"None" /PNone и платформа ответит невнятным «не идентифицирован»
+            raise SystemExit(f"нет учётки ИБ: ONEC_IB_USER[_{(a.contour or '<КЛЮЧ>').upper()}] и "
+                             f"ONEC_IB_PASS[_{(a.contour or '<КЛЮЧ>').upper()}] в .env")
         r = make_runner(a.host)
         if a.cmd == "updatedb":
             update_db(r, a.base, user, password, a.ext)
