@@ -113,3 +113,10 @@ def test_flags_strict_and_bad_date_and_status(tmp_path):
     assert any("дата оценки" in k for k in q)
     rr = ec.coefficient([], "M", "dev", "права", risky_min=1.2)
     assert rr["coef"] == 1.2 and "повышен настройкой до 1.20" in rr["status"]
+
+
+def test_week_date_and_synonym_flags_rejected(tmp_path):
+    rows = [{"task": "W", "est_date": "2026-W01-1"}, {"scope_changed": "0"}, {"fact_complete": "true"}]
+    got, q = ec.load(write(tmp_path, rows))
+    assert any("дата оценки" in k for k in q) and q["флаг не распознан (нужно да или нет)"] == 2
+    assert len(got) == 1

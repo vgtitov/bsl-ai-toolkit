@@ -32,8 +32,8 @@ MIN_N_RISKY = 5
 DEFAULT_RISKY = ("интеграция", "обмен", "права")
 REQUIRED = ("task", "size", "work_type", "role", "est_without_ai", "fact", "close_reason",
             "scope_changed", "out_of_plan", "fact_complete")
-YES = {"да", "yes", "true", "1", "y"}
-NO = {"нет", "no", "false", "0", "n"}
+YES = {"да"}
+NO = {"нет"}
 
 
 def _num(v):
@@ -70,10 +70,10 @@ def load(path):
     for r in rows:  # дата строго ГГГГ-ММ-ДД; иная считается отсутствующей (с пометкой)
         d = (r.get("est_date") or "").strip()
         try:
-            datetime.date.fromisoformat(d) if d else None
-            if d and len(d) != 10:
-                raise ValueError
+            ok = not d or datetime.datetime.strptime(d, "%Y-%m-%d").strftime("%Y-%m-%d") == d
         except ValueError:
+            ok = False
+        if not ok:
             q["дата оценки не в формате ГГГГ-ММ-ДД (считается отсутствующей)"] += 1
             d = ""
         r["_d"] = d
