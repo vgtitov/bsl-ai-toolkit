@@ -86,3 +86,23 @@ def test_duplicate_scalar_refuses_edt(tmp_path):
 
 def test_stray_text_refuses_edt(tmp_path):
     _refuses(tmp_path, "<nonNegative>true</nonNegative>", "<nonNegative>true</nonNegative>ВАЖНО")
+
+
+def test_foreign_namespace_and_container_attr_refuse(tmp_path):
+    _refuses(tmp_path, "<nonNegative>true</nonNegative>", '<nonNegative xmlns="urn:x">true</nonNegative>')
+    _refuses(tmp_path, "<numberQualifiers>", '<numberQualifiers mode="strict">')
+
+
+def test_foreign_namespace_and_container_attr_refuse_cfg(tmp_path):
+    import pytest
+    for old, new in (("<v8:AllowedSign>Nonnegative</v8:AllowedSign>",
+                      '<v8:AllowedSign xmlns:v8="urn:x">Nonnegative</v8:AllowedSign>'),
+                     ("<v8:NumberQualifiers>", '<v8:NumberQualifiers mode="strict">')):
+        work = _copy(tmp_path, "number_nonneg.xml")
+        txt = work.read_text(encoding="utf-8")
+        assert old in txt
+        work.write_text(txt.replace(old, new), encoding="utf-8")
+        before = work.read_text(encoding="utf-8")
+        with pytest.raises(ValueError):
+            edit_type(work, "Ревизия", "xs:decimal", precision=20)
+        assert work.read_text(encoding="utf-8") == before

@@ -81,7 +81,7 @@ def _mk(tag_q: str, text: str | None = None):
     return el
 
 
-def _merge_number(old_qual, order, named: dict) -> list:
+def _merge_number(old_qual, order, named: dict, ns: str | None = None) -> list:
     """Дети числового квалификатора: прежние значения сохраняются, названные в команде заменяются.
     Схема платформы закрыта: только скалярные `order`; иной дочерний узел (с содержимым, атрибутами
     или неизвестный) не переписываем молча, а отказываем: потеря данных хуже ошибки."""
@@ -89,6 +89,8 @@ def _merge_number(old_qual, order, named: dict) -> list:
     if len(old_qual) > 1:
         raise ValueError("несколько числовых квалификаторов в типе, правка типа отменена")
     if old_qual:
+        if old_qual[0].attrib:
+            raise ValueError("у числового квалификатора есть атрибуты, правка типа отменена")
         if (old_qual[0].text or "").strip():
             raise ValueError("текст внутри числового квалификатора, правка типа отменена")
         for el in old_qual[0]:
@@ -96,8 +98,9 @@ def _merge_number(old_qual, order, named: dict) -> list:
                 raise ValueError("текст между узлами числового квалификатора, правка типа отменена")
             if not isinstance(el.tag, str):
                 raise ValueError("комментарий внутри числового квалификатора, правка типа отменена")
-            name = etree.QName(el).localname
-            if name not in order or name in cur or len(el) or el.attrib:
+            q = etree.QName(el)
+            name = q.localname
+            if q.namespace != ns or name not in order or name in cur or len(el) or el.attrib:
                 raise ValueError(f"числовой квалификатор содержит неожиданный или повторный узел {name!r}, правка типа отменена")
             cur[name] = (el.text or "").strip()
     cur.update({k: v for k, v in named.items() if v is not None})
@@ -193,7 +196,7 @@ def _edit_configurator(path, member, type_refs, length, precision, scale) -> Non
     elif len(type_refs) == 1 and (precision is not None or scale is not None):
         ch = _merge_number(old_num, ("Digits", "FractionDigits", "AllowedSign"),
                            {"Digits": None if precision is None else str(precision),
-                            "FractionDigits": None if scale is None else str(scale)})
+                            "FractionDigits": None if scale is None else str(scale)}, cfg.NS["v8"])
         _build_qualifier(last, _mk(cfg.q("v8", "NumberQualifiers")),
                          ch, nl, lead_p, unit, tag_v8)
 
