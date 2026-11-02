@@ -61,4 +61,6 @@ GITLAB_HOST=gitlab.example.ru GITLAB_TOKEN=... python scripts/mr_review.py --mr 
 
 Проверка: `python scripts/review_inbox.py --self-test` печатает `self-test ok`. На живых системах: список строк `gitlab !N автор заголовок` и `github owner/repo#N ...` с ссылкой под каждой; пусто значит «Ревью на вас нет.». Код выхода 2, если источник недоступен (в stderr причина без токена). Один источник можно отключить: `--no-gitlab`, `--no-github`.
 
+Просрочку по issue и чужим PR показывает `python scripts/review_inbox.py --issues` (issue 2 рабочих дня, чужой PR и ревью на вас 3; код выхода 1, если есть просроченное). Порядок issue и PR: `docs/ISSUES_AND_PRS.md`.
+
 Сигналы назначения: надёжнее всего to-do и запрос по `reviewer_username`; письма «added as a reviewer» и «requested your review» дают только ссылку. Автору: назначить ревьюера в самом MR (иначе уведомление не придёт) и написать одну строку со ссылкой в рабочий чат.
