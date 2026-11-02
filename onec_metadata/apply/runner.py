@@ -184,6 +184,12 @@ def quote_arg(a: str) -> str:
     return f'"{a}"' if " " in a and not a.startswith('"') else a
 
 
+def pass_arg(pwd: str) -> str:
+    """`/P<пароль>` одним аргументом: пароль с пробелом — в кавычках, иначе он рвётся
+    на два токена, и маска скрыла бы только первый."""
+    return f'/P"{pwd}"' if " " in (pwd or "") else f"/P{pwd}"
+
+
 def conn_arg(ib: str) -> str:
     """Аргумент строки соединения по виду `ib`:
     - уже готовый флаг (`/S…`/`/F…`/`/IBConnectionString…`) — как есть;
@@ -212,7 +218,7 @@ def enterprise_cmd(ib: str, user: str, pwd: str, execute_epf: str,
         f'"{bin or DEFAULT_BIN}" ENTERPRISE',
         conn_arg(ib),
         f'/N"{user}"',
-        f"/P{pwd}",
+        pass_arg(pwd),
         f'/Execute "{execute_epf}"',
         f'/C"{c_param}"',
         "/DisableStartupDialogs /DisableStartupMessages",
@@ -227,7 +233,7 @@ def designer_cmd(ib: str, user: str, pwd: str, action: str,
         f'"{bin or DEFAULT_BIN}" DESIGNER',
         conn_arg(ib),
         f'/N"{user}"',
-        f"/P{pwd}",
+        pass_arg(pwd),
         "/DisableStartupDialogs /DisableStartupMessages",
         action,
     ]

@@ -269,3 +269,22 @@ def test_mask_password_all_forms():
     out = mask_password(s)
     for secret in ("a b", "rp2", "sec3", "sec4"):
         assert secret not in out
+
+
+def test_resolve_cred_pair_from_one_key():
+    # логин KEY1 не склеивается с паролем KEY2
+    m = _load()
+    env = {"ONEC_IB_USER_A": "ua", "ONEC_IB_PASS_B": "pb", "ONEC_IB_PASS": "pc"}
+    assert m.resolve_cred("IB", ["A", "B"], env) == ("ua", "pc")
+
+
+def test_password_with_space_is_one_arg_and_fully_masked():
+    sys.path.insert(0, str(SCRIPTS_DIR.parent))
+    from onec_metadata.apply.runner import designer_cmd, mask_password
+    m = _load()
+    cmd = designer_cmd(r"srv\b", "u", "ab cd", "/X", [], "l.log")
+    assert '/P"ab cd"' in cmd
+    conn = m.repo_conn("r", "u", "ef gh")
+    assert '/ConfigurationRepositoryP "ef gh"' in conn
+    out = mask_password(cmd + " " + conn)
+    assert "ab" not in out.replace("/DisableStartup", "") and "cd" not in out and "ef" not in out and "gh" not in out

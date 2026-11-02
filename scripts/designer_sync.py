@@ -64,13 +64,14 @@ def resolve_cred(kind: str, keys, env=None):
     ONEC_<kind>_USER_<КЛЮЧ>, фолбэк общий ONEC_<kind>_USER: в dev-базах логин бывает свой
     (с пробелом, кириллицей), и общий логин давал ложное «Пользователь ИБ не идентифицирован»."""
     env = os.environ if env is None else env
-    user = password = None
+    common = (env.get(f"ONEC_{kind}_USER") or None, env.get(f"ONEC_{kind}_PASS") or None)
     for key in ([keys] if isinstance(keys, str) else (keys or [])):
-        user = user or env.get(f"ONEC_{kind}_USER_{key.upper()}") or None
-        password = password or env.get(f"ONEC_{kind}_PASS_{key.upper()}") or None
-    user = user or env.get(f"ONEC_{kind}_USER") or None
-    password = password or env.get(f"ONEC_{kind}_PASS") or None
-    return user, password
+        # пара берётся с ОДНОГО ключа (недостающее — из общего), чтобы не склеить логин KEY1 с паролем KEY2
+        user = env.get(f"ONEC_{kind}_USER_{key.upper()}") or None
+        password = env.get(f"ONEC_{kind}_PASS_{key.upper()}") or None
+        if user or password:
+            return user or common[0], password or common[1]
+    return common
 
 
 def base_args(base: str):
@@ -250,7 +251,7 @@ def repo_conn(path, user, password) -> str:
     from onec_metadata.apply.runner import quote_arg
     return " ".join(["/ConfigurationRepositoryF", quote_arg(path),
                      "/ConfigurationRepositoryN", f'"{user}"',
-                     "/ConfigurationRepositoryP", password])
+                     "/ConfigurationRepositoryP", f'"{password}"'])
 
 
 def run_repo(r, base, user, password, repo, op, ext=None, objects=None, comment=None,
@@ -332,10 +333,12 @@ def main(argv=None):
             print(f"[ok] UpdateDBCfg {a.base}" + (f" -Extension {a.ext}" if a.ext else ""))
             return
         key = a.repo_key or a.contour
-        path = os.environ.get(f"ONEC_REPO_PATH_{(key or '').upper()}") if key else None
+        path = (os.environ.get(f"ONEC_REPO_PATH_{key.upper()}") if key else None) \
+            or os.environ.get("ONEC_REPO_PATH")
         ruser, rpass = resolve_cred("REPO", key)
         if not (path and ruser and rpass):
-            raise SystemExit(f"нет кредов хранилища: ONEC_REPO_PATH_/USER_/PASS_<{key}> в .env")
+            names = f"ONEC_REPO_PATH_/USER_/PASS_{key.upper()}" if key else "ONEC_REPO_PATH/USER/PASS"
+            raise SystemExit(f"нет кредов хранилища: {names} в .env (ключ — --repo-key или --contour)")
         # shortcut: кириллица в командной строке ssh ломается; комментарий — латиницей/номером тикета.
         # Нужна кириллица — передавать через файл-сценарий на хосте.
         if a.host and a.comment and not a.comment.isascii():
