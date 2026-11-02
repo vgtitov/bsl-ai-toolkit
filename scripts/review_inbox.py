@@ -31,7 +31,12 @@ def gitlab_queue(host: str, token: str, get=_gitlab_get) -> list[dict]:
     api = f"https://{host}/api/v4"
     user = get(f"{api}/user", token)["username"]
     out: dict[str, dict] = {}
-    for t in get(f"{api}/todos?state=pending&action=review_requested&type=MergeRequest&per_page=50", token):
+    try:
+        todos = get(f"{api}/todos?state=pending&action=review_requested&type=MergeRequest&per_page=50", token)
+    except Exception:  # старый GitLab без фильтра action: очередь всё равно даёт список MR ниже
+        todos = [t for t in get(f"{api}/todos?state=pending&type=MergeRequest&per_page=50", token)
+                 if t.get("action_name") == "review_requested"]
+    for t in todos:
         tg = t.get("target") or {}
         out[t.get("target_url", "")] = {"src": "gitlab", "kind": "todo", "ref": f"!{tg.get('iid', '?')}",
                                         "title": tg.get("title", ""), "author": (t.get("author") or {}).get("username", ""),
