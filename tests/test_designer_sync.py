@@ -235,13 +235,14 @@ def test_repo_lock_puts_objects_file_and_masks_nothing_in_order(monkeypatch):
                         lambda runner, path, text: put.update({path: text}))
     m.run_repo(r, r"srv\Base", "u", "p", (r"C:\Repo Store\erp", "Иванов И", "rp"), "lock",
                objects=["ОбщийМодуль.askСервер"], workdir=r"C:\w")
-    xml = put[r"C:\w\repo_objects.xml"]
+    (path, xml), = put.items()
+    assert path.startswith(r"C:\w\repo_objects_") and path.endswith(".xml")
     assert 'fullName="ОбщийМодуль.askСервер"' in xml and 'includeChildObjects="false"' in xml
     cmd = r.run_calls[0]
     # соединение с хранилищем — до действия, путь и логин с пробелом — в кавычках
     assert cmd.index(r'/ConfigurationRepositoryF "C:\Repo Store\erp"') < cmd.index("/ConfigurationRepositoryLock")
     assert '/ConfigurationRepositoryN "Иванов И"' in cmd
-    assert r"-Objects C:\w\repo_objects.xml -revised" in cmd
+    assert f"-Objects {path} -revised" in cmd
 
 
 def test_repo_commit_requires_objects_and_comment():
@@ -295,3 +296,41 @@ def test_repo_update_objects_and_force_explicit():
     assert m.repo_action("update") == ("/ConfigurationRepositoryUpdateCfg", [])
     assert m.repo_action("update", objects_file="f.xml", force=True) == \
         ("/ConfigurationRepositoryUpdateCfg", ["-Objects", "f.xml", "-force"])
+
+
+def test_unsafe_chars_rejected_before_command_is_built():
+    """Пароль ab"cd ef маска закрыла бы не целиком: отказ на входе, пока Runner собирает строку."""
+    import pytest
+    from onec_metadata.apply.runner import designer_cmd, pass_arg, quote_arg
+    m = _load()
+    for ch in ['"', "&", "|", "<", ">", "^", "%", "\n", "\r"]:
+        with pytest.raises(ValueError):
+            pass_arg(f"ab{ch}cd ef")
+        with pytest.raises(ValueError):
+            quote_arg(f"DEV-1{ch}x")                      # --comment
+        with pytest.raises(ValueError):
+            m.repo_conn(r"C:\R", "u", f"p{ch}")
+        with pytest.raises(ValueError):
+            designer_cmd(r"srv\B", f"u{ch}", "p", "/UpdateDBCfg", [], "l")
+    assert quote_arg(r'"C:\Program Files\x"') == r'"C:\Program Files\x"'
+
+
+def test_empty_password_is_a_password_not_missing():
+    m = _load()
+    from onec_metadata.apply.runner import mask_password, pass_arg
+    assert m.resolve_cred("IB", "dev", {"ONEC_IB_USER": "u", "ONEC_IB_PASS": "x",
+                                        "ONEC_IB_PASS_DEV": ""}) == ("u", "")
+    assert m.resolve_cred("IB", "dev", {"ONEC_IB_USER": "u"}) == ("u", None)
+    assert pass_arg("") == '/P""'
+    assert mask_password('1cv8 /P"" /DisableStartupDialogs') == "1cv8 /P*** /DisableStartupDialogs"
+
+
+def test_repo_objects_file_unique_per_call(monkeypatch):
+    m = _load()
+    put = {}
+    monkeypatch.setattr("onec_metadata.apply.dumpload._put_text",
+                        lambda runner, path, text: put.update({path: text}))
+    for _ in range(2):
+        m.run_repo(_LogRunner(), r"srv\B", "u", "p", (r"C:\R", "ru", "rp"), "lock",
+                   objects=["ОбщийМодуль.X"], workdir=r"C:\w")
+    assert len(put) == 2

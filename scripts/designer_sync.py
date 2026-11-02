@@ -43,6 +43,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import uuid
 from pathlib import Path
 
 # Windows-консоль по умолчанию cp1251 — печать '→'/'—'/кириллицы роняет скрипт. Принудительно UTF-8.
@@ -64,13 +65,14 @@ def resolve_cred(kind: str, keys, env=None):
     ONEC_<kind>_USER_<КЛЮЧ>, фолбэк общий ONEC_<kind>_USER: в dev-базах логин бывает свой
     (с пробелом, кириллицей), и общий логин давал ложное «Пользователь ИБ не идентифицирован»."""
     env = os.environ if env is None else env
-    common = (env.get(f"ONEC_{kind}_USER") or None, env.get(f"ONEC_{kind}_PASS") or None)
+    # пустой пароль ("") — заданный пароль учётки без пароля, отсутствие — None
+    common = (env.get(f"ONEC_{kind}_USER") or None, env.get(f"ONEC_{kind}_PASS"))
     for key in ([keys] if isinstance(keys, str) else (keys or [])):
         # пара берётся с ОДНОГО ключа (недостающее — из общего), чтобы не склеить логин KEY1 с паролем KEY2
         user = env.get(f"ONEC_{kind}_USER_{key.upper()}") or None
-        password = env.get(f"ONEC_{kind}_PASS_{key.upper()}") or None
-        if user or password:
-            return user or common[0], password or common[1]
+        password = env.get(f"ONEC_{kind}_PASS_{key.upper()}")
+        if user or password is not None:
+            return user or common[0], common[1] if password is None else password
     return common
 
 
@@ -250,7 +252,9 @@ def repo_action(op, ext=None, objects_file=None, comment=None, force=False):
 
 def repo_conn(path, user, password) -> str:
     """Параметры соединения с хранилищем — ставятся ПЕРЕД действием, как в рабочих прогонах."""
-    from onec_metadata.apply.runner import quote_arg
+    from onec_metadata.apply.runner import check_cmd_safe, quote_arg
+    check_cmd_safe(user, "логин хранилища")
+    check_cmd_safe(password, "пароль хранилища")
     return " ".join(["/ConfigurationRepositoryF", quote_arg(path),
                      "/ConfigurationRepositoryN", f'"{user}"',
                      "/ConfigurationRepositoryP", f'"{password}"'])
@@ -268,7 +272,8 @@ def run_repo(r, base, user, password, repo, op, ext=None, objects=None, comment=
     if op in ("lock", "unlock", "commit") and not objects:
         raise SystemExit(f"repo {op}: нужен --objects (полные имена через запятую)")
     if objects:
-        objects_file = workdir + r"\repo_objects.xml"
+        # своё имя на вызов: параллельные прогоны в одном workdir не подменяют список объектов
+        objects_file = workdir + rf"\repo_objects_{uuid.uuid4().hex[:8]}.xml"
         dumpload._put_text(r, objects_file, objects_xml(objects))
     if op == "commit" and not comment:
         raise SystemExit("repo commit: нужен --comment")
@@ -329,7 +334,7 @@ def main(argv=None):
     if a.cmd in ("repo", "updatedb"):
         from onec_metadata.apply.runner import make_runner
         user, password = resolve_cred("IB", a.contour)
-        if not (user and password):
+        if not user or password is None:
             # иначе в команду уйдут /N"None" /PNone и платформа ответит невнятным «не идентифицирован»
             raise SystemExit(f"нет учётки ИБ: ONEC_IB_USER[_{(a.contour or '<КЛЮЧ>').upper()}] и "
                              f"ONEC_IB_PASS[_{(a.contour or '<КЛЮЧ>').upper()}] в .env")
@@ -342,7 +347,7 @@ def main(argv=None):
         path = (os.environ.get(f"ONEC_REPO_PATH_{key.upper()}") if key else None) \
             or os.environ.get("ONEC_REPO_PATH")
         ruser, rpass = resolve_cred("REPO", key)
-        if not (path and ruser and rpass):
+        if not (path and ruser) or rpass is None:
             names = f"ONEC_REPO_PATH_/USER_/PASS_{key.upper()}" if key else "ONEC_REPO_PATH/USER/PASS"
             raise SystemExit(f"нет кредов хранилища: {names} в .env (ключ — --repo-key или --contour)")
         # shortcut: кириллица в командной строке ssh ломается; комментарий — латиницей/номером тикета.
@@ -412,4 +417,7 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except ValueError as e:      # отказ check_cmd_safe: понятное сообщение без трейсбека
+        raise SystemExit(f"ошибка: {e}")
