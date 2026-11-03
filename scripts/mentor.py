@@ -2,7 +2,7 @@
 """Режим наставника ai-mentor: off | ask | on. Состояние в личном файле человека вне репозитория.
 
   python scripts/mentor.py status                 # что хранится (файл показывается целиком)
-  python scripts/mentor.py set on|off|ask         # «включи» / «выключи» / «не предлагай» (= off)
+  python scripts/mentor.py set on|off|ask         # включает только явная команда человека; по умолчанию off
   python scripts/mentor.py answer yes|no|later [--days 30]   # ответ на предложение
   python scripts/mentor.py offered                # предложение показано: записать сразу, до ответа
   python scripts/mentor.py api-asked [--days 30]  # про Jira и Confluence по API спросили; can-offer-api проверяет срок
@@ -31,6 +31,7 @@ for _s in (sys.stdout, sys.stderr):
         pass
 
 MODES = ("off", "ask", "on")
+SCHEMA = 1  # формат записи; чужой или отсутствующий в существующем файле = off, обновление наставника не включает
 COOLDOWN_DAYS = 14  # не чаще одного предложения за этот срок (и не больше одного за сессию)
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -52,7 +53,7 @@ def card_path() -> Path:
 
 
 def default_state() -> dict:
-    return {"mode": "ask", "declined_at": None, "remind_after": None, "offers_made": 0,
+    return {"schema": SCHEMA, "mode": "off", "declined_at": None, "remind_after": None, "offers_made": 0,
             "last_offer": None, "api_remind_after": None, "api_declined_at": None, "level_card": str(card_path()), "updated": None}
 
 
@@ -64,6 +65,8 @@ def load() -> dict:
         d = json.loads(state_path().read_text(encoding="utf-8"))
         if not isinstance(d, dict):
             raise ValueError
+        if type(d.get("schema")) is not int or d["schema"] != SCHEMA:  # True и 1.0 не годятся
+            raise ValueError("другой формат записи")
         s.update({k: d[k] for k in s if k in d})
         for k in ("declined_at", "remind_after", "last_offer", "api_remind_after", "api_declined_at"):
             if s[k] is not None:
