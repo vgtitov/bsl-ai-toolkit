@@ -32,14 +32,27 @@ class Issue:
         return f"{self.code:14} {self.item}: {self.message}"
 
 
-def lint_form(form_path: Path, langs=("ru", "en")) -> list:
+CHECKS = {"titles": ("title-lang", "title-no-own"),
+          "tokens": ("literal-font", "literal-color"),
+          "command-bar": ("command-bar",)}
+
+
+def lint_form(form_path: Path, langs=("ru", "en"), checks=tuple(CHECKS)) -> list:
+    """`checks` — группы проверок: titles, tokens, command-bar (по умолчанию все). Формы, где фирменное
+    оформление не принято (только компоновка), проверять `checks=("titles",)`."""
+    unknown = set(checks) - set(CHECKS)
+    if unknown:
+        raise OpPreconditionError(f"form lint: неизвестные проверки {sorted(unknown)}; есть {sorted(CHECKS)}")
     form_path = Path(form_path)
     root = cfg.load(form_path).getroot()
     if form_path.suffix == ".form":
-        return _lint_edt(root, langs)
-    if form_path.suffix == ".xml":
-        return _lint_cfg(root, langs)
-    raise OpPreconditionError("form lint: ожидается Form.form (EDT) или Form.xml (Конфигуратор)")
+        issues = _lint_edt(root, langs)
+    elif form_path.suffix == ".xml":
+        issues = _lint_cfg(root, langs)
+    else:
+        raise OpPreconditionError("form lint: ожидается Form.form (EDT) или Form.xml (Конфигуратор)")
+    wanted = {code for c in checks for code in CHECKS[c]}
+    return [i for i in issues if i.code in wanted]
 
 
 def _missing(present, langs):

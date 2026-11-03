@@ -60,3 +60,10 @@ def test_edt_hidden_column_not_checked(tmp_path):
     work = _copy(tmp_path, "form_style_edt.form", "Form.form")
     items = {i.item for i in lint_form(work)}
     assert "ЗаказыOrderId" not in items and "ЗаказыНомерСтроки" not in items
+
+def test_checks_titles_only_for_layout_forms(tmp_path):
+    """Только компоновка (без фирменного оформления): шрифты по месту и командная панель — не находки."""
+    work = _copy(tmp_path, "form_style_cfg.xml", "Form.xml")
+    set_style(work, "ОбщаяИнформация", {"textColor": "rgb:1,2,3"})
+    codes = _codes(lint_form(work, langs=("ru", "en"), checks=("titles",)))
+    assert "literal-color" not in codes and "command-bar" not in codes

@@ -34,6 +34,7 @@ _ORDER_CFG = json.loads((_DATA / "cfg_form_order.json").read_text(encoding="utf-
 # выгрузка Конфигуратора не пишет значение, равное умолчанию платформы (пары EDT ↔ XML-выгрузка)
 _DEFAULTS_CFG = json.loads((_DATA / "cfg_form_defaults.json").read_text(encoding="utf-8"))
 _XT = cfg.q("xsi", "type")
+_XNIL = cfg.q("xsi", "nil")
 _LF = cfg.NS["lf"]
 _XR = cfg.NS["xr"]
 _FONT_FLAGS = ("bold", "italic", "underline", "strikeout")
@@ -215,7 +216,9 @@ class _Cfg:
     def build(self, tag, spec, ws):
         el = etree.Element(self.qname(tag))
         kind = spec[0]
-        if kind == "text":
+        if kind == "text" and spec[1] == "xsi:nil":     # напр. <RowFilter xsi:nil="true"/>
+            el.set(_XNIL, "true")
+        elif kind == "text":
             el.text = spec[1]
         elif kind == "color":
             el.text = f"{spec[1]}:{spec[2]}"
