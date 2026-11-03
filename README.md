@@ -51,7 +51,8 @@ git clone https://github.com/vgtitov/bsl-ai-toolkit ; cd bsl-ai-toolkit
 - **`bsl-ls`** — диагностики BSL Language Server после каждой правки;
 - **`onec_metadata`** — детерминированная **byte-perfect** правка метаданных (Конфигуратор-XML + EDT `.mdo`/`.dcs`) с
   **round-trip verify** (загрузка в ТЕСТ-базу платформой + повторная выгрузка = ровно целевой дифф). Это закрывает тот самый
-  «последний рубеж», который остальные обходят;
+  «последний рубеж», который остальные обходят. Оформление управляемых форм (`1c-meta form set-style`, `form lint`) —
+  в свойствах формы, порядок свойств выведен из корпуса реальных форм (`scripts/learn_*_form_*.py`);
 - **`onec-ops`** — эксплуатация и производительность (ТЖ, план запроса, APDEX, Zabbix/Prometheus): agentic SWE, а не только кодинг;
 - **`onec-data`** — доступ к данным живой ИБ read-only под исследуемым пользователем (честный RLS, маскирование ПДн).
 
@@ -92,7 +93,7 @@ bsl-ai-toolkit/
 ├── build.sh                    # генерация из core/: CLAUDE.md · AGENTS.md · GEMINI.md · .mcp.json · .claude/  (закоммичены)
 ├── onec_metadata/              # ОС-независимый движок правок метаданных (Конфигуратор-XML + EDT .mdo/.dcs), byte-perfect
 │   └── formats/ · ops/ · apply/ · catalog.py    #  apply-слой (ssh/scp/tar или локально) + round-trip verify в ТЕСТ-базе
-├── bin/1c-meta                 # headless CLI движка (detect/template/scd/attr/child)
+├── bin/1c-meta                 # headless CLI движка (detect/template/scd/attr/child/form)
 ├── mcp/                        # реализации MCP: onec_mcp.py · bsl_ls_mcp.py · onec_ops_mcp.py · onec_data_mcp.py
 ├── extensions/ai_debug/        # расширение 1С для onec-data: HTTP-сервис (read-only под пользователем, privileged за гейтом)
 ├── config/                     # layers.example.toml (слои/scope) · contours.example.md (карта баз для 1c-analyst)
