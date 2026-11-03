@@ -65,7 +65,7 @@ def load() -> dict:
         d = json.loads(state_path().read_text(encoding="utf-8"))
         if not isinstance(d, dict):
             raise ValueError
-        if d.get("schema") != SCHEMA:
+        if type(d.get("schema")) is not int or d["schema"] != SCHEMA:  # True и 1.0 не годятся
             raise ValueError("другой формат записи")
         s.update({k: d[k] for k in s if k in d})
         for k in ("declined_at", "remind_after", "last_offer", "api_remind_after", "api_declined_at"):

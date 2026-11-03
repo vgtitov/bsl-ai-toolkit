@@ -208,3 +208,28 @@ def test_update_keeps_choice_and_other_format_means_off(st):
     assert mentor.load()["mode"] == "off"
     st.write_text(json.dumps({"mode": "on"}))  # запись без формата (старая) тоже не включает
     assert mentor.load()["mode"] == "off"
+
+
+@pytest.mark.parametrize("schema", [True, False, 1.0, "1", None, [], {}, 2])
+def test_non_integer_or_wrong_schema_means_off(st, schema):
+    st.write_text(json.dumps({"schema": schema, "mode": "on"}))
+    assert mentor.load()["mode"] == "off"
+
+
+@pytest.mark.parametrize("target", ["claude", "agents", "codex"])
+def test_build_never_creates_or_changes_state(st, tmp_path, target):
+    env = {"AI_MENTOR_STATE": str(st), "AI_MENTOR_CARD": str(tmp_path / "card.md"), "PATH": "/usr/bin:/bin"}
+    st.unlink()
+    subprocess.run(["sh", str(ROOT / "build.sh"), target], cwd=ROOT, check=True, capture_output=True, env=env)
+    assert not st.exists() and not (tmp_path / "card.md").exists()
+    st.write_text(json.dumps({"schema": 99, "mode": "on"}))
+    subprocess.run(["sh", str(ROOT / "build.sh"), target], cwd=ROOT, check=True, capture_output=True, env=env)
+    assert json.loads(st.read_text()) == {"schema": 99, "mode": "on"} and mentor.load()["mode"] == "off"
+
+
+def test_install_question_yes_creates_on_nothing_else_creates_nothing(st):
+    st.unlink()
+    assert not st.exists()  # любой ответ кроме «да» или молчание: команда не вызывается, файла нет
+    run("set", "on")
+    d = json.loads(st.read_text())
+    assert d["schema"] == mentor.SCHEMA and d["mode"] == "on"
