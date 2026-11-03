@@ -36,17 +36,19 @@
 Только в режиме `ask`, один раз за сессию, после результата, не вместо него. Сигналы: слабая постановка три раза подряд, текст Jira или Confluence вставлен вручную без настроенного API, одна и та же ошибка дважды, вопрос «как лучше спросить». Не предлагает, когда человек торопится или просит «просто сделай». Фразы и порядок: `core/skills/ai-mentor/OFFER.md`. Предложение подключить Jira и Confluence по API отдельное и тоже одно: токен только на чтение, кладёт человек сам через `scripts/set_secret.py`, в чат не вставляет.
 
 ## Наставник и другие агенты
-Таблица проверенного (на 03.11.2026):
+Один скилл `ai-mentor` с обычным `SKILL.md`, отдельных версий под агентов нет. По документации агентов на 03.11.2026 (вживую проверен только Claude Code; Codex не отвечает из-за лимита, Cursor и VS Code на проверяющей машине не установлены):
 
-| Агент | Что раскладывает `build.sh` | Скилл | Хук состояния | Что проверено |
+| Агент | Читает SKILL.md | Папки проекта | Как отключить описание в контексте | Хук SessionStart |
 |---|---|---|---|---|
-| Claude Code | `.claude/skills/ai-mentor`, `.claude/settings.json` | да | да, SessionStart | вживую, сценарии ниже |
-| Codex | только `AGENTS.md` (`build.sh codex`) | нет | нет | вживую: блок `core/mentor/agent-rules.md` в AGENTS.md, в `off` агент молчит о наставнике, в `ask` предлагает один раз |
-| Copilot в VS Code | `AGENTS.md` читает; `.github/copilot-instructions.md` не раскладывается (rulesync без конфига) | не проверено | нет | VS Code не установлен на проверяющей машине; блок правил вручную в `.github/copilot-instructions.md`, вживую не проверено |
-| Cursor | `AGENTS.md` | нет | нет | не проверено вживую (не установлен); блок правил вручную в правила Cursor |
-| Gemini CLI | `GEMINI.md` из `AGENTS.md` | нет | нет | не проверено вживую; блок правил вручную |
-| Веб-Copilot (браузер) | ничего | нет | нет | выбор хранит человек (Personalization), подсказки идут отдельным репозиторием |
+| Claude Code | да | `.claude/skills` | `disable-model-invocation: true` | да, `.claude/settings.json` |
+| Codex | да | `.agents/skills` (от текущей папки вверх до корня репо); `.claude/skills` не читает | поля нет; `agents/openai.yaml` с `allow_implicit_invocation: false` (файл лежит в скилле) | да, но другие файлы (`.codex/hooks.json`) и подтверждение через `/hooks`; хук набора для Codex не написан |
+| Copilot в VS Code | да | `.github/skills`, `.claude/skills`, `.agents/skills` | то же `disable-model-invocation` | да, читает и `.claude/settings.json` (Preview) |
+| Cursor | да | `.cursor/skills`, `.agents/skills`, `.claude/skills` | то же `disable-model-invocation` | да, читает и хуки Claude Code |
+| Gemini CLI | не проверено | `GEMINI.md` из `AGENTS.md` | | |
+| Веб-Copilot | нет файлов и хуков | | | выбор хранит человек, веб-версия вынесена в отдельный материал |
 
-Что нет без хука: агент не знает режим, пока не прочитает файл, поэтому блок правил начинается с «прочитай `~/.ai-mentor.json`». Блок ставится по желанию, без него агент о наставнике не знает и ничего не предлагает.
+Раскладка. `sh build.sh claude` кладёт скиллы в `.claude/skills` (Claude Code, Copilot, Cursor их читают). Для Codex добавлена цель `sh build.sh agents` (на Windows `build.ps1 agents`): копия в `.agents/skills`, в git не попадает. В общую цель `all` она не входит: Copilot и Cursor читают обе папки, и две копии одних скиллов могли бы дважды занять контекст (как агенты склеивают одинаковые имена, документация не говорит).
+
+Без хука (Codex пока) агент не знает режим, пока не прочитает файл. Для него и для агентов без скиллов есть блок правил `core/mentor/agent-rules.md` на 6 пунктов: он начинается с «прочитай `~/.ai-mentor.json`» и ставится по желанию в AGENTS.md. Вживую проверено: Codex с этим блоком в AGENTS.md в `off` ничего не говорит о наставнике, в `ask` предлагает один раз.
 
 Подробности прогонов и таблица A/B: `modes-check.md`.
