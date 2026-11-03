@@ -230,6 +230,12 @@ def main(argv=None) -> int:
     p = sub.add_parser("reset"); p.add_argument("--card", action="store_true")
     a = ap.parse_args(argv)
 
+    a.typed = None  # ответ на вопрос вводится до блокировки: ожидание ввода не держит lock
+    if a.cmd == "onboarding" and sys.stdin.isatty() and onboarding_needed(load()):
+        try:
+            a.typed = input(ONBOARDING_Q + " ").strip().lower()
+        except EOFError:
+            a.typed = False  # EOF
     if a.cmd in WRITE:
         with locked():
             return run_cmd(a, load())
@@ -270,13 +276,12 @@ def run_cmd(a, s) -> int:
     elif a.cmd == "onboarding":
         if not onboarding_needed(s):
             return 0
-        if sys.stdin.isatty():
-            try:
-                yes = input(ONBOARDING_Q + " ").strip().lower() in ("да", "д", "y", "yes")
-            except EOFError:
-                s["onboarding_asked"] = date.today().isoformat()  # показали, ответа нет
+        if a.typed is not None:
+            if a.typed is False:  # показали, ответа нет
+                s["onboarding_asked"] = date.today().isoformat()
                 save(s)
                 return 0
+            yes = a.typed in ("да", "д", "y", "yes")
             save(onboarding_answer(s, yes))
             print("наставник включён" if yes else "хорошо, наставник выключен")
         else:  # запуск агентом: вопрос задаёт агент человеку, затем onboarding-answer

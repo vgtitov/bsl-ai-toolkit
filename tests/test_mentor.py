@@ -294,3 +294,13 @@ def test_explicit_off_blocks_late_onboarding_yes(st):
     st.unlink()
     run("set", "off"); run("onboarding-answer", "yes")
     assert mentor.load()["mode"] == "off"
+
+
+def test_onboarding_input_is_read_before_lock(st, monkeypatch):
+    st.unlink(missing_ok=True)
+    lock = st.with_name(st.name + ".lock")
+    held = []
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda *_: held.append(lock.exists()) or "нет")
+    assert mentor.main(["onboarding"]) == 0
+    assert held == [False] and not lock.exists()

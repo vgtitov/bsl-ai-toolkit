@@ -112,8 +112,12 @@ if [ "$WITH_COPILOT" = 1 ]; then
   "${PY[@]}" "$TEAM_DIR/scripts/copilot_setup.py" || warn "copilot_setup с ошибкой (не критично)"
 fi
 
-say "Наставник по работе с ИИ (один вопрос, по умолчанию выключен)"
-"${PY[@]}" "$TEAM_DIR/scripts/mentor.py" onboarding || true
+if [ "$(cd "$WORKDIR" && pwd -P)" = "$(cd "$TEAM_DIR" && pwd -P)" ]; then
+  say "Наставник по работе с ИИ (один вопрос, по умолчанию выключен)"
+  "${PY[@]}" "$TEAM_DIR/scripts/mentor.py" onboarding || true
+else  # хук наставника лежит в папке набора; в чужой workdir он не попадает
+  warn "Наставник по работе с ИИ работает в папке набора ($TEAM_DIR); включить там: /ai-mentor on"
+fi
 
 say "Готово. Ручные шаги"
 cat <<EOF
