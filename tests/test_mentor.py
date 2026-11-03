@@ -106,7 +106,7 @@ def test_offered_blocks_repeat_without_answer(st):
 
 
 def test_status_prints_card_and_reset_uses_level_card(st, tmp_path, capsys):
-    card = tmp_path / "custom-card.md"
+    card = tmp_path / "ai-mentor-card-custom.md"
     card.write_text("Уровень: тест")
     s = mentor.load(); s["level_card"] = str(card); mentor.save(s)
     run("status")
@@ -167,3 +167,15 @@ def test_parallel_writers_keep_refusal(st):
     ts = [threading.Thread(target=w, args=(("offered",),)), threading.Thread(target=w, args=(("api-asked",),))]
     [t.start() for t in ts]; run("answer", "no"); [t.join() for t in ts]
     assert mentor.load()["mode"] == "off"
+
+
+def test_hook_paths_exist_and_foreign_card_path_ignored(st, tmp_path):
+    import re as _re
+    for mode in ("on", "ask"):
+        s = mentor.default_state(); s["mode"] = mode
+        path = _re.search(r"(\S+\.md)", mentor.hook_line(s)).group(1)
+        assert (ROOT / path).is_file(), path
+    victim = tmp_path / "important.txt"; victim.write_text("x")
+    s = mentor.load(); s["level_card"] = str(victim); mentor.save(s)
+    run("reset", "--card")
+    assert victim.exists()

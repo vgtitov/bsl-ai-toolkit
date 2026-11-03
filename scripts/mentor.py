@@ -32,7 +32,15 @@ for _s in (sys.stdout, sys.stderr):
 
 MODES = ("off", "ask", "on")
 COOLDOWN_DAYS = 14  # не чаще одного предложения за этот срок (и не больше одного за сессию)
-SKILL_DIR = ".claude/skills/ai-mentor"
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def skill_dir() -> str:
+    """Где лежит скилл относительно корня: установленный (.claude) или исходный (core)."""
+    for d in (".claude/skills/ai-mentor", "core/skills/ai-mentor"):
+        if (ROOT / d / "SKILL.md").is_file():
+            return d
+    return ".claude/skills/ai-mentor"
 
 
 def state_path() -> Path:
@@ -86,19 +94,27 @@ def locked():
     lock = state_path().with_name(state_path().name + ".lock")
     lock.parent.mkdir(parents=True, exist_ok=True)
     end = time.time() + 5
+    owned = True
     while True:
         try:
             os.close(os.open(lock, os.O_CREAT | os.O_EXCL))
             break
         except FileExistsError:
-            if time.time() > end:  # хозяин блокировки умер: снимаем и идём дальше
-                lock.unlink(missing_ok=True)
+            try:  # блокировка старше минуты: хозяин умер, снимаем
+                if time.time() - lock.stat().st_mtime > 60:
+                    lock.unlink(missing_ok=True)
+                    continue
+            except FileNotFoundError:
                 continue
+            if time.time() > end:  # хозяин жив, но долго: работаем без блокировки, чужую не трогаем
+                owned = False
+                break
             time.sleep(0.05)
     try:
         yield
     finally:
-        lock.unlink(missing_ok=True)
+        if owned:
+            lock.unlink(missing_ok=True)
 
 
 def _d(v):
@@ -132,14 +148,16 @@ def can_offer_api(s: dict, today: date | None = None) -> tuple[bool, str]:
 
 def hook_line(s: dict, today: date | None = None) -> str:
     if s["mode"] == "on":
-        return f"ai-mentor on: read {SKILL_DIR}/SKILL.md"
+        return f"ai-mentor on: read {skill_dir()}/SKILL.md"
     if can_offer(s, today)[0]:
-        return f"mentor ask, weak prompt or pasted Jira text: {SKILL_DIR}/OFFER.md"
+        return f"mentor ask, weak prompt or pasted Jira text: {skill_dir()}/OFFER.md"
     return ""
 
 
 def card_file(s: dict) -> Path:
-    return Path(s["level_card"]) if s.get("level_card") else card_path()
+    p = Path(s["level_card"]) if s.get("level_card") else card_path()
+    # путь из файла состояния не доверяем: удаляем и показываем только файл, похожий на карточку
+    return p if p.suffix == ".md" and "ai-mentor-card" in p.name else card_path()
 
 
 def mark_offered(s: dict, today: date | None = None) -> dict:
