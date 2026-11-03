@@ -19,6 +19,8 @@ import json
 import os
 import sys
 import tempfile
+import time
+from contextlib import contextmanager
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -43,7 +45,7 @@ def card_path() -> Path:
 
 def default_state() -> dict:
     return {"mode": "ask", "declined_at": None, "remind_after": None, "offers_made": 0,
-            "last_offer": None, "api_remind_after": None, "level_card": str(card_path()), "updated": None}
+            "last_offer": None, "api_remind_after": None, "api_declined_at": None, "level_card": str(card_path()), "updated": None}
 
 
 def load() -> dict:
@@ -55,7 +57,7 @@ def load() -> dict:
         if not isinstance(d, dict):
             raise ValueError
         s.update({k: d[k] for k in s if k in d})
-        for k in ("declined_at", "remind_after", "last_offer", "api_remind_after"):
+        for k in ("declined_at", "remind_after", "last_offer", "api_remind_after", "api_declined_at"):
             if s[k] is not None:
                 date.fromisoformat(s[k])  # TypeError/ValueError на неверном типе или формате
         if type(s["offers_made"]) is not int or not isinstance(s["level_card"], str):
@@ -76,6 +78,27 @@ def save(s: dict) -> None:
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(json.dumps(s, ensure_ascii=False, indent=2) + "\n")
     os.replace(tmp, p)
+
+
+@contextmanager
+def locked():
+    """Блокировка на цикл чтение-изменение-запись, чтобы два агента не затёрли отказ друг друга."""
+    lock = state_path().with_name(state_path().name + ".lock")
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    end = time.time() + 5
+    while True:
+        try:
+            os.close(os.open(lock, os.O_CREAT | os.O_EXCL))
+            break
+        except FileExistsError:
+            if time.time() > end:  # хозяин блокировки умер: снимаем и идём дальше
+                lock.unlink(missing_ok=True)
+                continue
+            time.sleep(0.05)
+    try:
+        yield
+    finally:
+        lock.unlink(missing_ok=True)
 
 
 def _d(v):
@@ -99,8 +122,8 @@ def can_offer(s: dict, today: date | None = None) -> tuple[bool, str]:
 
 def can_offer_api(s: dict, today: date | None = None) -> tuple[bool, str]:
     """Предложение подключить Jira и Confluence по API: отдельный срок, работает и в режиме on."""
-    if s["mode"] == "off":
-        return False, "режим off"
+    if s["mode"] == "off" or s["api_declined_at"]:
+        return False, "режим off или отказ от API"
     ra = _d(s["api_remind_after"])
     if ra and (today or date.today()) < ra:
         return False, f"про API спрашивали, не раньше {ra}"
@@ -129,6 +152,8 @@ def mark_offered(s: dict, today: date | None = None) -> dict:
 
 def cmd_answer(s: dict, ans: str, days: int, today: date | None = None) -> dict:
     today = today or date.today()
+    if s["mode"] == "off":  # запоздавший ответ не отменяет отказ; включает только set on
+        return s
     if s["last_offer"] != today.isoformat():  # предложение уже записано командой offered
         mark_offered(s, today)
     if ans == "yes":
@@ -155,6 +180,7 @@ def main(argv=None) -> int:
     sub.add_parser("can-offer")
     sub.add_parser("offered")
     sub.add_parser("can-offer-api")
+    sub.add_parser("api-declined")
     p = sub.add_parser("api-asked"); p.add_argument("--days", type=days_arg, default=30)
     sub.add_parser("hook")
     p = sub.add_parser("set"); p.add_argument("mode", choices=MODES)
@@ -163,7 +189,16 @@ def main(argv=None) -> int:
     p = sub.add_parser("reset"); p.add_argument("--card", action="store_true")
     a = ap.parse_args(argv)
 
-    s = load()
+    if a.cmd in WRITE:
+        with locked():
+            return run_cmd(a, load())
+    return run_cmd(a, load())
+
+
+WRITE = ("set", "answer", "offered", "api-asked", "api-declined", "reset")
+
+
+def run_cmd(a, s) -> int:
     if a.cmd == "hook":  # хук не должен ломать сессию
         try:
             line = hook_line(s)
@@ -191,6 +226,10 @@ def main(argv=None) -> int:
         s["api_remind_after"] = (date.today() + timedelta(days=a.days)).isoformat()
         save(s)
         print(f"про API не спрашивать до {s['api_remind_after']}")
+    elif a.cmd == "api-declined":
+        s["api_declined_at"] = date.today().isoformat()
+        save(s)
+        print("про API больше не спрашивать")
     elif a.cmd == "offered":
         save(mark_offered(s))
         print("предложение записано")

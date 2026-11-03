@@ -146,3 +146,24 @@ def test_days_range_and_new_state_dir(st, tmp_path, monkeypatch):
     monkeypatch.setenv("AI_MENTOR_STATE", str(tmp_path / "new" / "dir" / "s.json"))
     run("set", "on")
     assert (tmp_path / "new" / "dir" / "s.json").exists()
+
+
+def test_late_answer_does_not_revive_after_no(st):
+    run("answer", "no"); run("answer", "yes"); run("answer", "later")
+    assert mentor.load()["mode"] == "off"
+
+
+def test_api_decline_is_permanent(st):
+    run("api-declined")
+    s = mentor.load()
+    assert not mentor.can_offer_api(s, date.today() + timedelta(days=400))[0]
+
+
+def test_parallel_writers_keep_refusal(st):
+    import threading
+    def w(a):
+        for _ in range(10):
+            run(*a)
+    ts = [threading.Thread(target=w, args=(("offered",),)), threading.Thread(target=w, args=(("api-asked",),))]
+    [t.start() for t in ts]; run("answer", "no"); [t.join() for t in ts]
+    assert mentor.load()["mode"] == "off"
