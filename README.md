@@ -169,6 +169,7 @@ Toolkit — не только про код: смежные системы SDLC/
 | **Jira** | чтение задач, поиск по JQL, комментарии | `scripts/atlassian.py jira issue/search` (токен read-only) |
 | **Confluence** | чтение страниц/дерева, поиск, **публикация** `md → страница` | `scripts/atlassian.py conf page/tree/search/publish` |
 | **Zabbix** | APDEX → trapper-items (`1c.apdex[...]`), метрики/проблемы/дашборды, perf-отчёт и diff | `scripts/apdex_to_zabbix.py`, `scripts/zabbix_perf.py`, MCP `onec-ops` (Zabbix API) |
+| **Kafka / Schema Registry** | версии схемы топика и что менялось; одно сообщение (байты или запись AKHQ) против схемы записи и схемы потребителя: прочтёт верно / упадёт / молча исказит | `scripts/kafka_msg.py schemas/check/fetch` |
 | **Prometheus** | запрос метрик 1С/кластера (PromQL) | MCP `onec-ops` (`prometheus_query`) |
 | **Технологический журнал / ЖР** | разбор ТЖ (TTIMEOUT/TLOCK/EXCP…), журнал регистрации, APDEX по операциям | MCP `onec-ops` (`tech_journal_parse`, `event_log_parse`, `apdex_by_operation`) |
 | **BSL Language Server** | батч-диагностики после правки (`bsl-ls`) + (≥1.0, JDK 21+) навигация по коду и типам одного файла: `hover`, `definition`, `find_references`, `call_hierarchy`, `document_symbols`, `analyze_file`, `type_at_position`, `type_info`, `global_member_info`, `global_member_search` (`bsl-ls-native`) | MCP `bsl-ls` + `bsl-ls-native` (в комплекте) + авто-скачивание `scripts/detect_tools.py` |
