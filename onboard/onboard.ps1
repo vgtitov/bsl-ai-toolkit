@@ -138,6 +138,10 @@ if (-not $NoCopilot) {
   catch { Warn "copilot_setup с ошибкой (не критично)" }
 }
 
+Say "Наставник по работе с ИИ (один вопрос, по умолчанию выключен)"
+$mn = Join-Path $TeamDir 'scripts\mentor.py'
+try { if (Get-Command uv -ErrorAction SilentlyContinue) { uv run $mn onboarding } else { python $mn onboarding } } catch { }
+
 Say "Готово. Ручные шаги"
 @"
 [ ] Проставь версии под свою конфигурацию в core/skills/1c-dev/references/conventions-template.md (общие правила — в core/AGENTS.md).

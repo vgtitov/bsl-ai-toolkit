@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- Вопрос про наставника (`python scripts/mentor.py onboarding`) в `onboard/onboard.*` и `scripts/update.*`: при первой установке и при обновлении до версии с наставником, один раз на человека, по умолчанию «нет»; из терминала отвечает человек, при запуске агентом вопрос задаёт агент.
 - Наставник по умолчанию выключен: нет файла означает `off`, включает только `/ai-mentor on` или `ask` либо «да» на вопрос при установке (`docs/AGENT_SETUP.md`, шаг 6). Запись состояния получила поле `schema`; файл другого формата читается как `off`, обновление набора выбор не меняет и наставника не включает.
 - `sh build.sh agents` (`build.ps1 agents`): скиллы набора в `.agents/skills` для Codex; у `ai-mentor` файл `agents/openai.yaml` отключает неявное подключение.
 - ai-mentor v2: режим `off` | `ask` | `on` в личном файле `~/.ai-mentor.json` (`scripts/mentor.py`, хук SessionStart). Скилл не попадает в контекст (`disable-model-invocation`), в `off` хук молчит, в `ask` одна короткая строка. Правила предложения и подключения Jira и Confluence по API в `OFFER.md`, блок правил для агентов без скиллов в `core/mentor/agent-rules.md`, замеры и сценарии в `docs/mentor/modes.md` и `modes-check.md`.
