@@ -13,11 +13,13 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import mentor  # noqa: E402
 
 
-@pytest.fixture
-def st(tmp_path, monkeypatch):
+def _st(tmp_path, monkeypatch):
     monkeypatch.setenv("AI_MENTOR_STATE", str(tmp_path / "s.json"))
     monkeypatch.setenv("AI_MENTOR_CARD", str(tmp_path / "card.md"))
     return tmp_path / "s.json"
+
+
+st = pytest.fixture(_st)
 
 
 def run(*a):
