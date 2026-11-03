@@ -87,7 +87,7 @@ def hook_line(s: dict, today: date | None = None) -> str:
     if s["mode"] == "on":
         return f"ai-mentor on: read {SKILL_DIR}/SKILL.md"
     if can_offer(s, today)[0]:
-        return f"mentor ask: {SKILL_DIR}/OFFER.md"
+        return f"mentor ask, weak prompt or pasted Jira text: {SKILL_DIR}/OFFER.md"
     return ""
 
 
