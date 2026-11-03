@@ -27,7 +27,7 @@ def run(*a):
 def test_default_is_ask_and_hook_prints_one_line(st, capsys):
     run("hook")
     out = capsys.readouterr().out.strip()
-    assert out.startswith("ai-mentor ask") and "\n" not in out
+    assert out.startswith("mentor ask") and "\n" not in out
 
 
 def test_yes_sets_on_and_hook_points_to_skill(st, capsys):
