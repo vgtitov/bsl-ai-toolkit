@@ -68,6 +68,9 @@ cp -r <src> <src>_before               # эталон для verify
     --field X --data-path X --title "..."
 1c-meta scd get-query|set-query ... --from-file q.sql
 1c-meta attr add <Объект.xml> --name X --type xs:string --synonym "..."
+1c-meta form set-style <Form.form|Form.xml> --item <Элемент|.> \
+    --set backColor=style:<ЦветСтиля> --set font=style:<ШрифтСтиля>   # оформление в свойствах формы
+1c-meta form lint <Form.form|Form.xml> [--langs ru,en]              # языки, токены стиля, панель
 # затем python: onec_metadata.apply — upload_tree → load_extension →
 # dump_extension → fetch_tree → roundtrip_verify(before, after, {целевые файлы})
 ```

@@ -1,0 +1,1222 @@
+{
+ "Form": [
+  "title",
+  "items",
+  "commandBarLocation",
+  "autoCommandBar",
+  "handlers",
+  "excludedCommands",
+  "width",
+  "height",
+  "windowOpeningMode",
+  "autoSaveDataInSettings",
+  "enterKeyBehavior",
+  "saveDataInSettings",
+  "saveWindowSettings",
+  "autoTitle",
+  "settingsStorage",
+  "autoUrl",
+  "group",
+  "childItemsWidth",
+  "horizontalAlign",
+  "horizontalSpacing",
+  "verticalAlign",
+  "verticalSpacing",
+  "autoFillCheck",
+  "allowFormCustomize",
+  "enabled",
+  "scale",
+  "verticalScroll",
+  "scalingMode",
+  "showTitle",
+  "showCloseButton",
+  "collapseItemsByImportanceVariant",
+  "conversationsRepresentation",
+  "mobileDeviceCommandBarContent",
+  "attributes",
+  "formCommands",
+  "parameters",
+  "commandInterface",
+  "extInfo"
+ ],
+ "action[form:FormCommandHandlerContainer]": [
+  "handler"
+ ],
+ "additionalColumns": [
+  "tablePath",
+  "columns"
+ ],
+ "associatedTableElementId[core:StringValue]": [
+  "value"
+ ],
+ "attributes": [
+  "name",
+  "title",
+  "id",
+  "valueType",
+  "view",
+  "edit",
+  "fillChecking",
+  "functionalOptions",
+  "notDefaultUseAlwaysAttributes",
+  "settingsSavedData",
+  "main",
+  "savedData",
+  "columns",
+  "extInfo",
+  "additionalColumns"
+ ],
+ "autoCommandBar": [
+  "name",
+  "id",
+  "items",
+  "horizontalAlign",
+  "autoFill"
+ ],
+ "autoTable": [
+  "name",
+  "id",
+  "visible",
+  "enabled",
+  "userVisible",
+  "titleLocation",
+  "autoCommandBar",
+  "searchStringAddition",
+  "viewStatusAddition",
+  "searchControlAddition",
+  "extendedTooltip",
+  "contextMenu",
+  "representation",
+  "changeRowSet",
+  "changeRowOrder",
+  "autoMaxWidth",
+  "height",
+  "autoMaxHeight",
+  "autoMaxRowsCount",
+  "selectionMode",
+  "header",
+  "headerHeight",
+  "footerHeight",
+  "horizontalScrollBar",
+  "verticalScrollBar",
+  "horizontalLines",
+  "verticalLines",
+  "searchOnInput",
+  "initialListView",
+  "horizontalStretch",
+  "verticalStretch",
+  "fileDragMode"
+ ],
+ "availableTypes": [
+  "types",
+  "stringQualifiers"
+ ],
+ "backColor[core:ColorDef]": [
+  "red",
+  "green",
+  "blue"
+ ],
+ "backColor[core:ColorRef]": [
+  "color"
+ ],
+ "borderColor[core:ColorDef]": [
+  "red",
+  "green",
+  "blue"
+ ],
+ "borderColor[core:ColorRef]": [
+  "color"
+ ],
+ "border[core:BorderDef]": [
+  "style",
+  "width"
+ ],
+ "calculatedFields": [
+  "dataPath",
+  "expression",
+  "title",
+  "useRestriction"
+ ],
+ "choiceButtonPicture[core:PictureRef]": [
+  "picture"
+ ],
+ "choiceList": [
+  "presentation",
+  "value"
+ ],
+ "choiceParameterLinks": [
+  "name",
+  "changeMode",
+  "datapath"
+ ],
+ "choiceParameters": [
+  "name",
+  "value"
+ ],
+ "cmiFragmentRecord": [
+  "command",
+  "type",
+  "commandParameter",
+  "group",
+  "index",
+  "userVisible"
+ ],
+ "collapsedRepresentationTitle": [
+  "key",
+  "value"
+ ],
+ "columns": [
+  "name",
+  "title",
+  "id",
+  "valueType",
+  "view",
+  "edit",
+  "functionalOptions"
+ ],
+ "commandBar": [
+  "cmiFragmentRecord"
+ ],
+ "commandInterface": [
+  "navigationPanel",
+  "commandBar"
+ ],
+ "commandParameter[form:DataPath]": [
+  "segments"
+ ],
+ "content": [
+  "key",
+  "value"
+ ],
+ "contextMenu": [
+  "name",
+  "id",
+  "items",
+  "autoFill"
+ ],
+ "dataPath[form:DataPath]": [
+  "segments"
+ ],
+ "datapath[form:DataPath]": [
+  "segments"
+ ],
+ "dateQualifiers": [
+  "dateFractions"
+ ],
+ "edit": [
+  "common",
+  "for"
+ ],
+ "editFormat": [
+  "key",
+  "value"
+ ],
+ "extInfo[form:BusinessProcesFormExtInfo]": [
+  "handlers"
+ ],
+ "extInfo[form:ButtonGroupExtInfo]": [
+  "commandSource",
+  "representation"
+ ],
+ "extInfo[form:CalendarFieldExtInfo]": [
+  "handlers",
+  "width",
+  "autoMaxWidth",
+  "height",
+  "autoMaxHeight",
+  "horizontalStretch",
+  "verticalStretch",
+  "showCurrentDate",
+  "calendarNavigation",
+  "beginOfRepresentationPeriod",
+  "border",
+  "showMonthsPanel",
+  "widthInMonths",
+  "heightInMonths"
+ ],
+ "extInfo[form:CatalogFormExtInfo]": [
+  "handlers",
+  "useForFoldersAndItems"
+ ],
+ "extInfo[form:ChartFieldExtInfo]": [
+  "handlers",
+  "width",
+  "autoMaxWidth",
+  "height",
+  "autoMaxHeight",
+  "horizontalStretch",
+  "verticalStretch"
+ ],
+ "extInfo[form:ChartOfCharacteristicTypesFormExtInfo]": [
+  "handlers",
+  "useForFoldersAndItems"
+ ],
+ "extInfo[form:CheckBoxFieldExtInfo]": [
+  "checkBoxType",
+  "threeState",
+  "editFormat",
+  "equalElementsWidth"
+ ],
+ "extInfo[form:ColumnGroupExtInfo]": [
+  "group",
+  "showTitle",
+  "showInHeader",
+  "headerHorizontalAlign",
+  "headerPicture",
+  "fixingInTable"
+ ],
+ "extInfo[form:CommandBarExtInfo]": [
+  "horizontalAlign",
+  "commandSource"
+ ],
+ "extInfo[form:ConstantsFormExtInfo]": [
+  "handlers"
+ ],
+ "extInfo[form:DocumentFormExtInfo]": [
+  "handlers",
+  "autoTime",
+  "usePostingMode",
+  "repostOnWrite"
+ ],
+ "extInfo[form:DynamicListExtInfo]": [
+  "queryText",
+  "mainTable",
+  "dynamicDataRead",
+  "autoFillAvailableFields",
+  "customQuery",
+  "autoSaveUserSettings",
+  "getInvisibleFieldPresentations",
+  "calculatedFields",
+  "fields",
+  "keyType",
+  "parameters",
+  "keyField"
+ ],
+ "extInfo[form:DynamicListTableExtInfo]": [
+  "handlers",
+  "autoRefresh",
+  "autoRefreshPeriod",
+  "period",
+  "choiceFoldersAndItems",
+  "restoreCurrentRow",
+  "topLevelParent",
+  "showRoot",
+  "allowRootChoice",
+  "allowGettingCurrentRowURL",
+  "updateOnDataChange",
+  "userSettingsGroup"
+ ],
+ "extInfo[form:FlowchartFieldExtInfo]": [
+  "handlers",
+  "width",
+  "autoMaxWidth",
+  "height",
+  "autoMaxHeight",
+  "horizontalStretch",
+  "verticalStretch"
+ ],
+ "extInfo[form:FormattedDocFieldExtInfo]": [
+  "width",
+  "autoMaxWidth",
+  "height",
+  "autoMaxHeight",
+  "horizontalStretch",
+  "verticalStretch",
+  "borderColor"
+ ],
+ "extInfo[form:GanttChartFieldExtInfo]": [
+  "handlers",
+  "autoTable",
+  "width",
+  "autoMaxWidth",
+  "height",
+  "autoMaxHeight",
+  "horizontalStretch",
+  "verticalStretch"
+ ],
+ "extInfo[form:HtmlFieldExtInfo]": [
+  "handlers",
+  "width",
+  "autoMaxWidth",
+  "maxWidth",
+  "height",
+  "autoMaxHeight",
+  "maxHeight",
+  "horizontalStretch",
+  "verticalStretch",
+  "borderColor",
+  "output"
+ ],
+ "extInfo[form:ImageFieldExtInfo]": [
+  "handlers",
+  "width",
+  "autoMaxWidth",
+  "maxWidth",
+  "height",
+  "autoMaxHeight",
+  "maxHeight",
+  "zoomable",
+  "horizontalStretch",
+  "verticalStretch",
+  "pictureSize",
+  "hyperlink",
+  "borderColor",
+  "nonselectedPictureText",
+  "textColor",
+  "valuesPicture",
+  "border",
+  "font",
+  "fileDragMode"
+ ],
+ "extInfo[form:InformationRegisterManagerFormExtInfo]": [
+  "handlers"
+ ],
+ "extInfo[form:InputFieldExtInfo]": [
+  "handlers",
+  "width",
+  "autoMaxWidth",
+  "maxWidth",
+  "height",
+  "autoMaxHeight",
+  "maxHeight",
+  "horizontalStretch",
+  "verticalStretch",
+  "wrap",
+  "passwordMode",
+  "multiLine",
+  "extendedEdit",
+  "extendedEditMultipleValues",
+  "choiceListButton",
+  "markNegatives",
+  "dropListButton",
+  "choiceButton",
+  "choiceButtonRepresentation",
+  "mask",
+  "choiceButtonPicture",
+  "clearButton",
+  "spinButton",
+  "openButton",
+  "autoChoiceIncomplete",
+  "createButton",
+  "quickChoice",
+  "choiceFoldersAndItems",
+  "format",
+  "editFormat",
+  "listChoiceMode",
+  "choiceListHeight",
+  "autoMarkIncomplete",
+  "chooseType",
+  "incompleteChoiceMode",
+  "typeDomainEnabled",
+  "textEdit",
+  "autoShowOpenButtonMode",
+  "availableTypes",
+  "choiceForm",
+  "editTextUpdate",
+  "minValue",
+  "choiceParameterLinks",
+  "maxValue",
+  "choiceParameters",
+  "typeLink",
+  "choiceList",
+  "autoCorrectionOnTextInput",
+  "textColor",
+  "backColor",
+  "borderColor",
+  "font",
+  "heightControlVariant",
+  "specialTextInputMode",
+  "inputHint",
+  "choiceHistoryOnInput",
+  "dropListWidth"
+ ],
+ "extInfo[form:LabelDecorationExtInfo]": [
+  "handlers",
+  "hyperlink",
+  "horizontalAlign",
+  "verticalAlign",
+  "backColor",
+  "borderColor",
+  "titleHeight",
+  "border"
+ ],
+ "extInfo[form:LabelFieldExtInfo]": [
+  "handlers",
+  "width",
+  "autoMaxWidth",
+  "maxWidth",
+  "height",
+  "autoMaxHeight",
+  "maxHeight",
+  "horizontalStretch",
+  "markNegatives",
+  "verticalStretch",
+  "border",
+  "format",
+  "borderColor",
+  "hyperlink",
+  "passwordMode",
+  "textColor",
+  "backColor",
+  "font"
+ ],
+ "extInfo[form:ObjectFormExtInfo]": [
+  "handlers"
+ ],
+ "extInfo[form:PDFDocumentFieldExtInfo]": [
+  "viewStatusAddition",
+  "width",
+  "autoMaxWidth",
+  "height",
+  "autoMaxHeight",
+  "horizontalStretch",
+  "verticalStretch",
+  "scale",
+  "currentPageNumber"
+ ],
+ "extInfo[form:PageGroupExtInfo]": [
+  "picture",
+  "group",
+  "format",
+  "horizontalSpacing",
+  "slaveItemsWidth",
+  "verticalSpacing",
+  "horizontalAlign",
+  "verticalAlign",
+  "showTitle",
+  "backColor",
+  "titleDataPath",
+  "scrollOnCompress"
+ ],
+ "extInfo[form:PagesGroupExtInfo]": [
+  "handlers",
+  "pagesRepresentation",
+  "currentRowUse"
+ ],
+ "extInfo[form:PictureDecorationExtInfo]": [
+  "handlers",
+  "picture",
+  "hyperlink",
+  "border",
+  "nonselectedPictureText",
+  "pictureSize",
+  "borderColor",
+  "imageScale",
+  "zoomable",
+  "fileDragMode"
+ ],
+ "extInfo[form:PlannerFieldExtInfo]": [
+  "handlers",
+  "width",
+  "autoMaxWidth",
+  "height",
+  "autoMaxHeight",
+  "horizontalStretch",
+  "verticalStretch"
+ ],
+ "extInfo[form:PopupGroupExtInfo]": [
+  "picture",
+  "representation",
+  "backColor",
+  "commandSource"
+ ],
+ "extInfo[form:ProgressBarFieldExtInfo]": [
+  "width",
+  "autoMaxWidth",
+  "height",
+  "autoMaxHeight",
+  "horizontalStretch",
+  "maxValue",
+  "showPercent"
+ ],
+ "extInfo[form:RadioButtonsFieldExtInfo]": [
+  "radioButtonsType",
+  "itemTitleHeight",
+  "itemHeight",
+  "itemWidth",
+  "columnsCount",
+  "equalElementsWidth",
+  "choiceList",
+  "font",
+  "textColor"
+ ],
+ "extInfo[form:RecordSetFormExtInfo]": [
+  "handlers"
+ ],
+ "extInfo[form:ReportFormExtInfo]": [
+  "handlers",
+  "settingsForm",
+  "showState",
+  "reportResult",
+  "detailsInformation",
+  "currentVariantPresentationField",
+  "userSettingsGroup"
+ ],
+ "extInfo[form:SearchControlAdditionExtInfo]": [
+  "autoMaxWidth"
+ ],
+ "extInfo[form:SearchStringAdditionExtInfo]": [
+  "width",
+  "maxWidth",
+  "autoMaxWidth",
+  "horizontalStretch"
+ ],
+ "extInfo[form:SpreadSheetDocFieldExtInfo]": [
+  "handlers",
+  "width",
+  "autoMaxWidth",
+  "maxWidth",
+  "height",
+  "autoMaxHeight",
+  "maxHeight",
+  "horizontalStretch",
+  "verticalStretch",
+  "showGrid",
+  "showHeaders",
+  "showCellNames",
+  "showRowAndColumnNames",
+  "pointerType",
+  "verticalScrollBar",
+  "horizontalScrollBar",
+  "protection",
+  "selectionShowMode",
+  "drawingSelectionShowMode",
+  "edit",
+  "output",
+  "showGroups",
+  "enableStartDrag",
+  "enableDrag",
+  "borderColor"
+ ],
+ "extInfo[form:TaskFormExtInfo]": [
+  "handlers"
+ ],
+ "extInfo[form:TextDocFieldExtInfo]": [
+  "width",
+  "autoMaxWidth",
+  "maxWidth",
+  "height",
+  "autoMaxHeight",
+  "horizontalStretch",
+  "verticalStretch"
+ ],
+ "extInfo[form:TrackBarFieldExtInfo]": [
+  "width",
+  "autoMaxWidth",
+  "height",
+  "autoMaxHeight",
+  "horizontalStretch",
+  "minValue",
+  "maxValue",
+  "step",
+  "largeStep",
+  "markingStep",
+  "markingAppearance"
+ ],
+ "extInfo[form:UsualGroupExtInfo]": [
+  "group",
+  "childrenAlign",
+  "horizontalSpacing",
+  "verticalSpacing",
+  "horizontalAlign",
+  "verticalAlign",
+  "behavior",
+  "collapsedRepresentationTitle",
+  "collapsed",
+  "controlRepresentation",
+  "representation",
+  "showLeftMargin",
+  "united",
+  "format",
+  "slaveItemsWidth",
+  "showTitle",
+  "backColor",
+  "titleDataPath",
+  "throughAlign",
+  "currentRowUse"
+ ],
+ "extInfo[form:ValueListExtInfo]": [
+  "itemValueType"
+ ],
+ "extInfo[form:ViewStatusAdditionExtInfo]": [
+  "autoMaxWidth",
+  "horizontalLocation"
+ ],
+ "extendedTooltip": [
+  "name",
+  "id",
+  "title",
+  "formatted",
+  "type",
+  "width",
+  "autoMaxWidth",
+  "height",
+  "maxWidth",
+  "autoMaxHeight",
+  "horizontalStretch",
+  "groupHorizontalAlign",
+  "textColor",
+  "verticalStretch",
+  "groupVerticalAlign",
+  "font",
+  "extInfo"
+ ],
+ "fields[schema:DataCompositionSchemaDataSetField]": [
+  "dataPath",
+  "field",
+  "presentationExpression",
+  "title"
+ ],
+ "font[core:FontDef]": [
+  "faceName",
+  "height",
+  "bold",
+  "italic"
+ ],
+ "font[core:FontRef]": [
+  "font",
+  "faceName",
+  "height",
+  "bold",
+  "italic",
+  "underline",
+  "strikeout",
+  "scale"
+ ],
+ "footerBackColor[core:ColorDef]": [
+  "red",
+  "green",
+  "blue"
+ ],
+ "footerDataPath[form:DataPath]": [
+  "segments"
+ ],
+ "footerFont[core:FontRef]": [
+  "font",
+  "faceName",
+  "height",
+  "bold",
+  "italic",
+  "underline",
+  "strikeout",
+  "scale"
+ ],
+ "footerPicture[core:PictureRef]": [
+  "picture"
+ ],
+ "footerText": [
+  "key",
+  "value"
+ ],
+ "footerTextColor[core:ColorRef]": [
+  "color"
+ ],
+ "for": [
+  "value",
+  "role"
+ ],
+ "formCommands": [
+  "name",
+  "title",
+  "id",
+  "toolTip",
+  "use",
+  "shortcut",
+  "picture",
+  "action",
+  "functionalOptions",
+  "representation",
+  "modifiesStoredData",
+  "currentRowUse",
+  "associatedTableElementId"
+ ],
+ "format": [
+  "key",
+  "value"
+ ],
+ "handler": [
+  "name"
+ ],
+ "handlers": [
+  "event",
+  "name"
+ ],
+ "handlers[form:EventHandlerExtension]": [
+  "event",
+  "name",
+  "callType"
+ ],
+ "headerPicture[core:PictureRef]": [
+  "picture"
+ ],
+ "inputHint": [
+  "key",
+  "value"
+ ],
+ "itemValueType": [
+  "types",
+  "numberQualifiers",
+  "stringQualifiers"
+ ],
+ "items[form:Addition]": [
+  "title",
+  "visible",
+  "enabled",
+  "userVisible",
+  "name",
+  "id",
+  "extendedTooltip",
+  "contextMenu",
+  "type",
+  "source",
+  "groupHorizontalAlign",
+  "extInfo"
+ ],
+ "items[form:Button]": [
+  "name",
+  "id",
+  "displayImportance",
+  "title",
+  "visible",
+  "enabled",
+  "userVisible",
+  "dataPath",
+  "defaultItem",
+  "skipOnInput",
+  "titleHeight",
+  "extendedTooltip",
+  "type",
+  "commandName",
+  "parameter",
+  "representation",
+  "defaultButton",
+  "width",
+  "autoMaxWidth",
+  "maxWidth",
+  "height",
+  "autoMaxHeight",
+  "horizontalStretch",
+  "maxHeight",
+  "verticalStretch",
+  "groupHorizontalAlign",
+  "groupVerticalAlign",
+  "placementArea",
+  "check",
+  "textColor",
+  "backColor",
+  "borderColor",
+  "font",
+  "picture",
+  "toolTipRepresentation",
+  "representationInContextMenu",
+  "shape",
+  "shapeRepresentation",
+  "pictureLocation",
+  "locationInCommandBar"
+ ],
+ "items[form:Decoration]": [
+  "name",
+  "id",
+  "displayImportance",
+  "title",
+  "visible",
+  "enabled",
+  "userVisible",
+  "toolTip",
+  "toolTipRepresentation",
+  "extendedTooltip",
+  "contextMenu",
+  "formatted",
+  "type",
+  "width",
+  "autoMaxWidth",
+  "maxWidth",
+  "height",
+  "autoMaxHeight",
+  "maxHeight",
+  "horizontalStretch",
+  "verticalStretch",
+  "skipOnInput",
+  "textColor",
+  "font",
+  "groupHorizontalAlign",
+  "groupVerticalAlign",
+  "extInfo"
+ ],
+ "items[form:FormField]": [
+  "name",
+  "id",
+  "displayImportance",
+  "title",
+  "titleTextColor",
+  "titleFont",
+  "visible",
+  "enabled",
+  "userVisible",
+  "dataPath",
+  "defaultItem",
+  "titleBackColor",
+  "skipOnInput",
+  "titleLocation",
+  "excludedCommands",
+  "shortcut",
+  "titleHeight",
+  "toolTip",
+  "toolTipRepresentation",
+  "handlers",
+  "extendedTooltip",
+  "contextMenu",
+  "type",
+  "readOnly",
+  "warningOnEditRepresentation",
+  "horizontalAlign",
+  "warningOnEdit",
+  "verticalAlign",
+  "groupHorizontalAlign",
+  "groupVerticalAlign",
+  "editMode",
+  "fixingInTable",
+  "cellHyperlink",
+  "autoCellHeight",
+  "showInHeader",
+  "headerPicture",
+  "headerHorizontalAlign",
+  "showInFooter",
+  "footerDataPath",
+  "footerPicture",
+  "footerTextColor",
+  "footerHorizontalAlign",
+  "footerText",
+  "footerBackColor",
+  "footerFont",
+  "extInfo"
+ ],
+ "items[form:FormGroup]": [
+  "name",
+  "id",
+  "displayImportance",
+  "items",
+  "visible",
+  "enabled",
+  "userVisible",
+  "title",
+  "titleTextColor",
+  "titleFont",
+  "toolTip",
+  "toolTipRepresentation",
+  "readOnly",
+  "enableContentChange",
+  "shortcut",
+  "width",
+  "height",
+  "horizontalStretch",
+  "verticalStretch",
+  "groupHorizontalAlign",
+  "groupVerticalAlign",
+  "extendedTooltip",
+  "type",
+  "extInfo"
+ ],
+ "items[form:Table]": [
+  "name",
+  "id",
+  "displayImportance",
+  "title",
+  "titleTextColor",
+  "titleFont",
+  "visible",
+  "enabled",
+  "userVisible",
+  "dataPath",
+  "defaultItem",
+  "skipOnInput",
+  "titleLocation",
+  "shortcut",
+  "titleHeight",
+  "excludedCommands",
+  "toolTip",
+  "toolTipRepresentation",
+  "items",
+  "commandBarLocation",
+  "autoCommandBar",
+  "handlers",
+  "searchStringAddition",
+  "viewStatusAddition",
+  "searchControlAddition",
+  "extendedTooltip",
+  "contextMenu",
+  "representation",
+  "autoFill",
+  "readOnly",
+  "changeRowSet",
+  "changeRowOrder",
+  "width",
+  "autoMaxWidth",
+  "maxWidth",
+  "height",
+  "autoMaxHeight",
+  "maxHeight",
+  "heightInTableRows",
+  "heightControlVariant",
+  "autoMaxRowsCount",
+  "maxRowsCount",
+  "choiceMode",
+  "multipleChoice",
+  "rowInputMode",
+  "selectionMode",
+  "rowSelectionMode",
+  "header",
+  "headerHeight",
+  "footer",
+  "footerHeight",
+  "horizontalScrollBar",
+  "verticalScrollBar",
+  "horizontalLines",
+  "verticalLines",
+  "useAlternationRowColor",
+  "autoInsertNewRow",
+  "autoAddIncomplete",
+  "autoMarkIncomplete",
+  "searchOnInput",
+  "initialListView",
+  "initialTreeView",
+  "output",
+  "horizontalStretch",
+  "verticalStretch",
+  "enableStartDrag",
+  "enableDrag",
+  "fileDragMode",
+  "groupVerticalAlign",
+  "rowPictureDataPath",
+  "textColor",
+  "rowsPicture",
+  "backColor",
+  "borderColor",
+  "font",
+  "searchStringLocation",
+  "viewStatusLocation",
+  "searchControlLocation",
+  "currentRowUse",
+  "groupHorizontalAlign",
+  "refreshRequest",
+  "extInfo",
+  "viewMode",
+  "rowFilter",
+  "settingsNamedItemDetailedRepresentation"
+ ],
+ "localValue": [
+  "content"
+ ],
+ "maxValue[core:NumberValue]": [
+  "value"
+ ],
+ "minValue[core:NumberValue]": [
+  "value"
+ ],
+ "minValue[core:StringValue]": [
+  "value"
+ ],
+ "mobileDeviceCommandBarContent": [
+  "value"
+ ],
+ "navigationPanel": [
+  "cmiFragmentRecord"
+ ],
+ "nonselectedPictureText": [
+  "key",
+  "value"
+ ],
+ "notDefaultUseAlwaysAttributes[form:DataPath]": [
+  "segments"
+ ],
+ "numberQualifiers": [
+  "precision",
+  "scale",
+  "nonNegative"
+ ],
+ "parameter[core:ReferenceValue]": [
+  "value"
+ ],
+ "parameters": [
+  "name",
+  "title",
+  "valueType",
+  "keyParameter",
+  "values",
+  "useRestriction",
+  "valueListAllowed"
+ ],
+ "period": [
+  "startDate",
+  "endDate"
+ ],
+ "picture[core:PictureRef]": [
+  "picture"
+ ],
+ "picture[form:FormPicture]": [
+  "transparentPixel"
+ ],
+ "presentation": [
+  "key",
+  "value"
+ ],
+ "rowPictureDataPath[form:DataPath]": [
+  "segments"
+ ],
+ "rowsPicture[core:PictureRef]": [
+  "picture"
+ ],
+ "searchControlAddition": [
+  "enabled",
+  "title",
+  "name",
+  "id",
+  "extendedTooltip",
+  "contextMenu",
+  "type",
+  "source",
+  "extInfo"
+ ],
+ "searchStringAddition": [
+  "enabled",
+  "name",
+  "id",
+  "extendedTooltip",
+  "contextMenu",
+  "source",
+  "extInfo"
+ ],
+ "settingsSavedData[form:DataPath]": [
+  "segments"
+ ],
+ "stringQualifiers": [
+  "length",
+  "fixed"
+ ],
+ "tablePath[form:DataPath]": [
+  "segments"
+ ],
+ "textColor[core:ColorDef]": [
+  "red",
+  "green",
+  "blue"
+ ],
+ "textColor[core:ColorRef]": [
+  "color"
+ ],
+ "title": [
+  "key",
+  "localValue",
+  "value"
+ ],
+ "titleBackColor[core:ColorDef]": [
+  "red",
+  "green",
+  "blue"
+ ],
+ "titleBackColor[core:ColorRef]": [
+  "color"
+ ],
+ "titleDataPath[form:DataPath]": [
+  "segments"
+ ],
+ "titleFont[core:FontDef]": [
+  "height",
+  "bold"
+ ],
+ "titleFont[core:FontRef]": [
+  "font",
+  "faceName",
+  "height",
+  "bold",
+  "italic",
+  "underline",
+  "strikeout",
+  "scale"
+ ],
+ "titleTextColor[core:ColorDef]": [
+  "red",
+  "green",
+  "blue"
+ ],
+ "titleTextColor[core:ColorRef]": [
+  "color"
+ ],
+ "toolTip": [
+  "key",
+  "value"
+ ],
+ "transparentPixel": [
+  "x",
+  "y"
+ ],
+ "typeLink": [
+  "linkItem",
+  "datapath"
+ ],
+ "use": [
+  "common",
+  "for"
+ ],
+ "useRestriction": [
+  "condition",
+  "group",
+  "order"
+ ],
+ "userVisible": [
+  "common",
+  "for"
+ ],
+ "valueType": [
+  "types",
+  "numberQualifiers",
+  "stringQualifiers",
+  "dateQualifiers"
+ ],
+ "value[core:BooleanValue]": [
+  "value"
+ ],
+ "value[core:FixedArrayValue]": [
+  "values"
+ ],
+ "value[core:NumberValue]": [
+  "value"
+ ],
+ "value[core:ReferenceValue]": [
+  "value"
+ ],
+ "value[core:StringValue]": [
+  "value"
+ ],
+ "value[form:FormChoiceListDesTimeValue]": [
+  "value"
+ ],
+ "valuesPicture[core:PictureRef]": [
+  "picture"
+ ],
+ "valuesPicture[form:FormPicture]": [
+  "transparentPixel"
+ ],
+ "values[form:FormChoiceListDesTimeValue]": [
+  "value"
+ ],
+ "view": [
+  "common",
+  "for"
+ ],
+ "viewStatusAddition": [
+  "enabled",
+  "toolTipRepresentation",
+  "name",
+  "id",
+  "extendedTooltip",
+  "contextMenu",
+  "type",
+  "source",
+  "extInfo"
+ ],
+ "warningOnEdit": [
+  "key",
+  "value"
+ ]
+}
