@@ -138,9 +138,11 @@ if (-not $NoCopilot) {
   catch { Warn "copilot_setup с ошибкой (не критично)" }
 }
 
-Say "Наставник по работе с ИИ (один вопрос, по умолчанию выключен)"
-$mn = Join-Path $TeamDir 'scripts\mentor.py'
-try { if (Get-Command uv -ErrorAction SilentlyContinue) { uv run $mn onboarding } else { python $mn onboarding } } catch { }
+if ((Resolve-Path $WorkDir).Path -eq (Resolve-Path $TeamDir).Path) {
+  Say "Наставник по работе с ИИ (один вопрос, по умолчанию выключен)"
+  $mn = Join-Path $TeamDir 'scripts\mentor.py'
+  try { if (Get-Command uv -ErrorAction SilentlyContinue) { uv run $mn onboarding } else { python $mn onboarding } } catch { }
+} else { Warn "Наставник по работе с ИИ работает в папке набора ($TeamDir); включить там: /ai-mentor on" }
 
 Say "Готово. Ручные шаги"
 @"
