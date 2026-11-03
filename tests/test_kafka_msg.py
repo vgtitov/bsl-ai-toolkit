@@ -84,6 +84,27 @@ def test_plain_json_validation(tmp_path, capsys):
     assert km.cmd_check(FakeReg(), f, "Orders", "1") == 1
 
 
+def test_trailing_bytes_after_writer_schema_is_error(tmp_path, capsys):
+    f = tmp_path / "m.bin"
+    f.write_bytes(_wire(1, V1, {"id": "A1", "qty": 1}) + b"\x02\x02")
+    assert km.cmd_check(FakeReg(), f, "Orders", None) == 4
+
+
+def test_missing_required_nullable_field_fails_validation(tmp_path):
+    f = tmp_path / "v.json"
+    f.write_text(json.dumps({"id": "A1", "qty": 1}), encoding="utf-8")
+    reg = FakeReg()
+    reg.ids[5] = json.dumps({"type": "record", "name": "Order", "fields": V1["fields"] + [
+        {"name": "note", "type": ["null", "string"]}]})          # без default — поле обязательно
+    assert km.cmd_check(reg, f, "Orders", "id:5") == 1
+
+
+def test_reordered_fields_are_flagged():
+    swapped = {"type": "record", "name": "Order", "fields": [V1["fields"][1], V1["fields"][0]]}
+    d = km.schema_diff(json.dumps(V1), json.dumps(swapped))
+    assert any("порядок" in line and danger for line, danger in d)
+
+
 def test_schema_diff_flags_middle_insert_only():
     d = dict((line, danger) for line, danger in km.schema_diff(json.dumps(V1), json.dumps(V2)))
     assert any("note" in k and "середину" in k and v for k, v in d.items())

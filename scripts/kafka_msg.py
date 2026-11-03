@@ -63,10 +63,17 @@ class Registry:
 
     def version(self, topic, v):
         """{'id', 'version', 'schema'} версии (`latest` или номер)."""
-        return _get_json(f"{self.url}/subjects/{urllib.parse.quote(topic)}-value/versions/{v}")
+        return _no_refs(_get_json(f"{self.url}/subjects/{urllib.parse.quote(topic)}-value/versions/{v}"))
 
     def by_id(self, sid):
-        return _get_json(f"{self.url}/schemas/ids/{int(sid)}")["schema"]
+        return _no_refs(_get_json(f"{self.url}/schemas/ids/{int(sid)}"))["schema"]
+
+
+def _no_refs(info):
+    # shortcut: схемы со ссылками на другие схемы (references) не разбираем; понадобятся — грузить их рекурсивно
+    if info.get("references"):
+        raise SystemExit("схема ссылается на другие схемы (references) — kafka_msg такие пока не разбирает")
+    return info
 
 
 def parse_schema(text):
@@ -118,7 +125,11 @@ def to_avro_value(schema, v):
         return v
     t, lt = schema.get("type"), schema.get("logicalType")
     if t == "record":
-        return {f["name"]: to_avro_value(f["type"], (v or {}).get(f["name"], f.get("default")))
+        v = v or {}
+        missing = [f["name"] for f in schema["fields"] if f["name"] not in v and "default" not in f]
+        if missing:                                                # иначе nullable-поле молча стало бы null
+            raise ValueError(f"нет обязательных полей {missing} в записи {schema.get('name')}")
+        return {f["name"]: to_avro_value(f["type"], v.get(f["name"], f.get("default")))
                 for f in schema["fields"]}
     if t == "array":
         return [to_avro_value(schema["items"], x) for x in (v or [])]
@@ -216,6 +227,14 @@ def schema_diff(old_text, new_text):
     for p, t in old:
         if p not in nd:
             out.append((f"- {p}: {t}", True))
+    # порядок полей задаёт порядок байт: перестановка общих полей одной записи — тоже сдвиг
+    def _parent(q):
+        return q.rsplit(".", 1)[0] if "." in q else ""
+    for par in dict.fromkeys(_parent(q) for q, _ in old):
+        o = [q for q, _ in old if _parent(q) == par and q in nd]
+        n = [q for q, _ in new if _parent(q) == par and q in od]
+        if o != n:
+            out.append((f"↕ порядок полей {par or '<корень>'}: {', '.join(x.rsplit('.', 1)[-1] for x in n)}", True))
     return out
 
 
@@ -264,7 +283,10 @@ def cmd_check(reg, path, topic, as_spec):
     writer = reg.by_id(sid)
     payload = msg["payload"] if msg["payload"] is not None else encode(writer, msg["value"])
     truth, rest = decode(writer, payload)
-    print(f"схема записи: id {sid}" + (f" (остаток {rest} байт — тело не по этой схеме!)" if rest else ""))
+    print(f"схема записи: id {sid}")
+    if rest:                                                       # тело длиннее схемы: битое или склеенное
+        print(f"ОШИБКА: после чтения схемой записи остался хвост {rest} байт — тело не по этой схеме")
+        return 4
     if not as_spec:
         print("верно прочитано схемой записи; укажите --as, чтобы проверить чтение схемой потребителя")
         return 0
@@ -294,6 +316,10 @@ def cmd_fetch(topic, partition, offset, out):
     url, cluster, cookie = (os.environ.get(k) for k in ("AKHQ_URL", "AKHQ_CLUSTER", "AKHQ_COOKIE"))
     if not (url and cluster and cookie):
         raise SystemExit("нужны AKHQ_URL, AKHQ_CLUSTER, AKHQ_COOKIE в .env (cookie — после входа в AKHQ в браузере)")
+    host = urllib.parse.urlparse(url).hostname or ""
+    if url.startswith("http://") and host not in ("localhost", "127.0.0.1") and os.environ.get("AKHQ_ALLOW_HTTP") != "1":
+        raise SystemExit("AKHQ по http: cookie сессии и тело сообщения уйдут открытым текстом. "
+                         "Только во внутренней сети и осознанно — AKHQ_ALLOW_HTTP=1")
     rec = _get_json(f"{url.rstrip('/')}/api/{cluster}/topic/{urllib.parse.quote(topic)}/data/record/"
                     f"{int(partition)}/{int(offset)}", headers={"Cookie": cookie, "Accept": "application/json"})
     rec = rec[0] if isinstance(rec, list) else rec
