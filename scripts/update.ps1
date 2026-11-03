@@ -60,4 +60,8 @@ if ($env:AI_TOOLKIT_NO_COPILOT -ne '1') {
   try { if (Get-Command uv -ErrorAction SilentlyContinue) { uv run $cp } else { python $cp } } catch { }
 }
 
+Write-Host "[+] Наставник по работе с ИИ (один вопрос, по умолчанию выключен)"
+$mn = Join-Path $RepoRoot 'scripts\mentor.py'
+try { if (Get-Command uv -ErrorAction SilentlyContinue) { uv run $mn onboarding } else { python $mn onboarding } } catch { }
+
 Write-Host "Готово. Перезапусти Claude Code, чтобы подхватились обновлённые скиллы."

@@ -1,0 +1,3 @@
+# Codex: без явного вызова не подключать (в Claude Code этот же эффект даёт disable-model-invocation)
+policy:
+  allow_implicit_invocation: false
