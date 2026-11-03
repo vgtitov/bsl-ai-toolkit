@@ -146,9 +146,15 @@ def can_offer_api(s: dict, today: date | None = None) -> tuple[bool, str]:
 ONBOARDING_Q = "Включить наставника по работе с ИИ (подсказки, как лучше ставить задачи)? По умолчанию нет. [да/нет]"
 
 
-def onboarding_needed(s: dict) -> bool:
-    """Спросить один раз: при первой установке и при обновлении до версии с наставником."""
-    return s["mode"] == "off" and not s["onboarding_asked"] and not s["declined_at"]
+ONBOARDING_REASK_DAYS = 30  # вопрос показан, ответа нет: переспросить не раньше
+
+
+def onboarding_needed(s: dict, today: date | None = None) -> bool:
+    """Спросить при первой установке и при обновлении до версии с наставником; ответ закрывает вопрос."""
+    if s["mode"] != "off" or s["declined_at"]:
+        return False
+    asked = _d(s["onboarding_asked"])
+    return asked is None or (today or date.today()) >= asked + timedelta(days=ONBOARDING_REASK_DAYS)
 
 
 def onboarding_answer(s: dict, yes: bool, today: date | None = None) -> dict:
@@ -268,13 +274,20 @@ def run_cmd(a, s) -> int:
             try:
                 yes = input(ONBOARDING_Q + " ").strip().lower() in ("да", "д", "y", "yes")
             except EOFError:
-                return 0  # ответа нет: не записываем, спросим при следующем обновлении
+                s["onboarding_asked"] = date.today().isoformat()  # показали, ответа нет
+                save(s)
+                return 0
             save(onboarding_answer(s, yes))
             print("наставник включён" if yes else "хорошо, наставник выключен")
         else:  # запуск агентом: вопрос задаёт агент человеку, затем onboarding-answer
+            s["onboarding_asked"] = date.today().isoformat()  # показан; без ответа переспросим через 30 дней
+            save(s)
             print(f"ВОПРОС ЧЕЛОВЕКУ: {ONBOARDING_Q}\nОтвет «да»: python scripts/mentor.py onboarding-answer yes; "
-                  "любой другой: onboarding-answer no. Молчание: ничего не записывать.")
+                  "любой другой: onboarding-answer no. Молчание: ничего не делать.")
     elif a.cmd == "onboarding-answer":
+        if a.answer == "yes" and (s["declined_at"] or s["mode"] != "off"):  # запоздавшее «да» не отменяет выбор
+            print("режим уже выбран, не меняю; включить явно: /ai-mentor on")
+            return 0
         save(onboarding_answer(s, a.answer == "yes"))
         print("записано: " + a.answer)
     elif a.cmd == "api-declined":

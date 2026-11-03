@@ -264,7 +264,10 @@ def test_onboarding_by_agent_prints_question_and_writes_nothing(st, monkeypatch,
     st.unlink()
     monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
     run("onboarding")
-    assert "ВОПРОС ЧЕЛОВЕКУ" in capsys.readouterr().out and not st.exists()
+    assert "ВОПРОС ЧЕЛОВЕКУ" in capsys.readouterr().out
+    s = mentor.load()
+    assert s["mode"] == "off" and s["onboarding_asked"]  # показан, не включён
+    assert not mentor.onboarding_needed(s) and mentor.onboarding_needed(s, date.today() + timedelta(days=31))
     run("onboarding-answer", "no")
     s = mentor.load()
     assert s["mode"] == "off" and s["declined_at"] and not mentor.onboarding_needed(s)
@@ -273,3 +276,9 @@ def test_onboarding_by_agent_prints_question_and_writes_nothing(st, monkeypatch,
 def test_setup_and_update_scripts_call_onboarding():
     for f in ("onboard/onboard.sh", "onboard/onboard.ps1", "scripts/update.sh", "scripts/update.ps1"):
         assert "mentor.py" in (ROOT / f).read_text(encoding="utf-8") and "onboarding" in (ROOT / f).read_text(encoding="utf-8"), f
+
+
+def test_late_onboarding_yes_does_not_override_choice(st, capsys):
+    st.unlink()
+    run("onboarding-answer", "no"); run("onboarding-answer", "yes")
+    assert mentor.load()["mode"] == "off"
