@@ -171,7 +171,40 @@ def make_runner(host: str | None = None):
 
 
 def mask_password(cmd: str) -> str:
-    return re.sub(r"/P\S+", "/P***", cmd)
+    """Скрыть пароли ИБ и хранилища во всех формах записи: `/Pxxx`, `/P"x y"`, `/P xxx`,
+    `/ConfigurationRepositoryP xxx`. Пароль отдельным аргументом уже уходил в чат."""
+    cmd = re.sub(r'(/ConfigurationRepositoryP)\s*("[^"]*"|\S+)', r"\1 ***", cmd)
+    cmd = re.sub(r'/P\s*"[^"]*"', "/P***", cmd)
+    return re.sub(r"/P(?!\*\*\*)\s*\S+", "/P***", cmd)
+
+
+# Символы, которые ломают строку для cmd.exe или кавычки CreateProcess: значение с ними
+# рвёт команду, а маска скрывает пароль не целиком (ab"cd ef → в логе остаётся хвост).
+_CMD_UNSAFE = set('"&|<>^%\r\n')
+
+
+def check_cmd_safe(value, what: str = "значение") -> None:
+    """Отказать на входе, пока Runner собирает команду строкой.
+    shortcut: запрет вместо экранирования; снять, когда Runner перейдёт на argv без оболочки."""
+    bad = sorted(_CMD_UNSAFE & set(value or ""))
+    if bad:
+        shown = " ".join("перевод строки" if c in "\r\n" else c for c in dict.fromkeys(bad))
+        raise ValueError(f"{what} содержит недопустимые для командной строки символы: {shown}")
+
+
+def quote_arg(a: str) -> str:
+    """Аргумент с пробелом — в кавычки (уже закавыченный не трогаем): командная строка
+    склеивается через пробел, и путь с `Program Files` иначе рвётся на два."""
+    quoted = len(a) > 1 and a.startswith('"') and a.endswith('"')
+    check_cmd_safe(a[1:-1] if quoted else a, f"аргумент {a[:20]!r}")
+    return f'"{a}"' if " " in a and not quoted else a
+
+
+def pass_arg(pwd: str) -> str:
+    """`/P<пароль>` одним аргументом: пароль с пробелом или пустой — в кавычках, иначе он
+    рвётся на два токена, и маска скрыла бы только первый."""
+    check_cmd_safe(pwd, "пароль")
+    return f'/P"{pwd}"' if pwd == "" or " " in (pwd or "") else f"/P{pwd}"
 
 
 def conn_arg(ib: str) -> str:
@@ -198,11 +231,13 @@ def enterprise_cmd(ib: str, user: str, pwd: str, execute_epf: str,
     в файл-результат: клиентский запуск кода возврата не даёт, а Сообщить/ЖР в /Out не
     попадают (см. apply.bsp). `ib` — серверная `сервер\\база` или путь к файловой базе.
     """
+    check_cmd_safe(user, "логин")
+    check_cmd_safe(c_param, "параметр /C")
     return " ".join([
         f'"{bin or DEFAULT_BIN}" ENTERPRISE',
         conn_arg(ib),
         f'/N"{user}"',
-        f"/P{pwd}",
+        pass_arg(pwd),
         f'/Execute "{execute_epf}"',
         f'/C"{c_param}"',
         "/DisableStartupDialogs /DisableStartupMessages",
@@ -212,12 +247,13 @@ def enterprise_cmd(ib: str, user: str, pwd: str, execute_epf: str,
 
 def designer_cmd(ib: str, user: str, pwd: str, action: str,
                  args: list, log: str, bin: str | None = None) -> str:
-    quoted = " ".join(args)
+    check_cmd_safe(user, "логин")
+    quoted = " ".join(quote_arg(a) for a in args)
     parts = [
         f'"{bin or DEFAULT_BIN}" DESIGNER',
         conn_arg(ib),
         f'/N"{user}"',
-        f"/P{pwd}",
+        pass_arg(pwd),
         "/DisableStartupDialogs /DisableStartupMessages",
         action,
     ]
