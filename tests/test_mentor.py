@@ -16,6 +16,7 @@ import mentor  # noqa: E402
 def _st(tmp_path, monkeypatch):
     monkeypatch.setenv("AI_MENTOR_STATE", str(tmp_path / "s.json"))
     monkeypatch.setenv("AI_MENTOR_CARD", str(tmp_path / "card.md"))
+    (tmp_path / "s.json").write_text(json.dumps({"schema": mentor.SCHEMA, "mode": "ask"}))  # человек включил ask
     return tmp_path / "s.json"
 
 
@@ -26,7 +27,14 @@ def run(*a):
     return mentor.main(list(a))
 
 
-def test_default_is_ask_and_hook_prints_one_line(st, capsys):
+def test_no_file_means_off_and_hook_silent(st, capsys):
+    st.unlink()
+    assert mentor.load()["mode"] == "off"
+    run("hook")
+    assert capsys.readouterr().out == ""
+
+
+def test_ask_hook_prints_one_line(st, capsys):
     run("hook")
     out = capsys.readouterr().out.strip()
     assert out.startswith("mentor ask") and "\n" not in out
@@ -71,7 +79,7 @@ def test_cooldown_between_offers(st):
 
 
 def test_corrupt_file_means_off(st, capsys):
-    assert mentor.load()["mode"] == "ask"  # файла нет: значения по умолчанию
+    st.unlink(); assert mentor.load()["mode"] == "off"  # файла нет: off
     st.write_text("{{{ не json")
     assert mentor.load()["mode"] == "off"  # файл есть, но не читается: согласие неизвестно
     st.write_text(json.dumps({"mode": "bogus"}))
@@ -122,7 +130,7 @@ def test_later_keeps_on_mode(st):
 
 def test_wrong_field_types_mean_off(st):
     for bad in ({"offers_made": "1"}, {"last_offer": []}, {"level_card": {}}, {"remind_after": "не дата"}):
-        st.write_text(json.dumps({"mode": "ask", **bad}))
+        st.write_text(json.dumps({"schema": mentor.SCHEMA, "mode": "ask", **bad}))
         assert mentor.load()["mode"] == "off", bad
 
 
@@ -186,3 +194,17 @@ def test_build_agents_lays_out_skills_with_codex_policy():
     names = {p.name for p in (ROOT / "core/skills").iterdir() if p.is_dir()}
     assert names <= {p.name for p in (ROOT / ".agents/skills").iterdir()}
     assert "allow_implicit_invocation: false" in (ROOT / ".agents/skills/ai-mentor/agents/openai.yaml").read_text()
+
+
+def test_update_keeps_choice_and_other_format_means_off(st):
+    """Обновление набора (сборка) файл не трогает; запись другого формата не включает наставника."""
+    for mode in ("off", "ask", "on"):
+        st.write_text(json.dumps({"schema": mentor.SCHEMA, "mode": mode}))
+        before = st.read_bytes()
+        subprocess.run(["sh", str(ROOT / "build.sh"), "claude"], cwd=ROOT, check=True, capture_output=True,
+                       env={"AI_MENTOR_STATE": str(st), "PATH": "/usr/bin:/bin"})
+        assert st.read_bytes() == before and mentor.load()["mode"] == mode
+    st.write_text(json.dumps({"schema": 99, "mode": "on"}))
+    assert mentor.load()["mode"] == "off"
+    st.write_text(json.dumps({"mode": "on"}))  # запись без формата (старая) тоже не включает
+    assert mentor.load()["mode"] == "off"
