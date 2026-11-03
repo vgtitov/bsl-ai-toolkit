@@ -71,8 +71,9 @@ def test_cooldown_between_offers(st):
 
 
 def test_corrupt_file_means_off(st, capsys):
+    assert mentor.load()["mode"] == "ask"  # файла нет: значения по умолчанию
     st.write_text("{{{ не json")
-    assert mentor.load()["mode"] == "ask"  # нечитаемый файл = значения по умолчанию
+    assert mentor.load()["mode"] == "off"  # файл есть, но не читается: согласие неизвестно
     st.write_text(json.dumps({"mode": "bogus"}))
     assert mentor.load()["mode"] == "off"
 
@@ -112,3 +113,8 @@ def test_status_prints_card_and_reset_uses_level_card(st, tmp_path, capsys):
     assert "Уровень: тест" in capsys.readouterr().out
     run("reset", "--card")
     assert not card.exists() and not st.exists()
+
+
+def test_later_keeps_on_mode(st):
+    run("set", "on"); run("answer", "later", "--days", "30")
+    assert mentor.load()["mode"] == "on"

@@ -46,12 +46,15 @@ def default_state() -> dict:
 
 def load() -> dict:
     s = default_state()
+    if not state_path().exists():
+        return s
     try:
         d = json.loads(state_path().read_text(encoding="utf-8"))
-        if isinstance(d, dict):
-            s.update({k: d[k] for k in s if k in d})
-    except (OSError, ValueError):
-        pass
+        if not isinstance(d, dict):
+            raise ValueError
+        s.update({k: d[k] for k in s if k in d})
+    except (OSError, ValueError):  # файл есть, но не читается: согласие неизвестно, значит off
+        s["mode"] = "off"
     if s["mode"] not in MODES:  # битый файл не должен включать ментора
         s["mode"] = "off"
     return s
@@ -111,7 +114,8 @@ def cmd_answer(s: dict, ans: str, days: int, today: date | None = None) -> dict:
     elif ans == "no":
         s["mode"], s["declined_at"], s["remind_after"] = "off", today.isoformat(), None
     else:
-        s["mode"], s["remind_after"] = "ask", (today + timedelta(days=days)).isoformat()
+        s["mode"] = "on" if s["mode"] == "on" else "ask"  # «позже» на вопрос про API не выключает включённого
+        s["remind_after"] = (today + timedelta(days=days)).isoformat()
     return s
 
 
