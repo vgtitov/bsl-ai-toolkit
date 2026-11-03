@@ -54,7 +54,7 @@ def card_path() -> Path:
 
 def default_state() -> dict:
     return {"schema": SCHEMA, "mode": "off", "declined_at": None, "remind_after": None, "offers_made": 0,
-            "last_offer": None, "api_remind_after": None, "api_declined_at": None, "level_card": str(card_path()), "updated": None}
+            "last_offer": None, "api_remind_after": None, "api_declined_at": None, "onboarding_asked": None, "level_card": str(card_path()), "updated": None}
 
 
 def load() -> dict:
@@ -68,7 +68,7 @@ def load() -> dict:
         if type(d.get("schema")) is not int or d["schema"] != SCHEMA:  # True и 1.0 не годятся
             raise ValueError("другой формат записи")
         s.update({k: d[k] for k in s if k in d})
-        for k in ("declined_at", "remind_after", "last_offer", "api_remind_after", "api_declined_at"):
+        for k in ("declined_at", "remind_after", "last_offer", "api_remind_after", "api_declined_at", "onboarding_asked"):
             if s[k] is not None:
                 date.fromisoformat(s[k])  # TypeError/ValueError на неверном типе или формате
         if type(s["offers_made"]) is not int or not isinstance(s["level_card"], str):
@@ -143,6 +143,24 @@ def can_offer_api(s: dict, today: date | None = None) -> tuple[bool, str]:
     return True, "можно"
 
 
+ONBOARDING_Q = "Включить наставника по работе с ИИ (подсказки, как лучше ставить задачи)? По умолчанию нет. [да/нет]"
+
+
+def onboarding_needed(s: dict) -> bool:
+    """Спросить один раз: при первой установке и при обновлении до версии с наставником."""
+    return s["mode"] == "off" and not s["onboarding_asked"] and not s["declined_at"]
+
+
+def onboarding_answer(s: dict, yes: bool, today: date | None = None) -> dict:
+    today = (today or date.today()).isoformat()
+    s["onboarding_asked"] = today
+    if yes:
+        s["mode"] = "on"
+    else:
+        s["declined_at"] = today
+    return s
+
+
 def hook_line(s: dict, today: date | None = None) -> str:
     if s["mode"] == "on":
         return f"ai-mentor on: read {skill_dir()}/SKILL.md"
@@ -196,6 +214,8 @@ def main(argv=None) -> int:
     sub.add_parser("offered")
     sub.add_parser("can-offer-api")
     sub.add_parser("api-declined")
+    sub.add_parser("onboarding")
+    p = sub.add_parser("onboarding-answer"); p.add_argument("answer", choices=("yes", "no"))
     p = sub.add_parser("api-asked"); p.add_argument("--days", type=days_arg, default=30)
     sub.add_parser("hook")
     p = sub.add_parser("set"); p.add_argument("mode", choices=MODES)
@@ -210,7 +230,7 @@ def main(argv=None) -> int:
     return run_cmd(a, load())
 
 
-WRITE = ("set", "answer", "offered", "api-asked", "api-declined", "reset")
+WRITE = ("onboarding", "onboarding-answer", "set", "answer", "offered", "api-asked", "api-declined", "reset")
 
 
 def run_cmd(a, s) -> int:
@@ -241,6 +261,22 @@ def run_cmd(a, s) -> int:
         s["api_remind_after"] = (date.today() + timedelta(days=a.days)).isoformat()
         save(s)
         print(f"про API не спрашивать до {s['api_remind_after']}")
+    elif a.cmd == "onboarding":
+        if not onboarding_needed(s):
+            return 0
+        if sys.stdin.isatty():
+            try:
+                yes = input(ONBOARDING_Q + " ").strip().lower() in ("да", "д", "y", "yes")
+            except EOFError:
+                return 0  # ответа нет: не записываем, спросим при следующем обновлении
+            save(onboarding_answer(s, yes))
+            print("наставник включён" if yes else "хорошо, наставник выключен")
+        else:  # запуск агентом: вопрос задаёт агент человеку, затем onboarding-answer
+            print(f"ВОПРОС ЧЕЛОВЕКУ: {ONBOARDING_Q}\nОтвет «да»: python scripts/mentor.py onboarding-answer yes; "
+                  "любой другой: onboarding-answer no. Молчание: ничего не записывать.")
+    elif a.cmd == "onboarding-answer":
+        save(onboarding_answer(s, a.answer == "yes"))
+        print("записано: " + a.answer)
     elif a.cmd == "api-declined":
         s["api_declined_at"] = date.today().isoformat()
         save(s)

@@ -233,3 +233,43 @@ def test_install_question_yes_creates_on_nothing_else_creates_nothing(st):
     run("set", "on")
     d = json.loads(st.read_text())
     assert d["schema"] == mentor.SCHEMA and d["mode"] == "on"
+
+
+def test_onboarding_asks_once_and_records(st, monkeypatch, capsys):
+    st.unlink()
+    assert mentor.onboarding_needed(mentor.load())
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda *_: "")  # молчание или пустой ответ = нет
+    run("onboarding")
+    s = mentor.load()
+    assert s["mode"] == "off" and s["onboarding_asked"] and not mentor.onboarding_needed(s)
+    capsys.readouterr(); run("onboarding")
+    assert capsys.readouterr().out == ""  # второй раз не спрашивает
+
+
+def test_onboarding_yes_enables_and_existing_choice_not_asked(st, monkeypatch):
+    st.unlink()
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda *_: "да")
+    run("onboarding")
+    assert mentor.load()["mode"] == "on"
+    for mode in ("ask", "on"):
+        s = mentor.default_state(); s["mode"] = mode
+        assert not mentor.onboarding_needed(s)
+    s = mentor.default_state(); s["declined_at"] = "2026-11-01"
+    assert not mentor.onboarding_needed(s)
+
+
+def test_onboarding_by_agent_prints_question_and_writes_nothing(st, monkeypatch, capsys):
+    st.unlink()
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+    run("onboarding")
+    assert "ВОПРОС ЧЕЛОВЕКУ" in capsys.readouterr().out and not st.exists()
+    run("onboarding-answer", "no")
+    s = mentor.load()
+    assert s["mode"] == "off" and s["declined_at"] and not mentor.onboarding_needed(s)
+
+
+def test_setup_and_update_scripts_call_onboarding():
+    for f in ("onboard/onboard.sh", "onboard/onboard.ps1", "scripts/update.sh", "scripts/update.ps1"):
+        assert "mentor.py" in (ROOT / f).read_text(encoding="utf-8") and "onboarding" in (ROOT / f).read_text(encoding="utf-8"), f

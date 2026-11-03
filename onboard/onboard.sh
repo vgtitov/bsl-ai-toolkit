@@ -112,6 +112,9 @@ if [ "$WITH_COPILOT" = 1 ]; then
   "${PY[@]}" "$TEAM_DIR/scripts/copilot_setup.py" || warn "copilot_setup с ошибкой (не критично)"
 fi
 
+say "Наставник по работе с ИИ (один вопрос, по умолчанию выключен)"
+"${PY[@]}" "$TEAM_DIR/scripts/mentor.py" onboarding || true
+
 say "Готово. Ручные шаги"
 cat <<EOF
 [ ] Проставь версии под свою конфигурацию в core/skills/1c-dev/references/conventions-template.md (общие правила — в core/AGENTS.md).
