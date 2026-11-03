@@ -282,3 +282,9 @@ def test_late_onboarding_yes_does_not_override_choice(st, capsys):
     st.unlink()
     run("onboarding-answer", "no"); run("onboarding-answer", "yes")
     assert mentor.load()["mode"] == "off"
+
+
+def test_explicit_off_blocks_late_onboarding_yes(st):
+    st.unlink()
+    run("set", "off"); run("onboarding-answer", "yes")
+    assert mentor.load()["mode"] == "off"
