@@ -94,3 +94,21 @@ def test_hook_cli_exits_zero_without_state(st):
     r = subprocess.run([sys.executable, str(ROOT / "scripts/mentor.py"), "hook"], capture_output=True, text=True,
                        env={"AI_MENTOR_STATE": str(st), "PATH": "/usr/bin"})
     assert r.returncode == 0
+
+
+def test_offered_blocks_repeat_without_answer(st):
+    run("offered")
+    s = mentor.load()
+    assert s["offers_made"] == 1 and not mentor.can_offer(s)[0]
+    run("answer", "no")  # ответ в тот же день не удваивает счётчик
+    assert mentor.load()["offers_made"] == 1
+
+
+def test_status_prints_card_and_reset_uses_level_card(st, tmp_path, capsys):
+    card = tmp_path / "custom-card.md"
+    card.write_text("Уровень: тест")
+    s = mentor.load(); s["level_card"] = str(card); mentor.save(s)
+    run("status")
+    assert "Уровень: тест" in capsys.readouterr().out
+    run("reset", "--card")
+    assert not card.exists() and not st.exists()

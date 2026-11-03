@@ -4,6 +4,7 @@
   python scripts/mentor.py status                 # что хранится (файл показывается целиком)
   python scripts/mentor.py set on|off|ask         # «включи» / «выключи» / «не предлагай» (= off)
   python scripts/mentor.py answer yes|no|later [--days 30]   # ответ на предложение
+  python scripts/mentor.py offered                # предложение показано: записать сразу, до ответа
   python scripts/mentor.py can-offer              # код 0, если сейчас можно предложить; иначе 1 и причина
   python scripts/mentor.py hook                   # SessionStart: off молчит, ask и on одна строка
   python scripts/mentor.py reset [--card]         # сбросить состояние (и карточку уровня)
@@ -91,10 +92,20 @@ def hook_line(s: dict, today: date | None = None) -> str:
     return ""
 
 
+def card_file(s: dict) -> Path:
+    return Path(s["level_card"]) if s.get("level_card") else card_path()
+
+
+def mark_offered(s: dict, today: date | None = None) -> dict:
+    s["offers_made"] += 1
+    s["last_offer"] = (today or date.today()).isoformat()
+    return s
+
+
 def cmd_answer(s: dict, ans: str, days: int, today: date | None = None) -> dict:
     today = today or date.today()
-    s["offers_made"] += 1
-    s["last_offer"] = today.isoformat()
+    if s["last_offer"] != today.isoformat():  # предложение уже записано командой offered
+        mark_offered(s, today)
     if ans == "yes":
         s["mode"], s["remind_after"] = "on", None
     elif ans == "no":
@@ -109,6 +120,7 @@ def main(argv=None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("status")
     sub.add_parser("can-offer")
+    sub.add_parser("offered")
     sub.add_parser("hook")
     p = sub.add_parser("set"); p.add_argument("mode", choices=MODES)
     p = sub.add_parser("answer"); p.add_argument("answer", choices=("yes", "no", "later"))
@@ -128,11 +140,17 @@ def main(argv=None) -> int:
     if a.cmd == "status":
         print(f"файл: {state_path()}" + ("" if state_path().exists() else " (нет, значения по умолчанию)"))
         print(json.dumps(s, ensure_ascii=False, indent=2))
-        print(f"карточка: {card_path()}" + ("" if card_path().exists() else " (нет)"))
+        c = card_file(s)
+        print(f"карточка: {c}" + ("" if c.exists() else " (нет)"))
+        if c.exists():
+            print(c.read_text(encoding="utf-8"))
     elif a.cmd == "can-offer":
         ok, why = can_offer(s)
         print(("да: " if ok else "нет: ") + why)
         return 0 if ok else 1
+    elif a.cmd == "offered":
+        save(mark_offered(s))
+        print("предложение записано")
     elif a.cmd == "set":
         s["mode"] = a.mode
         if a.mode == "off":
@@ -143,7 +161,7 @@ def main(argv=None) -> int:
         save(cmd_answer(s, a.answer, a.days))
         print(f"записано: {a.answer}, режим {load()['mode']}")
     elif a.cmd == "reset":
-        for f in [state_path()] + ([card_path()] if a.card else []):
+        for f in [state_path()] + ([card_file(s)] if a.card else []):
             f.unlink(missing_ok=True)
         print("сброшено" + (" вместе с карточкой" if a.card else ""))
     return 0
