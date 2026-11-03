@@ -247,3 +247,25 @@ def test_table_template(tmp_path):
                                                      "SearchControlAddition"]
     s = t.find(LF + "SearchStringAddition")
     assert s.get("name") == "Т1СтрокаПоиска" and s.find(LF + "AdditionSource").findtext(LF + "Item") == "Т1"
+
+def test_first_item_into_form_without_child_items(tmp_path):
+    """Пустая форма без корневого ChildItems: контейнер создаётся, а не отказ."""
+    doc = cfg.load(GOLDEN)
+    root = doc.getroot()
+    root.remove(root.find(LF + "ChildItems"))
+    f = tmp_path / "Form.xml"
+    cfg.save(doc, f)
+    add_group(f, "НоваяГруппа")
+    got = cfg.load(f).getroot()
+    assert got.find(LF + "ChildItems").find(LF + "UsualGroup").get("name") == "НоваяГруппа"
+
+
+def test_sub_item_name_conflict_is_refused(tmp_path):
+    """Имя вложенной части (…РасширеннаяПодсказка) уже занято — отказ, файл не меняется."""
+    f = tmp_path / "Form.xml"
+    shutil.copy(GOLDEN, f)
+    add_decoration(f, "НоваяГруппаРасширеннаяПодсказка")
+    before = f.read_bytes()
+    with pytest.raises(OpPreconditionError):
+        add_group(f, "НоваяГруппа")
+    assert f.read_bytes() == before

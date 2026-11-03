@@ -206,10 +206,6 @@ def _next_id(root):
 def _add(form_path, name, parent, position, build, in_table=False):
     validate_name(name)
     doc, root = _load(form_path)
-    if root.xpath(".//*[@name=$n]", n=name):
-        raise OpPreconditionError(f"Элемент формы '{name}' уже существует")
-    if _items(root) is None:
-        raise OpPreconditionError("В форме нет блока ChildItems")
     owner = None if parent in (".", "", None) else _find(root, parent)
     owner_kind = etree.QName(owner).localname if owner is not None else "Form"
     if in_table != (owner_kind in ("Table", "ColumnGroup")):
@@ -217,6 +213,12 @@ def _add(form_path, name, parent, position, build, in_table=False):
             f"'{name}': колонка/группа колонок — только в таблицу или группу колонок; "
             f"прочие элементы — не в таблицу (родитель '{parent}' — {owner_kind})")
     el = build(_next_id(root))
+    # проверяем и имена вложенных частей (…РасширеннаяПодсказка, …КонтекстноеМеню, …КоманднаяПанель):
+    # их дубль даёт форму с неоднозначными именами, которую Конфигуратор может не загрузить
+    for n in [el.get("name")] + el.xpath(".//@name"):
+        if root.xpath(".//*[@name=$n]", n=n):
+            raise OpPreconditionError(f"Элемент формы '{n}' уже существует")
+    # пустая форма без корневого ChildItems: контейнер создаётся на своём месте по таблице порядка
     _insert(_container(root, parent, create=True), el, position)
     cfg.save(doc, form_path)
 
