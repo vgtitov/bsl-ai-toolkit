@@ -5,6 +5,7 @@
   python scripts/mentor.py set on|off|ask         # «включи» / «выключи» / «не предлагай» (= off)
   python scripts/mentor.py answer yes|no|later [--days 30]   # ответ на предложение
   python scripts/mentor.py offered                # предложение показано: записать сразу, до ответа
+  python scripts/mentor.py api-asked [--days 30]  # про Jira и Confluence по API спросили; can-offer-api проверяет срок
   python scripts/mentor.py can-offer              # код 0, если сейчас можно предложить; иначе 1 и причина
   python scripts/mentor.py hook                   # SessionStart: off молчит, ask и on одна строка
   python scripts/mentor.py reset [--card]         # сбросить состояние (и карточку уровня)
@@ -17,6 +18,7 @@ import argparse
 import json
 import os
 import sys
+import tempfile
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -41,7 +43,7 @@ def card_path() -> Path:
 
 def default_state() -> dict:
     return {"mode": "ask", "declined_at": None, "remind_after": None, "offers_made": 0,
-            "last_offer": None, "level_card": str(card_path()), "updated": None}
+            "last_offer": None, "api_remind_after": None, "level_card": str(card_path()), "updated": None}
 
 
 def load() -> dict:
@@ -53,7 +55,13 @@ def load() -> dict:
         if not isinstance(d, dict):
             raise ValueError
         s.update({k: d[k] for k in s if k in d})
-    except (OSError, ValueError):  # файл есть, но не читается: согласие неизвестно, значит off
+        for k in ("declined_at", "remind_after", "last_offer", "api_remind_after"):
+            if s[k] is not None:
+                date.fromisoformat(s[k])  # TypeError/ValueError на неверном типе или формате
+        if type(s["offers_made"]) is not int or not isinstance(s["level_card"], str):
+            raise ValueError
+    except (OSError, ValueError, TypeError):  # файл есть, но не читается: согласие неизвестно, значит off
+        s = default_state()
         s["mode"] = "off"
     if s["mode"] not in MODES:  # битый файл не должен включать ментора
         s["mode"] = "off"
@@ -63,8 +71,10 @@ def load() -> dict:
 def save(s: dict) -> None:
     s["updated"] = date.today().isoformat()
     p = state_path()
-    tmp = p.with_name(p.name + ".tmp")
-    tmp.write_text(json.dumps(s, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    p.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=p.parent, prefix=p.name + ".")  # уникальный файл, права 0600
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(json.dumps(s, ensure_ascii=False, indent=2) + "\n")
     os.replace(tmp, p)
 
 
@@ -87,6 +97,16 @@ def can_offer(s: dict, today: date | None = None) -> tuple[bool, str]:
     return True, "можно"
 
 
+def can_offer_api(s: dict, today: date | None = None) -> tuple[bool, str]:
+    """Предложение подключить Jira и Confluence по API: отдельный срок, работает и в режиме on."""
+    if s["mode"] == "off":
+        return False, "режим off"
+    ra = _d(s["api_remind_after"])
+    if ra and (today or date.today()) < ra:
+        return False, f"про API спрашивали, не раньше {ra}"
+    return True, "можно"
+
+
 def hook_line(s: dict, today: date | None = None) -> str:
     if s["mode"] == "on":
         return f"ai-mentor on: read {SKILL_DIR}/SKILL.md"
@@ -100,6 +120,8 @@ def card_file(s: dict) -> Path:
 
 
 def mark_offered(s: dict, today: date | None = None) -> dict:
+    if s["mode"] == "off":  # отказ не отменяется запоздавшей записью
+        return s
     s["offers_made"] += 1
     s["last_offer"] = (today or date.today()).isoformat()
     return s
@@ -119,16 +141,25 @@ def cmd_answer(s: dict, ans: str, days: int, today: date | None = None) -> dict:
     return s
 
 
+def days_arg(v: str) -> int:
+    n = int(v)
+    if not 1 <= n <= 3650:
+        raise argparse.ArgumentTypeError("дней от 1 до 3650")
+    return n
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("status")
     sub.add_parser("can-offer")
     sub.add_parser("offered")
+    sub.add_parser("can-offer-api")
+    p = sub.add_parser("api-asked"); p.add_argument("--days", type=days_arg, default=30)
     sub.add_parser("hook")
     p = sub.add_parser("set"); p.add_argument("mode", choices=MODES)
     p = sub.add_parser("answer"); p.add_argument("answer", choices=("yes", "no", "later"))
-    p.add_argument("--days", type=int, default=30)
+    p.add_argument("--days", type=days_arg, default=30)
     p = sub.add_parser("reset"); p.add_argument("--card", action="store_true")
     a = ap.parse_args(argv)
 
@@ -152,6 +183,14 @@ def main(argv=None) -> int:
         ok, why = can_offer(s)
         print(("да: " if ok else "нет: ") + why)
         return 0 if ok else 1
+    elif a.cmd == "can-offer-api":
+        ok, why = can_offer_api(s)
+        print(("да: " if ok else "нет: ") + why)
+        return 0 if ok else 1
+    elif a.cmd == "api-asked":
+        s["api_remind_after"] = (date.today() + timedelta(days=a.days)).isoformat()
+        save(s)
+        print(f"про API не спрашивать до {s['api_remind_after']}")
     elif a.cmd == "offered":
         save(mark_offered(s))
         print("предложение записано")

@@ -118,3 +118,31 @@ def test_status_prints_card_and_reset_uses_level_card(st, tmp_path, capsys):
 def test_later_keeps_on_mode(st):
     run("set", "on"); run("answer", "later", "--days", "30")
     assert mentor.load()["mode"] == "on"
+
+
+def test_wrong_field_types_mean_off(st):
+    for bad in ({"offers_made": "1"}, {"last_offer": []}, {"level_card": {}}, {"remind_after": "не дата"}):
+        st.write_text(json.dumps({"mode": "ask", **bad}))
+        assert mentor.load()["mode"] == "off", bad
+
+
+def test_offered_never_revives_declined(st):
+    run("answer", "no"); run("offered")
+    s = mentor.load()
+    assert s["mode"] == "off" and s["offers_made"] == 1
+
+
+def test_api_question_has_own_cooldown_and_keeps_on(st):
+    run("set", "on"); assert mentor.can_offer_api(mentor.load())[0]
+    run("api-asked", "--days", "30")
+    s = mentor.load()
+    assert s["mode"] == "on" and not mentor.can_offer_api(s)[0]
+    assert mentor.can_offer_api(s, date.today() + timedelta(days=31))[0]
+
+
+def test_days_range_and_new_state_dir(st, tmp_path, monkeypatch):
+    with pytest.raises(SystemExit):
+        run("answer", "later", "--days", "-1")
+    monkeypatch.setenv("AI_MENTOR_STATE", str(tmp_path / "new" / "dir" / "s.json"))
+    run("set", "on")
+    assert (tmp_path / "new" / "dir" / "s.json").exists()
