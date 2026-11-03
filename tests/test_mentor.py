@@ -179,3 +179,10 @@ def test_hook_paths_exist_and_foreign_card_path_ignored(st, tmp_path):
     s = mentor.load(); s["level_card"] = str(victim); mentor.save(s)
     run("reset", "--card")
     assert victim.exists()
+
+
+def test_build_agents_lays_out_skills_with_codex_policy():
+    subprocess.run(["sh", str(ROOT / "build.sh"), "agents"], cwd=ROOT, check=True, capture_output=True)
+    names = {p.name for p in (ROOT / "core/skills").iterdir() if p.is_dir()}
+    assert names <= {p.name for p in (ROOT / ".agents/skills").iterdir()}
+    assert "allow_implicit_invocation: false" in (ROOT / ".agents/skills/ai-mentor/agents/openai.yaml").read_text()

@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- `sh build.sh agents` (`build.ps1 agents`): скиллы набора в `.agents/skills` для Codex; у `ai-mentor` файл `agents/openai.yaml` отключает неявное подключение.
 - ai-mentor v2: режим `off` | `ask` | `on` в личном файле `~/.ai-mentor.json` (`scripts/mentor.py`, хук SessionStart). Скилл не попадает в контекст (`disable-model-invocation`), в `off` хук молчит, в `ask` одна короткая строка. Правила предложения и подключения Jira и Confluence по API в `OFFER.md`, блок правил для агентов без скиллов в `core/mentor/agent-rules.md`, замеры и сценарии в `docs/mentor/modes.md` и `modes-check.md`.
 - Скилл `ai-mentor`: режим «ментор». Определяет уровень человека (новичок, уверенный пользователь, разработчик) по вопросам и проверке на его задаче, ведёт по маршруту по одному шагу, просит сделать самому, проверяет понимание и не пишет за человека то, чему он учится; эталонные задачи и критерии «освоил». Веб-версия вынесена в отдельный материал; прогоны на трёх уровнях: `docs/mentor/scenarios.md`.
 
