@@ -175,7 +175,7 @@ def test_hook_paths_exist_and_foreign_card_path_ignored(st, tmp_path):
         s = mentor.default_state(); s["mode"] = mode
         path = _re.search(r"(\S+\.md)", mentor.hook_line(s)).group(1)
         assert (ROOT / path).is_file(), path
-    victim = tmp_path / "important.txt"; victim.write_text("x")
+    victim = tmp_path / "important-ai-mentor-card-notes.md"; victim.write_text("x")
     s = mentor.load(); s["level_card"] = str(victim); mentor.save(s)
     run("reset", "--card")
     assert victim.exists()

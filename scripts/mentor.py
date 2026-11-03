@@ -93,8 +93,6 @@ def locked():
     """Блокировка на цикл чтение-изменение-запись, чтобы два агента не затёрли отказ друг друга."""
     lock = state_path().with_name(state_path().name + ".lock")
     lock.parent.mkdir(parents=True, exist_ok=True)
-    end = time.time() + 5
-    owned = True
     while True:
         try:
             os.close(os.open(lock, os.O_CREAT | os.O_EXCL))
@@ -106,15 +104,11 @@ def locked():
                     continue
             except FileNotFoundError:
                 continue
-            if time.time() > end:  # хозяин жив, но долго: работаем без блокировки, чужую не трогаем
-                owned = False
-                break
-            time.sleep(0.05)
+            time.sleep(0.05)  # ponytail: снятие устаревшей блокировки не атомарно, для личного файла достаточно
     try:
         yield
     finally:
-        if owned:
-            lock.unlink(missing_ok=True)
+        lock.unlink(missing_ok=True)
 
 
 def _d(v):
@@ -157,7 +151,7 @@ def hook_line(s: dict, today: date | None = None) -> str:
 def card_file(s: dict) -> Path:
     p = Path(s["level_card"]) if s.get("level_card") else card_path()
     # путь из файла состояния не доверяем: удаляем и показываем только файл, похожий на карточку
-    return p if p.suffix == ".md" and "ai-mentor-card" in p.name else card_path()
+    return p if p.suffix == ".md" and p.name.startswith("ai-mentor-card") else card_path()
 
 
 def mark_offered(s: dict, today: date | None = None) -> dict:
