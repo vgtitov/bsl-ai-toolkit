@@ -59,7 +59,12 @@ def learn(edt_root: Path, xml_root: Path):
         pairs += 1
         edt = etree.parse(str(f)).getroot()
         xml = etree.parse(str(x)).getroot()
-        xml_items = {e.get("name"): e for e in xml.iter() if isinstance(e.tag, str) and e.get("name")}
+        # только визуальные элементы (дети ChildItems): реквизит и команда формы часто называются так же,
+        # как поле, и их свойства не должны попасть в таблицу; повторяющееся имя — пару не сопоставляем
+        visual = [e for e in xml.iter() if isinstance(e.tag, str) and e.get("name")
+                  and etree.QName(e.getparent()).localname == "ChildItems"]
+        names = collections.Counter(e.get("name") for e in visual)
+        xml_items = {e.get("name"): e for e in visual if names[e.get("name")] == 1}
         for item in edt.iter("items"):
             name = item.findtext("name")
             xe = xml_items.get(name)
@@ -75,7 +80,12 @@ def learn(edt_root: Path, xml_root: Path):
                     omitted[(ctx, p)][v] += 1
     table = collections.defaultdict(dict)
     for (ctx, p), vals in omitted.items():
-        v, _ = vals.most_common(1)[0]
+        # умолчание — только единственное пропущенное значение, ни разу не записанное явно;
+        # разные пропущенные значения = несопоставимые пары или разные версии, в таблицу не берём
+        if len(vals) != 1:
+            print(f"пропуск {ctx}.{p}: разные пропущенные значения {dict(vals)}", file=sys.stderr)
+            continue
+        v = next(iter(vals))
         if v not in written[(ctx, p)]:
             table[ctx][p] = v
     return {k: dict(sorted(v.items())) for k, v in sorted(table.items())}, pairs
