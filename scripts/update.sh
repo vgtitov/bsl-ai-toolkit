@@ -58,4 +58,8 @@ if [ "${AI_TOOLKIT_NO_COPILOT:-}" != 1 ]; then
   else python3 "$REPO_ROOT/scripts/copilot_setup.py" || true; fi
 fi
 
+echo "[+] Наставник по работе с ИИ (один вопрос, по умолчанию выключен)"
+if command -v uv >/dev/null 2>&1; then uv run "$REPO_ROOT/scripts/mentor.py" onboarding || true
+else python3 "$REPO_ROOT/scripts/mentor.py" onboarding || true; fi
+
 echo "Готово. Перезапусти Claude Code, чтобы подхватились обновлённые скиллы."

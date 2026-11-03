@@ -18,6 +18,8 @@ config/servicedesk.toml
 # Источник истины — core/mcp/servers.json (коммитится). Генерация: sh build.sh. НЕ коммитить .mcp.json (иначе конфликт с локальным на настроенных машинах).
 .mcp.json
 src/
+# .agents/skills генерируется для Codex: sh build.sh agents
+.agents/
 # ...но исходники расширений toolkit (напр. extensions/ai_debug/src) — это КОД, он отслеживается
 !extensions/**/src/
 !extensions/**/src/**

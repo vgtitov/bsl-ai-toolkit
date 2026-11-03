@@ -26,6 +26,11 @@
             "type": "command",
             "command": "cd \"${CLAUDE_PROJECT_DIR:-.}\" && { P=$(for c in python3 python; do \"$c\" -c '' >/dev/null 2>&1 && { echo \"$c\"; break; }; done); ${P:-uv run --quiet --no-project --python 3.12 python} scripts/repo_freshness.py 2>/dev/null; } || true",
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "cd \"${CLAUDE_PROJECT_DIR:-.}\" && { P=$(for c in python3 python; do \"$c\" -c '' >/dev/null 2>&1 && { echo \"$c\"; break; }; done); ${P:-uv run --quiet --no-project --python 3.12 python} scripts/mentor.py hook 2>/dev/null; } || true",
+            "timeout": 10
           }
         ]
       }

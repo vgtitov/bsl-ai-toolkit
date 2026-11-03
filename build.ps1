@@ -26,6 +26,7 @@ function Build-Claude {
 }
 function Build-Gemini { Write-Host '[gemini] GEMINI.md (copy of AGENTS.md)'; Copy-Item 'core\AGENTS.md' 'AGENTS.md' -Force; Copy-Item 'core\AGENTS.md' 'GEMINI.md' -Force }
 function Build-Codex  { Write-Host '[codex] AGENTS.md (canonical, read natively)'; Copy-Item 'core\AGENTS.md' 'AGENTS.md' -Force }
+function Build-Agents { Write-Host '[agents] .agents/skills (Codex)'; if (Test-Path '.agents\skills') { Remove-Item '.agents\skills' -Recurse -Force }; New-Item -ItemType Directory -Force -Path '.agents\skills' | Out-Null; Copy-Item 'core\skills\*' '.agents\skills' -Recurse -Force }
 function Build-Rulesync {
   if (Get-Command rulesync -ErrorAction SilentlyContinue) {
     Write-Host '[rulesync] generating for Cursor/Copilot/Cline/Windsurf/...'
@@ -37,7 +38,8 @@ switch ($Target) {
   'claude' { Build-Claude }
   'gemini' { Build-Gemini }
   'codex'  { Build-Codex }
+  'agents' { Build-Agents }
   'all'    { Build-Claude; Build-Gemini; Build-Codex; Build-Rulesync }
-  default  { Write-Host 'usage: .\build.ps1 [all|claude|gemini|codex]'; exit 1 }
+  default  { Write-Host 'usage: .\build.ps1 [all|claude|gemini|codex|agents]'; exit 1 }
 }
 Write-Host "[ok] build: $Target"

@@ -30,6 +30,9 @@ build_claude() {
 }
 
 build_gemini()  { echo "[gemini] GEMINI.md → AGENTS.md";  cp -f core/AGENTS.md AGENTS.md; cp -f core/AGENTS.md GEMINI.md; }
+# Скиллы для Codex (.agents/skills: папка проекта, которую читают Codex, Copilot в VS Code и Cursor). Claude Code её
+# не читает, поэтому .claude/skills остаётся. Copilot и Cursor читают обе папки: им отдельная сборка не нужна.
+build_agents()  { echo "[agents] .agents/skills (Codex)"; rm -rf .agents/skills && mkdir -p .agents/skills && cp -R core/skills/. .agents/skills/; }
 build_codex()   { echo "[codex] AGENTS.md (канон, читается нативно)"; cp -f core/AGENTS.md AGENTS.md; }
 
 build_rulesync() {
@@ -47,7 +50,8 @@ case "$TARGET" in
   claude) build_claude ;;
   gemini) build_gemini ;;
   codex)  build_codex ;;
+  agents) build_agents ;;
   all)    build_claude; build_gemini; build_codex; build_rulesync ;;
-  *) echo "usage: sh build.sh [all|claude|gemini|codex]"; exit 1 ;;
+  *) echo "usage: sh build.sh [all|claude|gemini|codex|agents]"; exit 1 ;;
 esac
 echo "[ok] build: $TARGET"
