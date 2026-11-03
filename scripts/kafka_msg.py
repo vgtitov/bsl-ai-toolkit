@@ -26,6 +26,7 @@ import io
 import json
 import os
 import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -46,9 +47,20 @@ except Exception:
 
 # ---------- Schema Registry ----------
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """urllib при редиректе переносит заголовки (и Cookie сессии AKHQ) на новый адрес — не следуем."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(req.full_url, code, f"редирект на {newurl} не выполняю: "
+                                     "проверьте адрес (AKHQ_URL / реестр)", headers, fp)
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
 def _get_json(url, headers=None, timeout=20):
     req = urllib.request.Request(url, headers=headers or {})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with _OPENER.open(req, timeout=timeout) as r:
         return json.load(r)
 
 
