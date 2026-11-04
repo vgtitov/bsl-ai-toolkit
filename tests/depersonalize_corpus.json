@@ -1,0 +1,1401 @@
+[
+{
+"id": "FP01",
+"text": "Релиз выйдет 04.11.2026 в 10:30, перенос на 2026-11-05.",
+"keep": [
+"04.11.2026",
+"2026-11-05"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "FP02",
+"text": "Сумма договора 1 234 567,89 BYN, НДС 20%, итого 1481481.47",
+"keep": [
+"1 234 567,89",
+"1481481.47"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "FP03",
+"text": "Артикул 4607012345678, штрихкод 5901234123457, номер заказа 20261104123456",
+"keep": [
+"4607012345678",
+"5901234123457",
+"20261104123456"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "FP04",
+"text": "Платформа 8.3.24.1467 и сборка 10.0.19045.5247, версия v1.2.3.4567",
+"keep": [
+"8.3.24.1467",
+"10.0.19045.5247"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "FP05",
+"text": "commit 3f786850e387550fdab836ed7e6dc881de23001b, short 892e883d",
+"keep": [
+"3f786850e387550fdab836ed7e6dc881de23001b",
+"892e883d"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "FP06",
+"text": "uuid 550e8400-e29b-41d4-a716-446655440000 request",
+"keep": [
+"550e8400-e29b-41d4-a716-446655440000"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "FP07",
+"text": "Документ РТУ00-000123 от 01.11.2026, ПКО 00000012345, код 1С 000000123",
+"keep": [
+"РТУ00-000123",
+"00000012345"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "FP08",
+"text": "2026-11-04T17:32:40+03:00 INFO pid=1234567890 elapsed=1700000000000ms",
+"keep": [
+"2026-11-04T17:32:40+03:00",
+"1700000000000"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "FP09",
+"text": "Сервер слушает 127.0.0.1:8080 и 0.0.0.0, шлюз 10.0.0.1",
+"keep": [
+"127.0.0.1"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "FP10",
+"text": "Использованы Microsoft Windows Server, Конфигурация Управление Торговлей, Договор Поставки, Минск, Беларусь, Директор",
+"keep": [
+"Microsoft Windows Server",
+"Управление Торговлей",
+"Договор Поставки",
+"Минск",
+"Беларусь",
+"Директор"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "FP11",
+"text": "Путь /usr/local/bin/python3.11 и /var/log/app/2026-11-04.log, /etc/hosts",
+"keep": [
+"/usr/local/bin/python3.11",
+"/var/log/app/2026-11-04.log"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "FP12",
+"text": "См. https://docs.example.com/api/v2/orders/123456#section для деталей",
+"keep": [],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "FP13",
+"text": "Вызов Справочники.Контрагенты.НайтиПоКоду(\"000012345\"); Документы.РеализацияТоваровУслуг.СоздатьДокумент()",
+"keep": [
+"Справочники.Контрагенты",
+"РеализацияТоваровУслуг",
+"000012345"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "FP14",
+"text": "Запрос: ВЫБРАТЬ Номенклатура.Артикул, Остатки.Количество ИЗ Справочник.Номенклатура КАК Номенклатура",
+"keep": [
+"Номенклатура.Артикул",
+"Остатки.Количество"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "FP15",
+"text": "Глава 5, стр. 12-15, п. 3.4.2, рис. 7, таблица 2, 2 штуки, 100500 строк",
+"keep": [
+"3.4.2",
+"100500"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "FP16",
+"text": "Процент 12,5%, температура 36.6, координаты 53.9045 27.5615, id=1234567",
+"keep": [
+"53.9045",
+"1234567"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "FP17",
+"text": "В четверг Анна Каренина и Война и мир, Пётр Первый, Иван Грозный, Святой Георгий",
+"keep": [],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "FP18",
+"text": "Слово Магазин, Бензин, Мельник, Господин, Караван, Марка, Вера в успех, Надежда есть",
+"keep": [
+"Магазин",
+"Бензин",
+"Караван"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "FP19",
+"text": "Таблица Excel версия 16.0.17928.20114; Chrome/120.0.6099.109",
+"keep": [
+"16.0.17928.20114"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "FP20",
+"text": "Ошибка 0x80070005 код 4011 SQLSTATE 42P01 HTTP 404 ORA-00942",
+"keep": [
+"0x80070005",
+"SQLSTATE 42P01",
+"ORA-00942"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "FP21",
+"text": "Заказ 4111111111111 от клиента (13 цифр, luhn-валидное число-номер заказа)",
+"keep": [
+"4111111111111"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "DF01",
+"text": "diff --git a/x.py b/x.py\nindex 892e883d..e1266196 100644\n--- a/x.py\n+++ b/x.py\n@@ -49,7 +51,10 @@ def f():\n x = 1\n+y = 2\n",
+"keep": [
+"892e883d",
+"e1266196",
+"@@ -49,7 +51,10 @@"
+],
+"hide": [],
+"kind": "diff"
+},
+{
+"id": "DF02",
+"text": "diff --git a/m.bsl b/m.bsl\nindex 1a2b3c4..5d6e7f8 100755\nold mode 100644\nnew mode 100755\n--- a/m.bsl\n+++ b/m.bsl\n@@ -1,3 +1,4 @@\n Процедура А()\n+Сообщить(\"Версия 8.3.24.1467\");\n",
+"keep": [
+"1a2b3c4..5d6e7f8"
+],
+"hide": [],
+"kind": "diff"
+},
+{
+"id": "DF03",
+"text": "diff --git a/a b/b\nsimilarity index 95%\nrename from a\nrename to b\nindex 0123456789ab..cdef01234567 100644\n@@ -10 +10 @@ def g():\n-x = 1\n+x = 2\n",
+"keep": [
+"0123456789ab..cdef01234567"
+],
+"hide": [],
+"kind": "diff"
+},
+{
+"id": "DF04",
+"text": "diff --git a/x.py b/x.py\nindex 892e883d..e1266196 100644\n--- a/x.py\n+++ b/x.py\n@@ -49,7 +51,10 @@ def f():\n+# автор ivan.sidorov@example.test\n+card = '4111111111111111'\n",
+"keep": [],
+"hide": [
+"ivan.sidorov@example.test",
+"4111111111111111"
+],
+"kind": "diff"
+},
+{
+"id": "DF05",
+"text": "--- a/log.txt\n+++ b/log.txt\n@@ -100,2 +100,3 @@\n 2026-11-04 10:00:00 ok\n+call 4111 1111 1111 1111\n",
+"keep": [],
+"hide": [
+"4111 1111 1111 1111"
+],
+"kind": "diff"
+},
+{
+"id": "DF06",
+"text": "From 3f786850e387550fdab836ed7e6dc881de23001b Mon Sep 17 00:00:00 2001\nFrom: Dev <dev@example.test>\nDate: Tue, 4 Nov 2026 17:32:40 +0300\nSubject: [PATCH] fix\n---\n a.py | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)\n",
+"keep": [
+"3f786850e387550fdab836ed7e6dc881de23001b",
+"Tue, 4 Nov 2026"
+],
+"hide": [
+"dev@example.test"
+],
+"kind": "diff"
+},
+{
+"id": "DF07",
+"text": "diff --git a/x b/x\nindex 892e883d..e1266196 100644\n@@ -1 +1 @@\n-v = 1\n+v = 2\n \n+mapping 8.3.24.1467 -> 8.3.25.1394\n",
+"keep": [
+"8.3.24.1467"
+],
+"hide": [],
+"kind": "diff"
+},
+{
+"id": "DF08",
+"text": "diff --git a/c.py b/c.py\nindex 892e883d..e1266196 100644\n@@ -1 +1 @@\n-x = 'Иван Петрович Сидоров'\n+x = 'ok'\n",
+"keep": [],
+"hide": [
+"Иван Петрович Сидоров"
+],
+"kind": "diff"
+},
+{
+"id": "CD01",
+"text": "def f():\n    return 4607012345678  # артикул\nURL='https://example.com/v1'\nVER='8.3.24.1467'\n",
+"keep": [
+"4607012345678",
+"8.3.24.1467"
+],
+"hide": [],
+"kind": "code"
+},
+{
+"id": "CD02",
+"text": "x = '+375291234567'  # телефон клиента\n",
+"keep": [],
+"hide": [
+"+375291234567"
+],
+"kind": "code"
+},
+{
+"id": "CD03",
+"text": "Процедура Т()\n  Соединение = \"Srvr=\"\"srv01\"\";Ref=\"\"erp\"\";Usr=\"\"Иванов\"\";Pwd=\"\"Qwerty123\"\"\";\nКонецПроцедуры\n",
+"keep": [],
+"hide": [
+"Qwerty123"
+],
+"kind": "code"
+},
+{
+"id": "PI01",
+"text": "Договор подписал Иванов Иван Иванович вчера",
+"keep": [],
+"hide": [
+"Иванов Иван Иванович"
+],
+"kind": "text"
+},
+{
+"id": "PI02",
+"text": "Передайте Петру Сергеевичу Сидорову документы",
+"keep": [],
+"hide": [
+"Сидорову"
+],
+"kind": "text"
+},
+{
+"id": "PI03",
+"text": "Заявление Козловой Марии Сергеевне отправили",
+"keep": [],
+"hide": [
+"Козловой",
+"Марии"
+],
+"kind": "text"
+},
+{
+"id": "PI04",
+"text": "Мария Козлова сказала, что Козлову не звонили",
+"keep": [],
+"hide": [
+"Козлова",
+"Козлову"
+],
+"kind": "text"
+},
+{
+"id": "PI05",
+"text": "Сидоров П.С. и П. С. Сидоров согласовали",
+"keep": [],
+"hide": [
+"Сидоров"
+],
+"kind": "text"
+},
+{
+"id": "PI06",
+"text": "Иванова Анна, Петренко Олег, Ковальчук Игорь",
+"keep": [],
+"hide": [
+"Иванова",
+"Петренко",
+"Ковальчук"
+],
+"kind": "text"
+},
+{
+"id": "PI07",
+"text": "Хоружий Алексей и Мельник Ирина",
+"keep": [],
+"hide": [
+"Хоружий",
+"Мельник"
+],
+"kind": "text"
+},
+{
+"id": "PI08",
+"text": "Ли Вэй Ян принял заказ",
+"keep": [],
+"hide": [
+"Вэй"
+],
+"kind": "text",
+"web": "gap: имена не из списка и не по окончанию (Ли Вэй Ян) только через словарь",
+"py": "gap: то же"
+},
+{
+"id": "PI09",
+"text": "Жасулан Нурпеисов, Айгерим Сатыбалдиева",
+"keep": [],
+"hide": [
+"Нурпеисов",
+"Сатыбалдиева"
+],
+"kind": "text"
+},
+{
+"id": "TL01",
+"text": "Тел +375 29 123-45-67, 8 029 123 45 67, +375291234567",
+"keep": [],
+"hide": [
+"123-45-67",
+"123 45 67",
+"291234567"
+],
+"kind": "text"
+},
+{
+"id": "TL02",
+"text": "РФ: +7 (916) 123-45-67, 8-916-123-45-67, 89161234567",
+"keep": [],
+"hide": [
+"123-45-67",
+"89161234567"
+],
+"kind": "text"
+},
+{
+"id": "TL03",
+"text": "Казахстан +7 701 123 45 67 и +7 (727) 123-45-67",
+"keep": [],
+"hide": [
+"701 123 45 67",
+"727"
+],
+"kind": "text"
+},
+{
+"id": "TL04",
+"text": "Звоните (029) 123-45-67 или 80291234567 или 29 123 45 67",
+"keep": [],
+"hide": [
+"123-45-67",
+"80291234567",
+"29 123 45 67"
+],
+"kind": "text"
+},
+{
+"id": "TL05",
+"text": "+380 44 123 45 67, +49 30 12345678, +998 90 123 45 67",
+"keep": [],
+"hide": [
+"123 45 67",
+"12345678"
+],
+"kind": "text"
+},
+{
+"id": "ID01",
+"text": "УНП 190123456, УНП: 100 123 456, УНП190123456",
+"keep": [],
+"hide": [
+"190123456",
+"100 123 456"
+],
+"kind": "text"
+},
+{
+"id": "ID02",
+"text": "ИНН 7707083893, ИНН организации: 500100732259",
+"keep": [],
+"hide": [
+"7707083893",
+"500100732259"
+],
+"kind": "text"
+},
+{
+"id": "ID03",
+"text": "БИН 123456789012 и ИИН 900101300123, БИН: 123 456 789 012",
+"keep": [],
+"hide": [
+"123456789012",
+"900101300123"
+],
+"kind": "text"
+},
+{
+"id": "ID04",
+"text": "Паспорт MP1234567, паспорт 4510 123456, паспорт серии КН № 1234567",
+"keep": [],
+"hide": [
+"MP1234567",
+"4510 123456",
+"1234567"
+],
+"kind": "text"
+},
+{
+"id": "ID05",
+"text": "Личный номер 3010190A001PB1, ИНН физлица 770708389312",
+"keep": [],
+"hide": [
+"3010190A001PB1"
+],
+"kind": "text"
+},
+{
+"id": "ID06",
+"text": "СНИЛС 112-233-445 95",
+"keep": [],
+"hide": [
+"112-233-445 95"
+],
+"kind": "text"
+},
+{
+"id": "EM01",
+"text": "Пишите на ivan.sidorov@example.test или ИВАН@пример.бел",
+"keep": [],
+"hide": [
+"ivan.sidorov@example.test"
+],
+"kind": "text"
+},
+{
+"id": "CA01",
+"text": "Карта 4111 1111 1111 1111, 4111-1111-1111-1111, 4111111111111111, 5555 5555 5555 4444",
+"keep": [],
+"hide": [
+"4111 1111",
+"4111-1111",
+"4111111111111111",
+"5555 5555"
+],
+"kind": "text"
+},
+{
+"id": "IB01",
+"text": "IBAN BY13NBRB3600900000002Z00AB00 и BY13 NBRB 3600 9000 0000 2Z00 AB00, DE89370400440532013000",
+"keep": [],
+"hide": [
+"BY13NBRB3600900000002Z00AB00",
+"2Z00 AB00",
+"DE89370400440532013000"
+],
+"kind": "text"
+},
+{
+"id": "AD01",
+"text": "Адрес: г. Минск, ул. Ленина, д. 15, кв. 7; пр-т Независимости 4, оф. 12; Москва, Тверская ул., 7",
+"keep": [],
+"hide": [
+"Ленина",
+"Независимости",
+"Тверская"
+],
+"kind": "text"
+},
+{
+"id": "NK01",
+"text": "Telegram @ivan_sidorov77, t.me/ivan_sidorov77, tg: ivan_sidorov77",
+"keep": [],
+"hide": [
+"ivan_sidorov77"
+],
+"kind": "text"
+},
+{
+"id": "S01",
+"text": "Соединение: Srvr=\"srv01\";Ref=\"erp_prod\";Usr=\"ivanov\";Pwd=\"Qwerty123\"",
+"keep": [],
+"hide": [
+"Qwerty123"
+],
+"kind": "text"
+},
+{
+"id": "S02",
+"text": "1cestart ENTERPRISE /S srv01\\erp /N Иванов /P Qwerty123 /Execute",
+"keep": [],
+"hide": [
+"Qwerty123"
+],
+"kind": "text"
+},
+{
+"id": "S03",
+"text": "password: Qw3rty!zz, пароль 12345678, pwd=abc",
+"keep": [],
+"hide": [
+"Qw3rty!zz",
+"12345678"
+],
+"kind": "text"
+},
+{
+"id": "S04",
+"text": "Authorization: Bearer abcdEFGH1234567890abcdEFGH12; token=ghp_a1B2c3D4e5a1B2c3D4e5a1B2c3D4e5abcdef",
+"keep": [],
+"hide": [
+"abcdEFGH1234567890abcdEFGH12",
+"ghp_"
+],
+"kind": "text"
+},
+{
+"id": "S05",
+"text": "postgres://app:Sup3rSecret@db.example.test:5432/erp",
+"keep": [],
+"hide": [
+"Sup3rSecret"
+],
+"kind": "text"
+},
+{
+"id": "S06",
+"text": "Логин: ivanov_i, Пользователь: Иванов И.И., Usr=ivanov",
+"keep": [],
+"hide": [
+"ivanov_i"
+],
+"kind": "text"
+},
+{
+"id": "S07",
+"text": "AWS AKIAABCDEFGHIJKLMNOP key; secret = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+"keep": [],
+"hide": [
+"AKIAABCDEFGHIJKLMNOP",
+"wJalrXUtnFEMI"
+],
+"kind": "text"
+},
+{
+"id": "MX01",
+"text": "Иван Петрович Сидоров, +375 29 123-45-67, карта 4111 1111 1111 1111, ООО «Ромашка», УНП 190123456, ivan@example.test",
+"keep": [],
+"hide": [
+"Сидоров",
+"123-45-67",
+"4111",
+"Ромашка",
+"190123456",
+"ivan@"
+],
+"kind": "text",
+"py": "gap: в классе corp названия компаний не скрываются намеренно (dc.orgs_on только для private и strict); проверка private в test_depersonalize.py"
+},
+{
+"id": "OR01",
+"text": "ООО Ромашка, ЗАО \"Лютик\", ИП Сидоров, Аскона, ТООКЗ Sleep Market, ООО Рога и Копыта подписали",
+"keep": [],
+"hide": [
+"Ромашка",
+"Лютик"
+],
+"kind": "text",
+"py": "gap: в классе corp названия компаний не скрываются намеренно (dc.orgs_on только для private и strict); проверка private в test_depersonalize.py"
+},
+{
+"id": "FP22",
+"text": "Остатки 2871 7009 5650 6379, ряд 1000 2000 3000 4000, ряд 2000 3000 4000 5000",
+"keep": [
+"2871 7009 5650 6379",
+"1000 2000 3000 4000",
+"2000 3000 4000 5000"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "FP23",
+"text": "Периоды 2026-04-28 2026-04-28 2026-05-01 2026-05-02 в отчёте",
+"keep": [
+"2026-04-28 2026-04-28",
+"2026-05-01 2026-05-02"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "FP24",
+"text": "From 3f786850e387550fdab836ed7e6dc881de23001b Mon Sep 17 00:00:00 2001\nFrom: Dev <dev@example.test>\nSubject: [PATCH] fix\n",
+"keep": [
+"3f786850e387550fdab836ed7e6dc881de23001b"
+],
+"hide": [
+"dev@example.test"
+],
+"kind": "diff"
+},
+{
+"id": "FP25",
+"text": "md5 d41d8cd98f00b204e9800998ecf8427e sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 guid 0f8fad5bd9cb469fa16570867728950e",
+"keep": [
+"d41d8cd98f00b204e9800998ecf8427e",
+"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+"0f8fad5bd9cb469fa16570867728950e"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "FP26",
+"text": "Адрес в Тверская ул. находится в центре, а Ленинский проспект длинный",
+"keep": [
+"Тверская ул."
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "FP27",
+"text": "Документы.РеализацияТоваровУслуг и Документы.ПоступлениеТоваровУслуг, Справочники.Номенклатура",
+"keep": [
+"РеализацияТоваровУслуг",
+"ПоступлениеТоваровУслуг"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "FP28",
+"text": "Артикулы: 4607012345678, 4607012345685, 4607012345692, 4600000000017, 2000123456785",
+"keep": [
+"4607012345678",
+"4607012345685",
+"4607012345692",
+"4600000000017",
+"2000123456785"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "FP29",
+"text": "return 4607012345678\nx = 5901234123457",
+"keep": [
+"4607012345678",
+"5901234123457"
+],
+"hide": [],
+"kind": "code"
+},
+{
+"id": "FP30",
+"text": "Подпись Магазин Бензин ООО Север Директор Компании подписал",
+"keep": [
+"Магазин",
+"Бензин"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "ID07",
+"text": "ИНН организации: 500100732259; ИНН (юрлица) № 7707083893; ИНН физлица:\n771234567891",
+"keep": [],
+"hide": [
+"500100732259",
+"7707083893",
+"771234567891"
+],
+"kind": "text"
+},
+{
+"id": "ID08",
+"text": "УНП № 190123456 и УНП 190 123 456",
+"keep": [],
+"hide": [
+"190123456",
+"190 123 456"
+],
+"kind": "text"
+},
+{
+"id": "ID09",
+"text": "СНИЛС 112-233-445 95, СНИЛС: 11223344595",
+"keep": [],
+"hide": [
+"112-233-445 95",
+"11223344595"
+],
+"kind": "text"
+},
+{
+"id": "ID10",
+"text": "Паспорт серии КН № 1234567 выдан, паспорт серия МР №7654321",
+"keep": [],
+"hide": [
+"1234567",
+"7654321"
+],
+"kind": "text"
+},
+{
+"id": "S08",
+"text": "DB_PASSWORD=Qwerty123456\nclient_secret = \"AbCdEfGh1234Ij\"\nSTRIPE=sk_live_51HxYzAbCdEfGhIjKlMn",
+"keep": [],
+"hide": [
+"Qwerty123456",
+"AbCdEfGh1234Ij",
+"sk_live_51HxYzAbCdEfGhIjKlMn"
+],
+"kind": "text"
+},
+{
+"id": "S09",
+"text": "Authorization: Basic dXNlcjpTdXBlclNlY3JldDEyMw==",
+"keep": [],
+"hide": [
+"dXNlcjpTdXBlclNlY3JldDEyMw"
+],
+"kind": "text"
+},
+{
+"id": "S10",
+"text": "Connect: Srvr=\"srv01\";Ref=\"erp\";Usr=\"ivanov\";Pwd=\"Qwerty123\"",
+"keep": [],
+"hide": [
+"Qwerty123",
+"ivanov"
+],
+"kind": "text"
+},
+{
+"id": "S11",
+"text": "1cv8 ENTERPRISE /S srv01\\erp /N ivanov /P Qwerty123 /Execute",
+"keep": [],
+"hide": [
+"Qwerty123"
+],
+"kind": "text"
+},
+{
+"id": "S12",
+"text": "Логин: ivanov_i, Usr=ivanov",
+"keep": [],
+"hide": [
+"ivanov_i",
+"=ivanov"
+],
+"kind": "text"
+},
+{
+"id": "NK02",
+"text": "Пишите в t.me/ivan_sidorov77 или vk.com/id12345678, skype live:ivan.sidorov, vk.com/ivan.sidorov",
+"keep": [],
+"hide": [
+"ivan_sidorov77",
+"id12345678",
+"ivan.sidorov"
+],
+"kind": "text"
+},
+{
+"id": "AD03",
+"text": "Москва, Тверская ул., 7, кв. 5 и Невский пр-т 4, оф. 12",
+"keep": [],
+"hide": [
+"Тверская",
+"7, кв. 5",
+"оф. 12"
+],
+"kind": "text"
+},
+{
+"id": "PI10",
+"text": "Директор Петров подписал приказ, ИП Сидоров согласен",
+"keep": [],
+"hide": [
+"Петров",
+"Сидоров"
+],
+"kind": "text"
+},
+{
+"id": "PI11",
+"text": "Хоружий Алексей и Мельник Ирина, Нурпеисов Жасулан",
+"keep": [],
+"hide": [
+"Хоружий",
+"Мельник",
+"Нурпеисов"
+],
+"kind": "text"
+},
+{
+"id": "OR02",
+"text": "ООО Рога и Копыта подписали договор",
+"keep": [],
+"hide": [
+"Рога",
+"Копыта"
+],
+"kind": "text",
+"py": "gap: в классе corp названия компаний не скрываются намеренно (dc.orgs_on только для private и strict); проверка private в test_depersonalize.py"
+},
+{
+"id": "DF09",
+"text": "diff --git a/x b/x\nindex 892e883d..e1266196 100644\n--- a/x\n+++ b/x\n",
+"keep": [
+"892e883d..e1266196 100644"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "DF10",
+"text": "diff --git a/x b/x\nindex 892e883d..e1266196 100644\n",
+"keep": [
+"892e883d..e1266196 100644"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "S13",
+"text": "Authorization: Basic dTpw",
+"keep": [],
+"hide": [
+"dTpw"
+],
+"kind": "text"
+},
+{
+"id": "S14",
+"text": "1cv8.exe ENTERPRISE /F \"C:\\Bases\\ERP\" /P SuperSecret123",
+"keep": [],
+"hide": [
+"SuperSecret123"
+],
+"kind": "text"
+},
+{
+"id": "ID11",
+"text": "СНИЛС 112 233 445 95",
+"keep": [],
+"hide": [
+"112 233 445 95"
+],
+"kind": "text"
+},
+{
+"id": "AD04",
+"text": "Тверская улица, 7к2, кв. 5",
+"keep": [],
+"hide": [
+"7к2",
+"кв. 5"
+],
+"kind": "text"
+},
+{
+"id": "PI12",
+"text": "Большаков Андрей и Добрынин Иван",
+"keep": [],
+"hide": [
+"Большаков",
+"Добрынин"
+],
+"kind": "text"
+},
+{
+"id": "S15",
+"text": "Header Basic dXNlcjpwYXNz отправлен",
+"keep": [],
+"hide": [
+"dXNlcjpwYXNz"
+],
+"kind": "text"
+},
+{
+"id": "FP32",
+"text": "Basic configuration informations and Basic understanding",
+"keep": [
+"Basic configuration informations",
+"Basic understanding"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "AD05",
+"text": "ул. Тверская, 7к2, офис 15",
+"keep": [],
+"hide": [
+"7к2",
+"офис 15"
+],
+"kind": "text"
+},
+{
+"id": "AD06",
+"text": "УЛ. ЛЕНИНА, Д. 7 К. 2",
+"keep": [],
+"hide": [
+"ЛЕНИНА",
+"7 К. 2"
+],
+"kind": "text"
+},
+{
+"id": "CA02",
+"text": "карта: 4111\t1111\t1111\t1111 и 4111\t1111\t1111\t1111",
+"keep": [],
+"hide": [
+"4111\t1111"
+],
+"kind": "text"
+},
+{
+"id": "S16",
+"text": "1CV8.EXE /N admin /p SuperSecret123",
+"keep": [],
+"hide": [
+"SuperSecret123"
+],
+"kind": "text"
+},
+{
+"id": "S17",
+"text": "1cv8.exe ENTERPRISE /S srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-srv-/erp /P RealSecret123",
+"keep": [],
+"hide": [
+"RealSecret123"
+],
+"kind": "text"
+},
+{
+"id": "S18",
+"text": "1cv8.exe ENTERPRISE /P abc/SecretTail /Execute",
+"keep": [],
+"hide": [
+"abc",
+"SecretTail"
+],
+"kind": "text"
+},
+{
+"id": "PI13",
+"text": "Хороший Алексей Петрович согласовал договор",
+"keep": [],
+"hide": [
+"Хороший"
+],
+"kind": "text"
+},
+{
+"id": "S19",
+"text": "Header Basic YTpi sent",
+"keep": [],
+"hide": [
+"YTpi"
+],
+"kind": "text"
+},
+{
+"id": "NK03",
+"text": "telegram: @1slava, instagram: _slava_x, vk: 123user",
+"keep": [],
+"hide": [
+"1slava",
+"_slava_x",
+"123user"
+],
+"kind": "text"
+},
+{
+"id": "S20",
+"text": "1cv8.exe ENTERPRISE /NAdmin /PSuperSecret42",
+"keep": [],
+"hide": [
+"SuperSecret42"
+],
+"kind": "text"
+},
+{
+"id": "ID12",
+"text": "По паспорту 45 08 123456; Паспорт: серия 45 08 номер 654321",
+"keep": [],
+"hide": [
+"123456",
+"654321"
+],
+"kind": "text"
+},
+{
+"id": "CA03",
+"text": "карта 4222222222222",
+"keep": [],
+"hide": [
+"4222222222222"
+],
+"kind": "text"
+},
+{
+"id": "AD07",
+"text": "ул. 50 лет Октября, 10, кв. 5",
+"keep": [],
+"hide": [
+"Октября",
+"кв. 5"
+],
+"kind": "text"
+},
+{
+"id": "FP34",
+"text": "Артикул: 4111111111111111ABC",
+"keep": [
+"4111111111111111ABC"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "PI14",
+"text": "Директор Берлин подписал",
+"keep": [],
+"hide": [
+"Берлин"
+],
+"kind": "text"
+},
+{
+"id": "NK04",
+"text": "t.me/joinchat/AbCdEfGhIjKlMnOp",
+"keep": [],
+"hide": [
+"AbCdEfGhIjKlMnOp"
+],
+"kind": "text"
+},
+{
+"id": "CA04",
+"text": "карта 4111 1111 1111 1111 123",
+"keep": [],
+"hide": [
+"4111 1111 1111 1111"
+],
+"kind": "text"
+},
+{
+"id": "FP35",
+"text": "Артикул: А4111111111111111Б",
+"keep": [
+"А4111111111111111Б"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "S21",
+"text": "login=\"alice smith\"; логин: \"bob jones\"",
+"keep": [],
+"hide": [
+"alice smith",
+"bob jones"
+],
+"kind": "text"
+},
+{
+"id": "PI15",
+"text": "Отчёт Нурпеисов Жасулан",
+"keep": [],
+"hide": [
+"Нурпеисов"
+],
+"kind": "text"
+},
+{
+"id": "FP36",
+"text": "площадь 100 метров",
+"keep": [
+"площадь 100 метров"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "S22",
+"text": "1cv8 ENTERPRISE /P 'alpha beta' /Execute",
+"keep": [],
+"hide": [
+"alpha",
+"beta"
+],
+"kind": "text"
+},
+{
+"id": "S23",
+"text": "_ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_",
+"keep": [],
+"hide": [
+"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+],
+"kind": "text"
+},
+{
+"id": "CA05",
+"text": "карта 41111111111111111234",
+"keep": [],
+"hide": [
+"4111111111111111"
+],
+"kind": "text"
+},
+{
+"id": "AD08",
+"text": "Тверская УЛ., 7, КВ. 5",
+"keep": [],
+"hide": [
+"Тверская",
+"КВ. 5"
+],
+"kind": "text"
+},
+{
+"id": "S24",
+"text": "?login=alice&mode=prod",
+"keep": [
+"mode=prod"
+],
+"hide": [
+"alice"
+],
+"kind": "text"
+},
+{
+"id": "S25",
+"text": "eyJhbGciOiJIUzI1NiJ9.e30.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+"keep": [],
+"hide": [
+"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+],
+"kind": "text"
+},
+{
+"id": "S26",
+"text": "Authorization: Basic OnA=",
+"keep": [],
+"hide": [
+"OnA="
+],
+"kind": "text"
+},
+{
+"id": "AD09",
+"text": "УЛ. КРАСНЫХ ПАРТИЗАН, 7",
+"keep": [],
+"hide": [
+"КРАСНЫХ"
+],
+"kind": "text"
+},
+{
+"id": "AD10",
+"text": "ЛЕНИНА УЛ., 10",
+"keep": [],
+"hide": [
+"ЛЕНИНА"
+],
+"kind": "text"
+},
+{
+"id": "NK05",
+"text": "skype: anna-smith42",
+"keep": [],
+"hide": [
+"smith42"
+],
+"kind": "text"
+},
+{
+"id": "FP37",
+"text": "git config --get-regexp /Projects/",
+"keep": [
+"/Projects/"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "S27",
+"text": "1cv8.exe ENTERPRISE \"/PV7m2Q9z4\"",
+"keep": [],
+"hide": [
+"V7m2Q9z4"
+],
+"kind": "text"
+},
+{
+"id": "AD11",
+"text": "ул. Ленина, дом 10, квартира 25",
+"keep": [],
+"hide": [
+"Ленина",
+"квартира 25"
+],
+"kind": "text"
+},
+{
+"id": "AD12",
+"text": "наб. Космонавтов, 10, кв. 25",
+"keep": [],
+"hide": [
+"Космонавтов",
+"кв. 25"
+],
+"kind": "text"
+},
+{
+"id": "NK06",
+"text": "instagram: abc",
+"keep": [],
+"hide": [
+"abc"
+],
+"kind": "text"
+},
+{
+"id": "FP38",
+"text": "Площадь 1 200 м и Паспортизация: 123456 объектов",
+"keep": [
+"Площадь 1 200 м",
+"123456 объектов"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "S28",
+"text": "1cv8.exe ENTERPRISE \"/Palpha beta gamma\"",
+"keep": [],
+"hide": [
+"alpha",
+"beta",
+"gamma"
+],
+"kind": "text"
+},
+{
+"id": "FP39",
+"text": "1cv8.exe ENTERPRISE /F \"/Projects/clientbase\"",
+"keep": [
+"/Projects/clientbase"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "FP40",
+"text": "ИНН отсутствует; акт № 1234567890",
+"keep": [
+"1234567890"
+],
+"hide": [],
+"kind": "text"
+},
+{
+"id": "CA06",
+"text": "карта 4111111111111111 3 платежа",
+"keep": [
+"3 платежа"
+],
+"hide": [
+"4111111111111111"
+],
+"kind": "text"
+},
+{
+"id": "AD13",
+"text": "ул. 8 Марта, 10, кв. 5",
+"keep": [],
+"hide": [
+"Марта",
+"кв. 5"
+],
+"kind": "text"
+},
+{
+"id": "S29",
+"text": "логин: «service account»",
+"keep": [],
+"hide": [
+"service",
+"account"
+],
+"kind": "text"
+},
+{
+"id": "ID13",
+"text": "Паспорт: серия 4508, номер 123456",
+"keep": [],
+"hide": [
+"4508",
+"123456"
+],
+"kind": "text"
+}
+]
