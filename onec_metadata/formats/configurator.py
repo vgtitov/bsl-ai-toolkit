@@ -160,10 +160,13 @@ def save(doc: Doc, path: Path) -> None:
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
         if path.exists():
             shutil.copymode(path, tmp)          # mkstemp даёт 0600, права файла сохраняем
         _check_unchanged(doc, path)             # окно до замены минимально; строгая блокировка - вне объёма
-        # ponytail: окно между проверкой и заменой остаётся (микросекунды), строгая защита - lock-файл
+        # ponytail: окно между проверкой и заменой остаётся (микросекунды), строгая защита - lock-файл;
+        # жёсткая ссылка на Form.xml расходится с копией, fsync каталога не делаем (Windows)
         os.replace(tmp, path)                   # целиком или никак
     finally:
         if os.path.exists(tmp):
