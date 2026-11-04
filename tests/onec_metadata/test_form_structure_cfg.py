@@ -233,6 +233,10 @@ def test_column_group_and_guards(tmp_path):
     add_column(work, "КолонкаВвод", "ГруппаКолонок", "Объект.Т.Р", edit_mode="EnterOnInput")
     col = _by_name(cfg.load(work).getroot(), "КолонкаВвод")
     assert col.findtext(LF + "EditMode") == "EnterOnInput"
+    before = work.read_bytes()
+    with pytest.raises(OpPreconditionError):
+        add_column(work, "КолонкаПлохая", "ГруппаКолонок", "Объект.Т.Р", edit_mode="foo")
+    assert work.read_bytes() == before                               # отказ до изменения файла
     with pytest.raises(OpPreconditionError):
         add_column(work, "Колонка2", "ГруппаОтбор", "Объект.Т.Р")      # не таблица
     with pytest.raises(OpPreconditionError):

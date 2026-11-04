@@ -84,11 +84,17 @@ def add_table(form_path: Path, name: str, data_path: str, parent: str = ".", pos
     _add(form_path, name, parent, position, build)
 
 
+# РежимРедактированияКолонки платформы: Вход / ВходПриВводе / Непосредственно
+EDIT_MODES = ("Enter", "EnterOnInput", "Directly")
+
+
 def add_column(form_path: Path, name: str, parent: str, data_path: str, position: str = "last",
                edit_mode: str | None = None) -> None:
     """Колонка таблицы (InputField в таблице или группе колонок): DataPath, ContextMenu, ExtendedTooltip.
     `EditMode` — только если задан (`EnterOnInput` — как у колонок табличной части от конструктора); для
     динамического списка и таблицы только для чтения он не нужен, поэтому по умолчанию не пишем."""
+    if edit_mode and edit_mode not in EDIT_MODES:                    # до изменения файла
+        raise OpPreconditionError(f"EditMode '{edit_mode}': допустимо {', '.join(EDIT_MODES)}")
     def build(next_id):
         el = etree.Element(_q("InputField"), name=name, id=str(next_id))
         etree.SubElement(el, _q("DataPath")).text = data_path

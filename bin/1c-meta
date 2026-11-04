@@ -139,7 +139,8 @@ def build_parser() -> argparse.ArgumentParser:
         if cmd in ("add-table", "add-column"):
             p.add_argument("--data-path", required=True, help="напр. Объект.Товары / Объект.Товары.Номенклатура")
         if cmd == "add-column":
-            p.add_argument("--edit-mode", help="EditMode колонки, напр. EnterOnInput (по умолчанию не пишется)")
+            p.add_argument("--edit-mode", choices=["Enter", "EnterOnInput", "Directly"],
+                           help="EditMode колонки (по умолчанию не пишется)")
     fmt = fmsub.add_parser("set-title", help="заголовок элемента на языках (Конфигуратор Form.xml)")
     fmt.add_argument("file", help="Forms/<Имя>/Ext/Form.xml")
     fmt.add_argument("--name", required=True, help="имя элемента; '.' — сама форма")
