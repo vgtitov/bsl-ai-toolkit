@@ -94,3 +94,9 @@ def test_still_removes_decorated_and_email_attribution(tmp_path):
                "https://claude.ai/code/session_01ABC\n"
                "хвост\n")
     assert run_hook(tmp_path, message) == "Правка\n\nхвост\n"
+
+
+def test_keeps_ordinary_address_of_vendor_domain(tmp_path):
+    # Режется только служебный noreply-адрес атрибуции, а не любой адрес на этих доменах.
+    message = "Исправить вход для user@openai.com\n\nПисьмо ушло на dev@anthropic.com.ua тоже\n"
+    assert run_hook(tmp_path, message) == message

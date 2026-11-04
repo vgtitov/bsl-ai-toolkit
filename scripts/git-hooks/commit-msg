@@ -19,7 +19,7 @@ f="$1"; [ -f "$f" ] || exit 0
 trailer='^[[:space:]]*[a-z0-9][a-z0-9_-]*(-by|-session|-generated|-assisted)[[:space:]]*:'
 lead='^[[:space:][:punct:]]*([^[:alnum:][:space:][:punct:]]{1,4}[[:space:]]+)?'
 verb="${lead}(co[[:space:]-]*authored[[:space:]-]*by|reviewed[[:space:]-]*by|assisted[[:space:]-]*by|generated[[:space:]-]*(with|by)|written[[:space:]-]*by)"
-domain='@(anthropic|openai)\.com|noreply@github\.com|claude\.ai/code'
+domain='noreply@(anthropic|openai|github)\.com([^[:alnum:]_-]|$)|claude\.ai/code'
 keep='^[[:space:]]*signed-off-by[[:space:]]*:'
 
 # Номера строк-атрибуций (grep -n: "N:строка"), без внешних утилит кроме grep.
