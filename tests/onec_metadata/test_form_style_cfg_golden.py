@@ -58,5 +58,5 @@ def test_strip_and_reapply_equals_edt_export(tmp_path):
         set_style(work, item, {k: "" for k in props})
     assert len(work.read_bytes()) < len(golden) - 5000      # оформление действительно снято
     for item, props in RECIPE.items():
-        set_style(work, item, props)
+        set_style(work, item, props, omit_defaults=True)    # как выгрузка
     assert work.read_bytes() == golden

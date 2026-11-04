@@ -119,7 +119,7 @@ def test_golden_rebuild_equals_edt_export(tmp_path):
             set_title(work, n, _titles(g))
         props = {etree.QName(p).localname: _style_value(p) for p in g
                  if isinstance(p.tag, str) and etree.QName(p).localname not in SKIP}
-        set_style(work, n, props)
+        set_style(work, n, props, omit_defaults=True)
 
     out = work.read_bytes()
     assert _norm(out) == _norm(GOLDEN.read_bytes())
@@ -184,8 +184,8 @@ def _copy_props(work, golden_el):
     props = {etree.QName(p).localname: _style_value(p) for p in golden_el
              if isinstance(p.tag, str) and etree.QName(p).localname not in TABLE_SKIP}
     if etree.QName(golden_el).localname == "InputField":
-        props.setdefault("EditMode", "Enter")   # нет в выгрузке = умолчание; шаблон колонки ставит EnterOnInput
-    set_style(work, n, props)
+        props.setdefault("EditMode", "Enter")   # нет в выгрузке = умолчание
+    set_style(work, n, props, omit_defaults=True)
 
 
 def test_golden_table_rebuild_equals_edt_export(tmp_path):
@@ -229,7 +229,10 @@ def test_column_group_and_guards(tmp_path):
     g = _by_name(cfg.load(work).getroot(), "ГруппаКолонок")
     assert [etree.QName(c).localname for c in g] == ["ExtendedTooltip", "ChildItems"]
     col = _by_name(cfg.load(work).getroot(), "КолонкаВГруппе")
-    assert [etree.QName(c).localname for c in col] == ["DataPath", "EditMode", "ContextMenu", "ExtendedTooltip"]
+    assert [etree.QName(c).localname for c in col] == ["DataPath", "ContextMenu", "ExtendedTooltip"]   # EditMode не пишем
+    add_column(work, "КолонкаВвод", "ГруппаКолонок", "Объект.Т.Р", edit_mode="EnterOnInput")
+    col = _by_name(cfg.load(work).getroot(), "КолонкаВвод")
+    assert col.findtext(LF + "EditMode") == "EnterOnInput"
     with pytest.raises(OpPreconditionError):
         add_column(work, "Колонка2", "ГруппаОтбор", "Объект.Т.Р")      # не таблица
     with pytest.raises(OpPreconditionError):
