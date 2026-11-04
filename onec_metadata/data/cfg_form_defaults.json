@@ -1,0 +1,188 @@
+{
+ "Button": {
+  "AutoMaxHeight": "true",
+  "AutoMaxWidth": "true",
+  "Enabled": "true",
+  "PlacementArea": "UserCmds",
+  "Representation": "Auto",
+  "RepresentationInContextMenu": "Auto",
+  "Visible": "true"
+ },
+ "ButtonGroup": {
+  "Enabled": "true",
+  "Visible": "true"
+ },
+ "CalendarField": {
+  "CalendarNavigation": "true",
+  "EditMode": "Enter",
+  "Enabled": "true",
+  "HeaderHorizontalAlign": "Left",
+  "HeightInMonths": "1",
+  "ShowCurrentDate": "true",
+  "ShowInFooter": "true",
+  "ShowInHeader": "true",
+  "Visible": "true",
+  "WidthInMonths": "1"
+ },
+ "CheckBoxField": {
+  "EditMode": "Enter",
+  "Enabled": "true",
+  "HeaderHorizontalAlign": "Left",
+  "ShowInFooter": "true",
+  "ShowInHeader": "true",
+  "Visible": "true"
+ },
+ "ColumnGroup": {
+  "Enabled": "true",
+  "Group": "Vertical",
+  "ShowTitle": "true",
+  "Visible": "true"
+ },
+ "CommandBar": {
+  "Enabled": "true",
+  "HorizontalAlign": "Left",
+  "Visible": "true"
+ },
+ "HTMLDocumentField": {
+  "AutoMaxHeight": "true",
+  "AutoMaxWidth": "true",
+  "EditMode": "Enter",
+  "Enabled": "true",
+  "HeaderHorizontalAlign": "Left",
+  "Height": "10",
+  "HorizontalStretch": "true",
+  "ShowInFooter": "true",
+  "ShowInHeader": "true",
+  "VerticalStretch": "true",
+  "Visible": "true",
+  "Width": "50"
+ },
+ "InputField": {
+  "AutoMaxHeight": "true",
+  "AutoMaxWidth": "true",
+  "ChooseType": "true",
+  "EditMode": "Enter",
+  "Enabled": "true",
+  "HeaderHorizontalAlign": "Left",
+  "ShowInFooter": "true",
+  "ShowInHeader": "true",
+  "TextEdit": "true",
+  "TypeDomainEnabled": "true",
+  "Visible": "true",
+  "Wrap": "true"
+ },
+ "LabelDecoration": {
+  "AutoMaxHeight": "true",
+  "AutoMaxWidth": "true",
+  "Enabled": "true",
+  "HorizontalAlign": "Left",
+  "Visible": "true"
+ },
+ "LabelField": {
+  "AutoMaxHeight": "true",
+  "AutoMaxWidth": "true",
+  "EditMode": "Enter",
+  "Enabled": "true",
+  "HeaderHorizontalAlign": "Left",
+  "Hyperlink": "true",
+  "ShowInFooter": "true",
+  "ShowInHeader": "true",
+  "Visible": "true"
+ },
+ "Page": {
+  "Enabled": "true",
+  "Group": "Vertical",
+  "ShowTitle": "true",
+  "Visible": "true"
+ },
+ "Pages": {
+  "CurrentRowUse": "Auto",
+  "Enabled": "true",
+  "PagesRepresentation": "Auto",
+  "Visible": "true"
+ },
+ "PictureDecoration": {
+  "AutoMaxHeight": "true",
+  "AutoMaxWidth": "true",
+  "Enabled": "true",
+  "FileDragMode": "AsFileRef",
+  "Visible": "true"
+ },
+ "PictureField": {
+  "AutoMaxHeight": "true",
+  "AutoMaxWidth": "true",
+  "Enabled": "true",
+  "FileDragMode": "AsFileRef",
+  "HeaderHorizontalAlign": "Left",
+  "HorizontalStretch": "true",
+  "ShowInFooter": "true",
+  "ShowInHeader": "true",
+  "VerticalStretch": "true",
+  "Visible": "true"
+ },
+ "PlannerField": {
+  "AutoMaxHeight": "true",
+  "AutoMaxWidth": "true",
+  "EditMode": "Enter",
+  "Enabled": "true",
+  "HeaderHorizontalAlign": "Left",
+  "Height": "10",
+  "HorizontalStretch": "true",
+  "ShowInFooter": "true",
+  "ShowInHeader": "true",
+  "VerticalStretch": "true",
+  "Visible": "true",
+  "Width": "50"
+ },
+ "Popup": {
+  "Enabled": "true",
+  "Representation": "Auto",
+  "Visible": "true"
+ },
+ "RadioButtonField": {
+  "EditMode": "Enter",
+  "Enabled": "true",
+  "HeaderHorizontalAlign": "Left",
+  "ShowInFooter": "true",
+  "ShowInHeader": "true",
+  "Visible": "true"
+ },
+ "Table": {
+  "AutoMaxHeight": "true",
+  "AutoMaxRowsCount": "true",
+  "AutoMaxWidth": "true",
+  "ChangeRowOrder": "true",
+  "ChangeRowSet": "true",
+  "Enabled": "true",
+  "FileDragMode": "AsFileRef",
+  "FooterHeight": "1",
+  "Header": "true",
+  "HeaderHeight": "1",
+  "HorizontalLines": "true",
+  "HorizontalScrollBar": "AutoUse",
+  "HorizontalStretch": "true",
+  "InitialListView": "Auto",
+  "Representation": "HierarchicalList",
+  "SearchOnInput": "Auto",
+  "SelectionMode": "MultiRow",
+  "TitleLocation": "None",
+  "VerticalLines": "true",
+  "VerticalScrollBar": "AutoUse",
+  "VerticalStretch": "true",
+  "Visible": "true"
+ },
+ "UsualGroup": {
+  "Behavior": "Auto",
+  "CurrentRowUse": "Auto",
+  "DisplayImportance": "Usual",
+  "Enabled": "true",
+  "Group": "HorizontalIfPossible",
+  "Representation": "WeakSeparation",
+  "ShowLeftMargin": "true",
+  "ShowTitle": "true",
+  "SlaveItemsWidth": "Equal",
+  "ThroughAlign": "Auto",
+  "United": "true",
+  "Visible": "true"
+ }
+}

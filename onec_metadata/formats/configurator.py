@@ -18,6 +18,10 @@ XML-парсер по спецификации нормализует CRLF→LF,
 для такого входа не byte-perfect. На фикстурах и типовых выгрузках УТ не
 встречается; round-trip тест поймает регресс, если встретится.
 """
+import hashlib
+import os
+import shutil
+import tempfile
 from pathlib import Path
 
 from lxml import etree
@@ -63,13 +67,15 @@ class Doc:
         self.decl_newline = decl_newline        # перевод строки после <?xml?>
         self.trailing_newline = trailing_newline  # хвост файла ("" если нет)
         self.has_bom = has_bom                  # Конфигуратор: да; EDT: нет
+        self.src_path = None
+        self.src_hash = None                    # sha1 файла при чтении: save не затирает чужую правку
 
     def __getattr__(self, name):
         return getattr(self.tree, name)
 
 
 def load(path: Path) -> Doc:
-    raw = path.read_bytes()
+    raw = raw_all = path.read_bytes()
     has_bom = raw.startswith(BOM.encode("utf-8"))
     if has_bom:
         raw = raw[len(BOM.encode("utf-8")):]
@@ -92,7 +98,10 @@ def load(path: Path) -> Doc:
     protected = body_text.rstrip("\r\n").replace("\r\n", "&#13;\n")
     tree = etree.ElementTree(
         etree.fromstring(protected.encode("utf-8"), _PARSER))
-    return Doc(tree, decl_newline, trailing_newline, has_bom=has_bom)
+    doc = Doc(tree, decl_newline, trailing_newline, has_bom=has_bom)
+    doc.src_hash = hashlib.sha1(raw_all).hexdigest()
+    doc.src_path = path.resolve()
+    return doc
 
 
 def place_after(anchor, new) -> None:
@@ -140,8 +149,36 @@ def remove_children(container, to_remove) -> None:
 
 
 def save(doc: Doc, path: Path) -> None:
+    path = path.resolve()                        # через symlink пишем в целевой файл, ссылка остаётся
     body = etree.tostring(doc.tree, encoding="unicode")
     body = body.replace("&#13;\n", "\r\n").replace("&#13;", "\r")
     bom = BOM if doc.has_bom else ""
     text = bom + XML_DECL + doc.decl_newline + body + doc.trailing_newline
-    path.write_bytes(text.encode("utf-8"))
+    data = text.encode("utf-8")
+    _check_unchanged(doc, path)
+    fd, tmp = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        if path.exists():
+            shutil.copymode(path, tmp)          # mkstemp даёт 0600, права файла сохраняем
+        _check_unchanged(doc, path)             # окно до замены минимально; строгая блокировка - вне объёма
+        # ponytail: окно между проверкой и заменой остаётся (микросекунды), строгая защита - lock-файл;
+        # жёсткая ссылка на Form.xml расходится с копией, fsync каталога не делаем (Windows)
+        os.replace(tmp, path)                   # целиком или никак
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+    doc.src_path = path
+    doc.src_hash = hashlib.sha1(data).hexdigest()  # повторный save того же Doc не считается чужой правкой
+
+
+def _check_unchanged(doc: Doc, path: Path) -> None:
+    if not (doc.src_hash and doc.src_path == path):
+        return
+    if not path.exists() or hashlib.sha1(path.read_bytes()).hexdigest() != doc.src_hash:
+        from onec_metadata.ops import OpPreconditionError
+        raise OpPreconditionError(f"{path.name}: файл изменён другим процессом после чтения, "
+                                  "правка не записана, повторите команду")

@@ -114,6 +114,40 @@ def build_parser() -> argparse.ArgumentParser:
     fmf.add_argument("file", help="путь к Forms/<Имя>/Ext/Form.xml (Конфигуратор)")
     fmf.add_argument("--name", required=True, help="имя элемента (InputField)")
     fmf.add_argument("--data-path", required=True, help="привязка данных, напр. Объект.Артикул")
+    fms = fmsub.add_parser("set-style",
+                           help="оформление элемента в свойствах формы (EDT и Конфигуратор)")
+    fms.add_argument("file", help="Forms/<Имя>/Form.form (EDT) или Forms/<Имя>/Ext/Form.xml (Конфигуратор)")
+    fms.add_argument("--item", required=True, help="имя элемента; '.' — сама форма")
+    fms.add_argument("--set", dest="props", action="append", required=True, metavar="ИМЯ=ЗНАЧЕНИЕ",
+                     help="свойство: backColor=style:примЦветФона, textColor=rgb:74,74,74, "
+                          "font=style:NormalTextFont,face=Gilroy,height=10,bold, group=Vertical")
+    for cmd, hlp in (("add-group", "новая обычная группа (Конфигуратор Form.xml)"),
+                     ("add-decoration", "новая надпись/картинка (Конфигуратор Form.xml)"),
+                     ("move", "перенести элемент в другую группу / сменить порядок (Конфигуратор Form.xml)"),
+                     ("add-table", "новая таблица с привязкой --data-path (Конфигуратор Form.xml)"),
+                     ("add-column", "колонка таблицы: --parent <Таблица|ГруппаКолонок> --data-path (Конфигуратор)"),
+                     ("add-column-group", "группа колонок: --parent <Таблица|ГруппаКолонок> (Конфигуратор)")):
+        p = fmsub.add_parser(cmd, help=hlp)
+        p.add_argument("file", help="Forms/<Имя>/Ext/Form.xml")
+        p.add_argument("--name", required=True, help="имя элемента")
+        p.add_argument("--parent", default=".", help="родитель: группа, таблица, группа колонок; '.' — корень")
+        p.add_argument("--position", default="last", help="first | last | before:Имя | after:Имя")
+        if cmd == "add-decoration":
+            p.add_argument("--kind", default="Label", choices=["Label", "Picture"])
+        if cmd in ("add-table", "add-column"):
+            p.add_argument("--data-path", required=True, help="напр. Объект.Товары / Объект.Товары.Номенклатура")
+    fmt = fmsub.add_parser("set-title", help="заголовок элемента на языках (Конфигуратор Form.xml)")
+    fmt.add_argument("file", help="Forms/<Имя>/Ext/Form.xml")
+    fmt.add_argument("--name", required=True, help="имя элемента; '.' — сама форма")
+    fmt.add_argument("--title", action="append", required=True, metavar="ЯЗЫК=ТЕКСТ",
+                     help="напр. --title ru=Поиск --title en=Search; остальные языки сохраняются")
+    fmt.add_argument("--replace-all", action="store_true", help="заменить Title целиком, прочие языки удалить")
+    fml = fmsub.add_parser("lint", help="проверка формы: языки заголовков, шрифты/цвета токенами, "
+                                        "командная панель (только чтение; код 1 — есть находки)")
+    fml.add_argument("file", help="Form.form (EDT) или Form.xml (Конфигуратор)")
+    fml.add_argument("--langs", default="ru,en", help="обязательные языки заголовков (по умолчанию ru,en)")
+    fml.add_argument("--checks", default="titles,tokens,command-bar",
+                     help="группы проверок: titles,tokens,command-bar; только компоновка — titles")
 
     et = sub.add_parser("edit-type",
                         help="задать/сменить тип реквизита/измерения/ресурса или самого объекта")
@@ -210,6 +244,48 @@ def main() -> None:
             if ns.fmcmd == "add-attribute":
                 from onec_metadata.ops.form import add_attribute as form_add_attr
                 form_add_attr(Path(ns.file), ns.name, ns.type_ref)
+            elif ns.fmcmd in ("add-group", "add-decoration", "move", "set-title",
+                              "add-table", "add-column", "add-column-group"):
+                from onec_metadata.ops import form_structure as fs
+                if ns.fmcmd == "add-table":
+                    fs.add_table(Path(ns.file), ns.name, ns.data_path, ns.parent, ns.position)
+                elif ns.fmcmd == "add-column":
+                    fs.add_column(Path(ns.file), ns.name, ns.parent, ns.data_path, ns.position)
+                elif ns.fmcmd == "add-column-group":
+                    fs.add_column_group(Path(ns.file), ns.name, ns.parent, ns.position)
+                elif ns.fmcmd == "add-group":
+                    fs.add_group(Path(ns.file), ns.name, ns.parent, ns.position)
+                elif ns.fmcmd == "add-decoration":
+                    fs.add_decoration(Path(ns.file), ns.name, ns.parent, ns.position, ns.kind)
+                elif ns.fmcmd == "move":
+                    fs.move_item(Path(ns.file), ns.name, ns.parent, ns.position)
+                else:
+                    titles = {}
+                    for kv in ns.title:
+                        lang, sep, text = kv.partition("=")
+                        if not sep or not lang:
+                            raise OpPreconditionError(f"--title '{kv}': ожидается ЯЗЫК=ТЕКСТ")
+                        if lang in titles:
+                            raise OpPreconditionError(f"--title: язык '{lang}' указан дважды")
+                        titles[lang] = text
+                    fs.set_title(Path(ns.file), ns.name, titles, replace_all=ns.replace_all)
+            elif ns.fmcmd == "lint":
+                from onec_metadata.ops.form_lint import lint_form
+                issues = lint_form(Path(ns.file), langs=tuple(x.strip() for x in ns.langs.split(",") if x.strip()),
+                                   checks=tuple(x.strip() for x in ns.checks.split(",") if x.strip()))
+                for i in issues:
+                    print(i)
+                print(f"находок: {len(issues)}")
+                sys.exit(1 if issues else 0)
+            elif ns.fmcmd == "set-style":
+                from onec_metadata.ops.form_style import set_style
+                props = {}
+                for kv in ns.props:
+                    k, sep, v = kv.partition("=")
+                    if not sep or not k:
+                        raise OpPreconditionError(f"--set '{kv}': ожидается ИМЯ=ЗНАЧЕНИЕ")
+                    props[k] = v
+                set_style(Path(ns.file), ns.item, props)
             else:
                 from onec_metadata.ops.form import add_field as form_add_field
                 form_add_field(Path(ns.file), ns.name, ns.data_path)
