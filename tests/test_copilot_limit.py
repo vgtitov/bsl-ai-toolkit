@@ -145,7 +145,7 @@ def test_second_opinion_is_limit_threshold():
 
 def test_pause_skips_copilot_without_calling_it(monkeypatch, tmp_path):
     so = _load("second_opinion")
-    monkeypatch.setattr(so, "PAUSE_DIR", tmp_path / "skip")
+    monkeypatch.setenv("AI_TOOLKIT_LIMIT_SKIP_DIR", str(tmp_path / "skip"))
     monkeypatch.setenv("AI_TOOLKIT_COPILOT_CMD", f'"{sys.executable}" -c "raise SystemExit(99)"')
     so.set_pause("copilot")
     assert so.paused_until("copilot") > 0
@@ -154,7 +154,7 @@ def test_pause_skips_copilot_without_calling_it(monkeypatch, tmp_path):
 
 def test_limit_text_with_exit_zero_is_not_an_answer(monkeypatch, tmp_path):
     so = _load("second_opinion")
-    monkeypatch.setattr(so, "PAUSE_DIR", tmp_path / "skip")
+    monkeypatch.setenv("AI_TOOLKIT_LIMIT_SKIP_DIR", str(tmp_path / "skip"))
     fake = tmp_path / "lim.py"
     fake.write_text("print('You have reached your limit. Try again later.')\n", encoding="utf-8")
     monkeypatch.setenv("AI_TOOLKIT_COPILOT_CMD", f'"{sys.executable}" "{fake}"')
