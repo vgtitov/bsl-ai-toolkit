@@ -67,6 +67,7 @@ class Doc:
         self.decl_newline = decl_newline        # перевод строки после <?xml?>
         self.trailing_newline = trailing_newline  # хвост файла ("" если нет)
         self.has_bom = has_bom                  # Конфигуратор: да; EDT: нет
+        self.src_path = None
         self.src_hash = None                    # sha1 файла при чтении: save не затирает чужую правку
 
     def __getattr__(self, name):
@@ -99,6 +100,7 @@ def load(path: Path) -> Doc:
         etree.fromstring(protected.encode("utf-8"), _PARSER))
     doc = Doc(tree, decl_newline, trailing_newline, has_bom=has_bom)
     doc.src_hash = hashlib.sha1(raw_all).hexdigest()
+    doc.src_path = path
     return doc
 
 
@@ -165,11 +167,14 @@ def save(doc: Doc, path: Path) -> None:
     finally:
         if os.path.exists(tmp):
             os.unlink(tmp)
+    doc.src_path = path
     doc.src_hash = hashlib.sha1(data).hexdigest()  # повторный save того же Doc не считается чужой правкой
 
 
 def _check_unchanged(doc: Doc, path: Path) -> None:
-    if doc.src_hash and (not path.exists() or hashlib.sha1(path.read_bytes()).hexdigest() != doc.src_hash):
+    if not (doc.src_hash and doc.src_path == path):
+        return
+    if not path.exists() or hashlib.sha1(path.read_bytes()).hexdigest() != doc.src_hash:
         from onec_metadata.ops import OpPreconditionError
         raise OpPreconditionError(f"{path.name}: файл изменён другим процессом после чтения, "
                                   "правка не записана, повторите команду")
