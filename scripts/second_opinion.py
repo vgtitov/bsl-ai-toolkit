@@ -121,7 +121,8 @@ COPILOT_LAST_WHY = ""
 LIMIT_PHRASES = ("daily chat limit", "reached your limit", "try again later", "upgrade to keep going", "used your daily",
                  "дневной лимит", "достигли лимита", "достигли дневного лимита", "суточный лимит", "повторите попытку позже")
 LIMIT_MAX = 500
-PAUSE_DIR = Path(os.environ.get("AI_TOOLKIT_LIMIT_SKIP_DIR") or Path.home() / ".cache" / "ai_toolkit_limit_skip")
+def _pause_dir():
+    return Path(os.environ.get("AI_TOOLKIT_LIMIT_SKIP_DIR") or Path.home() / ".cache" / "ai_toolkit_limit_skip")
 PAUSE_HOURS = 6
 
 
@@ -134,7 +135,7 @@ def is_limit(text: str) -> bool:
 def paused_until(name: str) -> float:
     """Unix-время конца паузы звена или 0. Пока пауза идёт, страницу и сеть не трогаем."""
     try:
-        until = float((PAUSE_DIR / name).read_text().strip())
+        until = float((_pause_dir() / name).read_text().strip())
     except (OSError, ValueError):
         return 0.0
     return until if until > time.time() else 0.0
@@ -142,8 +143,8 @@ def paused_until(name: str) -> float:
 
 def set_pause(name: str, hours: float = PAUSE_HOURS) -> None:
     try:
-        PAUSE_DIR.mkdir(parents=True, exist_ok=True)
-        (PAUSE_DIR / name).write_text(str(time.time() + hours * 3600))
+        _pause_dir().mkdir(parents=True, exist_ok=True)
+        (_pause_dir() / name).write_text(str(time.time() + hours * 3600))
     except OSError:
         pass                                            # пауза — оптимизация, без неё просто повторим вызов
 
