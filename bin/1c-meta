@@ -176,8 +176,8 @@ def build_parser() -> argparse.ArgumentParser:
                                         "командная панель (только чтение; код 1 — есть находки)")
     fml.add_argument("file", help="Form.form (EDT) или Form.xml (Конфигуратор)")
     fml.add_argument("--langs", default="ru,en", help="обязательные языки заголовков (по умолчанию ru,en)")
-    fml.add_argument("--checks", default="titles,tokens,command-bar",
-                     help="группы проверок: titles,tokens,command-bar; только компоновка — titles")
+    fml.add_argument("--checks", default="titles,tokens,command-bar,layout",
+                     help="группы проверок: titles,tokens,command-bar,layout; без фирменного оформления — titles,layout")
 
     et = sub.add_parser("edit-type",
                         help="задать/сменить тип реквизита/измерения/ресурса или самого объекта")

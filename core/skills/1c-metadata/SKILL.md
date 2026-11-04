@@ -70,7 +70,7 @@ cp -r <src> <src>_before               # эталон для verify
 1c-meta attr add <Объект.xml> --name X --type xs:string --synonym "..."
 1c-meta form set-style <Form.form|Form.xml> --item <Элемент|.> \
     --set backColor=style:<ЦветСтиля> --set font=style:<ШрифтСтиля>   # оформление в свойствах формы
-1c-meta form lint <Form.form|Form.xml> [--langs ru,en]              # языки, токены стиля, панель
+1c-meta form lint <Form.form|Form.xml> [--langs ru,en]              # языки, токены стиля, панель, направление/заголовок групп
 1c-meta form add-group <Form.xml> --name <Группа> [--parent <Группа|.>] [--position first|last|before:X|after:X]
 1c-meta form add-decoration <Form.xml> --name <Надпись> [--parent …] [--position …] [--kind Label|Picture]
 1c-meta form move <Form.xml> --name <Элемент> --parent <Группа|.> [--position …]   # структура: Конфигуратор (СНГ)

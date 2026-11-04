@@ -67,3 +67,42 @@ def test_checks_titles_only_for_layout_forms(tmp_path):
     set_style(work, "ОбщаяИнформация", {"textColor": "rgb:1,2,3"})
     codes = _codes(lint_form(work, langs=("ru", "en"), checks=("titles",)))
     assert "literal-color" not in codes and "command-bar" not in codes
+
+# ---------- layout: расположение и группировка по гайду ----------
+
+def test_cfg_group_default_direction_and_title_word_flagged(tmp_path):
+    work = _copy(tmp_path, "form_style_cfg.xml", "Form.xml")
+    text = work.read_text(encoding="utf-8")
+    # ГруппаВерсияУстановленногоМодуля: направление не задано (умолчание «горизонтально, если возможно»),
+    # заголовок показан и начинается со слова «Группа»
+    text = text.replace("<Group>Horizontal</Group>", "", 1).replace("<ShowTitle>false</ShowTitle>", "", 1)
+    work.write_text(text, encoding="utf-8")
+    by_item = {(i.code, i.item) for i in lint_form(work, checks=("layout",))}
+    assert ("group-horizontal-if-possible", "ГруппаВерсияУстановленногоМодуля") in by_item
+    assert ("group-title-word", "ГруппаВерсияУстановленногоМодуля") in by_item
+
+
+def test_cfg_explicit_direction_and_hidden_title_pass(tmp_path):
+    work = _copy(tmp_path, "form_style_cfg.xml", "Form.xml")
+    flagged = {i.item for i in lint_form(work, checks=("layout",)) if i.code == "group-title-word"}
+    assert "ГруппаВерсияУстановленногоМодуля" not in flagged        # заголовок скрыт (ShowTitle=false)
+    dirs = {i.item for i in lint_form(work, checks=("layout",)) if i.code == "group-horizontal-if-possible"}
+    assert "ГруппаОбщаяИнформация" not in dirs                      # Group=Vertical задан явно
+
+
+def test_edt_group_without_direction_flagged(tmp_path):
+    work = _copy(tmp_path, "form_style_edt.form", "Form.form")
+    issues = lint_form(work, checks=("layout",))
+    assert all(i.code in ("group-horizontal-if-possible", "group-title-word") for i in issues)
+    assert any(i.code == "group-horizontal-if-possible" for i in issues)   # extInfo группы пустой
+    set_style(work, "ГруппаШапка", {"group": "AlwaysHorizontal"})
+    after = {i.item for i in lint_form(work, checks=("layout",)) if i.code == "group-horizontal-if-possible"}
+    assert "ГруппаШапка" not in after
+
+
+def test_unknown_check_lists_layout(tmp_path):
+    import pytest
+    from onec_metadata.ops import OpPreconditionError
+    work = _copy(tmp_path, "form_style_edt.form", "Form.form")
+    with pytest.raises(OpPreconditionError, match="layout"):
+        lint_form(work, checks=("nope",))

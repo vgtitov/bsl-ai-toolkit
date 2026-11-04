@@ -53,7 +53,7 @@ description: >
 
 Частые провалы AI в 1С и контр-приёмы (чек-лист самопроверки перед выдачей кода) — `references/ai-pitfalls.md`.
 Ревью MR агентом (порядок, замечания `блокер:`/`желательно:`, чего агент не делает): `references/mr-review-agent.md`. Ревью MR: `references/review-checklist.md` (чек-лист, приоритеты P1 и P2, размер MR, как ставить задачу второй модели), первый проход `scripts/mr_review.py`.
-Формы: компоновка и группировка элементов, оформление через `set-style`, свой стиль проекта профилем — `references/form-layout.md` (каркас профиля `references/form-style-profile-template.md`). Работа с СКД и списками: из кода — `references/skd-programmatic.md`, настройки и пользовательские значения — `references/skd-user-settings.md`, динамический список — `references/dynamic-list.md`, дополнительные реквизиты и сведения — `references/additional-props.md`.
+Формы: какой режим применять (типовая — не пересобирать; новая — по стандартам 1С; эксклюзивный стиль — только если задан) — `references/form-layout.md`; выбор элементов и расположение — `references/form-design-guide.md`; прототип в Figma или HTML — `references/form-prototyping.md`; свой стиль проекта профилем — каркас `references/form-style-profile-template.md`. Работа с СКД и списками: из кода — `references/skd-programmatic.md`, настройки и пользовательские значения — `references/skd-user-settings.md`, динамический список — `references/dynamic-list.md`, дополнительные реквизиты и сведения — `references/additional-props.md`.
 Чаще всего корпоративный SonarQube ругается на девять ключей BSL LS (точка по ссылке в запросе, описание параметров и возврата, сложность методов и др.) — как писать, чтобы их не было: `references/sonar-top-rules.md`.
 
 ## Версионный стек — НАСТРОЙ ПОД СВОЙ ПРОЕКТ
