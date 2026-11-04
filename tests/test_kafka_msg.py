@@ -138,6 +138,7 @@ def test_redirect_is_not_followed_cookie_stays_put():
 def test_diff_values_does_not_hide_missing_field_behind_placeholder():
     d = km.diff_values({"a": "<нет>"}, {"b": "<нет>"})
     assert {k for k, _, _ in d} == {"a", "b"}
+    assert [km._short(x) for x in d[0][1:]] == ["'<нет>'", "<нет поля>"]
 
 
 def test_long_values_are_truncated_in_output():

@@ -189,6 +189,14 @@ def flatten(v, prefix=""):
     return out
 
 
+class _Absent:
+    def __repr__(self):
+        return "<нет поля>"
+
+
+ABSENT = _Absent()
+
+
 def _short(x, n=80):
     """Значение для вывода: длинное обрезаем (логи CI, терминал)."""
     r = repr(x)
@@ -198,9 +206,8 @@ def _short(x, n=80):
 def diff_values(a, b, limit=20):
     fa, fb = flatten(a), flatten(b)
     keys = list(dict.fromkeys(list(fa) + list(fb)))
-    absent = "<нет>"
-    # "<нет>" как настоящее значение строки не должно прятать отсутствие поля
-    return [(k, fa.get(k, absent), fb.get(k, absent)) for k in keys
+    # ABSENT: строка "<нет>" в данных не должна прятать отсутствие поля
+    return [(k, fa.get(k, ABSENT), fb.get(k, ABSENT)) for k in keys
             if (k in fa) != (k in fb) or fa.get(k) != fb.get(k)][:limit]
 
 
