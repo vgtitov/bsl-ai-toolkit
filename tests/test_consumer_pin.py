@@ -123,3 +123,37 @@ def test_cli_error_is_actionable_without_traceback(
     assert result.returncode == 2
     assert result.stderr.startswith("ERROR:")
     assert "Traceback" not in result.stderr
+
+
+def test_unreachable_upstream_warns_and_passes_unless_strict(tmp_path: Path, capsys):
+    # Нет сети/VPN до апстрима: проверка наличия тега не должна блокировать чужой push.
+    pin = tmp_path / "toolkit.ref"
+    pin.write_text("v1.2.3\n", encoding="utf-8")
+    gone = str(tmp_path / "нет-такого.git")
+    assert consumer_pin.check_pin(gone, pin) == "v1.2.3"
+    assert "WARNING" in capsys.readouterr().err
+    with pytest.raises(consumer_pin.PinError):
+        consumer_pin.check_pin(gone, pin, strict=True)
+
+
+def test_ls_remote_has_timeout_and_never_prompts(tmp_path: Path, monkeypatch):
+    seen = {}
+
+    def hang(cmd, **kw):
+        seen.update(kw)
+        raise subprocess.TimeoutExpired(cmd, kw["timeout"])
+    monkeypatch.setattr(consumer_pin.subprocess, "run", hang)
+    pin = tmp_path / "toolkit.ref"
+    pin.write_text("v1.2.3\n", encoding="utf-8")
+    assert consumer_pin.check_pin("https://example.invalid/x.git", pin) == "v1.2.3"
+    assert 0 < seen["timeout"] <= 60
+    assert seen["env"]["GIT_TERMINAL_PROMPT"] == "0"
+    with pytest.raises(consumer_pin.PinError, match="timeout|не ответил|timed out"):
+        consumer_pin.bump_pin("https://example.invalid/x.git", pin, "v1.2.4")   # bump всегда строгий
+
+
+def test_missing_tag_still_fails_even_when_not_strict(upstream: Path, tmp_path: Path):
+    pin = tmp_path / "toolkit.ref"
+    pin.write_text("v9.9.9\n", encoding="utf-8")
+    with pytest.raises(consumer_pin.PinError, match="upstream"):
+        consumer_pin.check_pin(str(upstream), pin)

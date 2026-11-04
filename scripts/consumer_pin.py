@@ -19,6 +19,13 @@ class PinError(RuntimeError):
     """Consumer pin contract violation."""
 
 
+class UpstreamUnreachable(PinError):
+    """Upstream did not answer (no network, VPN down, timeout): the tag could not be checked either way."""
+
+
+LS_REMOTE_TIMEOUT = 20  # seconds; pre-push must not hang when the upstream is unreachable
+
+
 def _require_version(value: str) -> str:
     if not STRICT_VERSION.fullmatch(value):
         raise PinError(f"invalid strict SemVer tag: {value}")
@@ -38,32 +45,51 @@ def read_pin(pin_file: Path) -> str:
 
 def upstream_has_tag(repo: str, tag: str) -> bool:
     _require_version(tag)
-    result = subprocess.run(
-        [
-            "git",
-            "ls-remote",
-            "--exit-code",
-            "--tags",
-            repo,
-            f"refs/tags/{tag}",
-            f"refs/tags/{tag}^{{}}",
-        ],
-        text=True,
-        capture_output=True,
-    )
-    if result.returncode != 0:
-        reason = result.stderr.strip() or result.stdout.strip()
-        detail = f": {reason}" if reason else ""
-        raise PinError(
-            f"upstream tag {tag} is unavailable in {repo}{detail}")
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GCM_INTERACTIVE="never")
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "ls-remote",
+                "--exit-code",
+                "--tags",
+                repo,
+                f"refs/tags/{tag}",
+                f"refs/tags/{tag}^{{}}",
+            ],
+            text=True,
+            capture_output=True,
+            timeout=LS_REMOTE_TIMEOUT,
+            env=env,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise UpstreamUnreachable(
+            f"upstream {repo} did not answer within {LS_REMOTE_TIMEOUT}s (timeout)") from error
+    except OSError as error:
+        raise UpstreamUnreachable(f"cannot run git: {error}") from error
+    reason = result.stderr.strip() or result.stdout.strip()
+    detail = f": {reason}" if reason else ""
+    if result.returncode == 2:  # --exit-code: the remote answered, no such ref
+        raise PinError(f"upstream tag {tag} is unavailable in {repo}{detail}")
+    if result.returncode != 0:  # 128 and others: network, DNS, auth, bad URL
+        raise UpstreamUnreachable(f"upstream {repo} is not reachable{detail}")
     if not result.stdout.strip():
         raise PinError(f"upstream tag {tag} is unavailable in {repo}")
     return True
 
 
-def check_pin(repo: str, pin_file: Path) -> str:
+def check_pin(repo: str, pin_file: Path, strict: bool = False) -> str:
+    """Pin must be valid SemVer and, when upstream answers, an existing tag.
+
+    No answer from upstream (offline, VPN down) is a warning, not an error: it must not block an
+    unrelated push. strict=True (or ONEC_PIN_STRICT=1) makes it an error again."""
     tag = read_pin(pin_file)
-    upstream_has_tag(repo, tag)
+    try:
+        upstream_has_tag(repo, tag)
+    except UpstreamUnreachable as error:
+        if strict or os.environ.get("ONEC_PIN_STRICT") == "1":
+            raise
+        print(f"WARNING: tag check skipped, {error}", file=sys.stderr)
     return tag
 
 
@@ -105,6 +131,8 @@ def _parser() -> argparse.ArgumentParser:
     check = commands.add_parser("check", help="validate the current pin")
     check.add_argument("--repo", required=True)
     check.add_argument("--pin-file", required=True, type=Path)
+    check.add_argument("--strict", action="store_true",
+                       help="treat an unreachable upstream as an error (default: warning)")
 
     bump = commands.add_parser(
         "bump", help="validate and atomically update the pin")
@@ -118,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         if args.command == "check":
-            tag = check_pin(args.repo, args.pin_file)
+            tag = check_pin(args.repo, args.pin_file, args.strict)
             print(f"OK: {args.pin_file} pins existing upstream tag {tag}")
         else:
             bump_pin(args.repo, args.pin_file, args.tag)
