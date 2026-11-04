@@ -20,6 +20,7 @@ XML-парсер по спецификации нормализует CRLF→LF,
 """
 import hashlib
 import os
+import tempfile
 from pathlib import Path
 
 from lxml import etree
@@ -150,9 +151,21 @@ def save(doc: Doc, path: Path) -> None:
     bom = BOM if doc.has_bom else ""
     text = bom + XML_DECL + doc.decl_newline + body + doc.trailing_newline
     data = text.encode("utf-8")
+    _check_unchanged(doc, path)
+    fd, tmp = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+        _check_unchanged(doc, path)             # окно до замены минимально; строгая блокировка - вне объёма
+        os.replace(tmp, path)                   # целиком или никак
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+    doc.src_hash = hashlib.sha1(data).hexdigest()  # повторный save того же Doc не считается чужой правкой
+
+
+def _check_unchanged(doc: Doc, path: Path) -> None:
     if doc.src_hash and path.exists() and hashlib.sha1(path.read_bytes()).hexdigest() != doc.src_hash:
         from onec_metadata.ops import OpPreconditionError
-        raise OpPreconditionError(f"{path.name}: файл изменён другим процессом после чтения, правка не записана, повторите команду")
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_bytes(data)
-    os.replace(tmp, path)                       # целиком или никак
+        raise OpPreconditionError(f"{path.name}: файл изменён другим процессом после чтения, "
+                                  "правка не записана, повторите команду")

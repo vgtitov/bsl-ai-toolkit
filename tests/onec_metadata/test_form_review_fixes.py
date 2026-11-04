@@ -75,3 +75,11 @@ def test_font_rejects_non_finite_or_non_positive(tmp_path, font):
     with pytest.raises(OpPreconditionError):
         set_style(work, "ОбщаяИнформация", {"font": font})
     assert work.read_bytes() == before
+
+
+def test_two_saves_of_one_doc_are_not_a_conflict(tmp_path):
+    work = _form(tmp_path)
+    doc = cfg.load(work)
+    cfg.save(doc, work)
+    cfg.save(doc, work)
+    assert not list(tmp_path.glob("*.tmp"))
