@@ -195,7 +195,8 @@ def test_review_guards_move_pages_command_ref_list_source(form):
     for bad_move in (("Обычная", "Страницы"), ("Стр1", ".")):
         with pytest.raises(OpPreconditionError):
             move_item(form, *bad_move)
-    for cmd in ("foo.bar", "Catalog..Command.X", "Catalog.Товар.X", "CommonCommand.", "Form.Command"):
+    for cmd in ("foo.bar", "Catalog..Command.X", "Catalog.Товар.X", "CommonCommand.", "Form.Command",
+                "Garbage.Товары.Command.Открыть"):
         with pytest.raises(OpPreconditionError):
             add_button(form, "Кн", cmd)
     for table in (".Товары", "Catalog.", "Unknown.Товары", "Catalog.Тов ары", "Catalog.A.B"):
@@ -204,3 +205,15 @@ def test_review_guards_move_pages_command_ref_list_source(form):
     assert form.read_bytes() == before
     add_button(form, "КнОбщая", "CommonCommand.Печать")
     add_button(form, "КнОбъекта", "Catalog.Товары.Command.Открыть")
+
+
+def test_item_ops_ignore_attribute_with_same_name(form):
+    """Реквизит «Список2» и таблица «Список2»: операции над элементом находят таблицу, не реквизит."""
+    from onec_metadata.ops.form_structure import add_list, add_table, remove_item, set_title
+    add_list(form, "Список2", "Catalog.Товары")
+    add_table(form, "Список2", "Список2")
+    set_title(form, "Список2", {"ru": "Товары"})
+    remove_item(form, "Список2")
+    root = etree.parse(str(form)).getroot()
+    assert root.xpath("lf:Attributes/lf:Attribute[@name='Список2']", namespaces={"lf": LF[1:-1]})
+    assert not root.xpath("lf:ChildItems//*[@name='Список2']", namespaces={"lf": LF[1:-1]})

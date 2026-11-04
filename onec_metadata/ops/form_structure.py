@@ -49,11 +49,15 @@ _LIST_SOURCES = ("Catalog", "Document", "DocumentJournal", "Enum", "ChartOfChara
                  "CalculationRegister", "BusinessProcess", "Task", "ExchangePlan")
 
 
+# Виды метаданных, у которых бывают свои команды (`<Вид>.<Объект>.Command.<Имя>`)
+_COMMAND_OWNERS = _LIST_SOURCES + ("Report", "DataProcessor", "FilterCriterion")
+
+
 def _check_command_ref(command):
     """Form.Command.<Имя> | CommonCommand.<Имя> | <Вид>.<Объект>.Command.<Имя> — сегменты непустые, имена допустимые."""
     parts = command.split(".")
     ok = (len(parts) == 3 and parts[:2] == ["Form", "Command"]) or (len(parts) == 2 and parts[0] == "CommonCommand") \
-        or (len(parts) == 4 and parts[2] == "Command" and parts[0].isascii() and parts[0].isalpha())
+        or (len(parts) == 4 and parts[2] == "Command" and parts[0] in _COMMAND_OWNERS)
     if not ok:
         raise OpPreconditionError(f"Команда '{command}': ожидается Form.Command.<Имя>, CommonCommand.<Имя> "
                                   "или <Вид>.<Объект>.Command.<Имя>")
