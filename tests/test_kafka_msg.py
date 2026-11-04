@@ -110,3 +110,26 @@ def test_schema_diff_flags_middle_insert_only():
     assert any("note" in k and "середину" in k and v for k, v in d.items())
     d3 = km.schema_diff(json.dumps(V1), json.dumps(V3))
     assert d3 and not any(danger for _, danger in d3)
+
+
+def test_redirect_is_not_followed_cookie_stays_put():
+    """Редирект с адреса AKHQ не выполняется: иначе urllib унёс бы Cookie на чужой адрес."""
+    import http.server
+    import threading
+    import urllib.error
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(302)
+            self.send_header("Location", "http://example.invalid/steal")
+            self.end_headers()
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.handle_request, daemon=True).start()
+    with pytest.raises(urllib.error.HTTPError) as e:
+        km._get_json(f"http://127.0.0.1:{srv.server_port}/api", headers={"Cookie": "s=1"})
+    assert e.value.code == 302
+    srv.server_close()
