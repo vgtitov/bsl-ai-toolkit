@@ -83,3 +83,15 @@ def test_two_saves_of_one_doc_are_not_a_conflict(tmp_path):
     cfg.save(doc, work)
     cfg.save(doc, work)
     assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_save_keeps_file_mode_and_refuses_when_file_was_deleted(tmp_path):
+    work = _form(tmp_path)
+    work.chmod(0o644)
+    doc = cfg.load(work)
+    cfg.save(doc, work)
+    assert work.stat().st_mode & 0o777 == 0o644
+    work.unlink()
+    with pytest.raises(OpPreconditionError):
+        cfg.save(doc, work)
+    assert not work.exists()
