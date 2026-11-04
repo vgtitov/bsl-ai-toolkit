@@ -44,18 +44,20 @@ def read_pin(pin_file: Path) -> str:
 
 
 def _non_interactive_env() -> dict:
-    """Git must never wait for a password/passphrase/host-key answer in a hook (ssh ignores GIT_TERMINAL_PROMPT)."""
+    """Git must never wait for a password/passphrase/host-key answer in a hook (ssh ignores GIT_TERMINAL_PROMPT).
+
+    BatchMode is added only when the default OpenSSH is used; a custom ssh (GIT_SSH, GIT_SSH_COMMAND,
+    core.sshCommand: plink, wrappers, own flags) is left exactly as its owner configured it."""
     env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GCM_INTERACTIVE="never")
-    if "GIT_SSH" not in env:  # a custom ssh wrapper is the owner's business
-        base = env.get("GIT_SSH_COMMAND", "")
-        if not base:
-            try:
-                got = subprocess.run(["git", "config", "--get", "core.sshCommand"], text=True,
-                                     capture_output=True, timeout=5)
-                base = got.stdout.strip()
-            except (OSError, subprocess.TimeoutExpired):
-                base = ""
-        env["GIT_SSH_COMMAND"] = f"{base or 'ssh'} -o BatchMode=yes"
+    if not env.get("GIT_SSH") and not env.get("GIT_SSH_COMMAND"):
+        try:
+            got = subprocess.run(["git", "config", "--get", "core.sshCommand"], text=True,
+                                 capture_output=True, timeout=5)
+            custom = bool(got.stdout.strip())
+        except (OSError, subprocess.TimeoutExpired):
+            custom = True  # unknown: do not guess
+        if not custom:
+            env["GIT_SSH_COMMAND"] = "ssh -o BatchMode=yes"
     return env
 
 

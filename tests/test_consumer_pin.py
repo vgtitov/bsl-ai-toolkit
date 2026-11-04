@@ -1,5 +1,6 @@
 """Consumer pin helper tests against a real local Git remote."""
 import importlib.util
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -148,7 +149,6 @@ def test_ls_remote_has_timeout_and_never_prompts(tmp_path: Path, monkeypatch):
     assert consumer_pin.check_pin("https://example.invalid/x.git", pin) == "v1.2.3"
     assert 0 < seen["timeout"] <= 60
     assert seen["env"]["GIT_TERMINAL_PROMPT"] == "0"
-    assert seen["env"]["GIT_SSH_COMMAND"].endswith("-o BatchMode=yes")   # ssh не спрашивает пароль/ключ
     with pytest.raises(consumer_pin.PinError, match="timeout|не ответил|timed out"):
         consumer_pin.bump_pin("https://example.invalid/x.git", pin, "v1.2.4")   # bump всегда строгий
 
@@ -160,9 +160,14 @@ def test_missing_tag_still_fails_even_when_not_strict(upstream: Path, tmp_path: 
         consumer_pin.check_pin(str(upstream), pin)
 
 
-def test_ssh_batch_mode_keeps_existing_ssh_command(monkeypatch):
+def test_ssh_batch_mode_only_for_default_openssh(monkeypatch):
     monkeypatch.delenv("GIT_SSH", raising=False)
-    monkeypatch.setenv("GIT_SSH_COMMAND", "ssh -i /k/id")
-    assert consumer_pin._non_interactive_env()["GIT_SSH_COMMAND"] == "ssh -i /k/id -o BatchMode=yes"
+    monkeypatch.delenv("GIT_SSH_COMMAND", raising=False)
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CONFIG_SYSTEM", os.devnull)
+    assert consumer_pin._non_interactive_env()["GIT_SSH_COMMAND"] == "ssh -o BatchMode=yes"
+    monkeypatch.setenv("GIT_SSH_COMMAND", "plink -i /k")           # чужой клиент не трогаем
+    assert consumer_pin._non_interactive_env()["GIT_SSH_COMMAND"] == "plink -i /k"
+    monkeypatch.delenv("GIT_SSH_COMMAND")
     monkeypatch.setenv("GIT_SSH", "/w/ssh-wrapper")
-    assert consumer_pin._non_interactive_env()["GIT_SSH_COMMAND"] == "ssh -i /k/id"
+    assert "GIT_SSH_COMMAND" not in consumer_pin._non_interactive_env()
