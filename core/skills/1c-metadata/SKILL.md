@@ -78,6 +78,14 @@ cp -r <src> <src>_before               # эталон для verify
 1c-meta form add-table <Form.xml> --name <Таблица> --data-path Объект.<ТЧ> [--parent …] [--position …]
 1c-meta form add-column <Form.xml> --name <Колонка> --parent <Таблица|ГруппаКолонок> --data-path Объект.<ТЧ>.<Реквизит>
 1c-meta form add-column-group <Form.xml> --name <Группа> --parent <Таблица|ГруппаКолонок>
+1c-meta form add-group <Form.xml> --name <Группа> --kind Pages|Page [--parent <ГруппаСтраниц>]  # страницы
+1c-meta form add-command <Form.xml> --name <Команда> --title ru=<Текст> [--action <Обработчик>]
+1c-meta form add-button <Form.xml> --name <Кнопка> --command Form.Command.<Команда> [--parent …]
+1c-meta form add-event <Form.xml> --event OnCreateAtServer --handler <Процедура>
+1c-meta form add-checkbox <Form.xml> --name <Флажок> --data-path Объект.<Реквизит> [--parent …]
+1c-meta form add-list <Form.xml> --name Список --main-table Catalog.<Имя> [--main]
+1c-meta form remove <Form.xml> --name <Элемент>
+1c-meta subsystem remove-content <Подсистема.xml|.mdo> --ref Document.<Имя>
 # затем python: onec_metadata.apply — upload_tree → load_extension →
 # dump_extension → fetch_tree → roundtrip_verify(before, after, {целевые файлы})
 ```

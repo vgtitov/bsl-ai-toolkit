@@ -88,6 +88,9 @@ def build_parser() -> argparse.ArgumentParser:
     sbc.add_argument("file")
     sbc.add_argument("--ref", required=True,
                      help="ссылка объекта вида Тип.Имя (напр. Document.Заказ)")
+    sbr = sbsub.add_parser("remove-content")
+    sbr.add_argument("file")
+    sbr.add_argument("--ref", required=True, help="ссылка объекта вида Тип.Имя")
 
     sp = sub.add_parser("set-property",
                         help="изменить существующее скалярное свойство объекта/реквизита")
@@ -123,12 +126,15 @@ def build_parser() -> argparse.ArgumentParser:
                           "font=style:NormalTextFont,face=Gilroy,height=10,bold, group=Vertical")
     fms.add_argument("--omit-defaults", action="store_true",
                      help="Конфигуратор: не писать значение, равное умолчанию (как выгрузка); по умолчанию пишется явно")
-    for cmd, hlp in (("add-group", "новая обычная группа (Конфигуратор Form.xml)"),
+    for cmd, hlp in (("add-group", "новая группа: обычная, группа страниц или страница (Конфигуратор Form.xml)"),
                      ("add-decoration", "новая надпись/картинка (Конфигуратор Form.xml)"),
                      ("move", "перенести элемент в другую группу / сменить порядок (Конфигуратор Form.xml)"),
                      ("add-table", "новая таблица с привязкой --data-path (Конфигуратор Form.xml)"),
                      ("add-column", "колонка таблицы: --parent <Таблица|ГруппаКолонок> --data-path (Конфигуратор)"),
-                     ("add-column-group", "группа колонок: --parent <Таблица|ГруппаКолонок> (Конфигуратор)")):
+                     ("add-column-group", "группа колонок: --parent <Таблица|ГруппаКолонок> (Конфигуратор)"),
+                     ("add-button", "кнопка команды --command Form.Command.X | Catalog.X.Command.Y (Конфигуратор)"),
+                     ("add-checkbox", "флажок с привязкой --data-path (Конфигуратор Form.xml)"),
+                     ("remove", "удалить элемент формы со всем вложенным (Конфигуратор Form.xml)")):
         p = fmsub.add_parser(cmd, help=hlp)
         p.add_argument("file", help="Forms/<Имя>/Ext/Form.xml")
         p.add_argument("--name", required=True, help="имя элемента")
@@ -136,11 +142,30 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--position", default="last", help="first | last | before:Имя | after:Имя")
         if cmd == "add-decoration":
             p.add_argument("--kind", default="Label", choices=["Label", "Picture"])
-        if cmd in ("add-table", "add-column"):
+        if cmd in ("add-table", "add-column", "add-checkbox"):
             p.add_argument("--data-path", required=True, help="напр. Объект.Товары / Объект.Товары.Номенклатура")
         if cmd == "add-column":
             p.add_argument("--edit-mode", choices=["Enter", "EnterOnInput", "Directly"],
                            help="EditMode колонки (по умолчанию не пишется)")
+        if cmd == "add-group":
+            p.add_argument("--kind", default="Usual", choices=["Usual", "Pages", "Page"],
+                           help="Usual — обычная группа, Pages — группа страниц, Page — страница (в Pages)")
+        if cmd == "add-button":
+            p.add_argument("--command", required=True, help="Form.Command.<Имя> или <Объект>.Command.<Имя>")
+    fmc = fmsub.add_parser("add-command", help="команда формы с заголовком и обработчиком (Конфигуратор Form.xml)")
+    fmc.add_argument("file", help="Forms/<Имя>/Ext/Form.xml")
+    fmc.add_argument("--name", required=True, help="имя команды")
+    fmc.add_argument("--title", action="append", required=True, metavar="ЯЗЫК=ТЕКСТ", help="заголовок, по языкам")
+    fmc.add_argument("--action", default="", help="обработчик в модуле формы (по умолчанию — имя команды)")
+    fme = fmsub.add_parser("add-event", help="обработчик события формы (Конфигуратор Form.xml)")
+    fme.add_argument("file", help="Forms/<Имя>/Ext/Form.xml")
+    fme.add_argument("--event", required=True, help="событие платформы, напр. OnCreateAtServer")
+    fme.add_argument("--handler", required=True, help="процедура в модуле формы")
+    fmlst = fmsub.add_parser("add-list", help="реквизит формы «динамический список» по основной таблице (Конфигуратор)")
+    fmlst.add_argument("file", help="Forms/<Имя>/Ext/Form.xml")
+    fmlst.add_argument("--name", required=True, help="имя реквизита формы")
+    fmlst.add_argument("--main-table", required=True, help="напр. Catalog.Товары, InformationRegister.Журнал")
+    fmlst.add_argument("--main", action="store_true", help="основной реквизит формы")
     fmt = fmsub.add_parser("set-title", help="заголовок элемента на языках (Конфигуратор Form.xml)")
     fmt.add_argument("file", help="Forms/<Имя>/Ext/Form.xml")
     fmt.add_argument("--name", required=True, help="имя элемента; '.' — сама форма")
@@ -217,8 +242,8 @@ def main() -> None:
                       ns.type_ref, ns.parent,
                       Path(ns.donor) if ns.donor else None)
         elif ns.cmd == "subsystem":
-            from onec_metadata.ops.subsystem import add_content
-            add_content(Path(ns.file), ns.ref)
+            from onec_metadata.ops.subsystem import add_content, remove_content
+            (remove_content if ns.sbcmd == "remove-content" else add_content)(Path(ns.file), ns.ref)
         elif ns.cmd == "role":
             from onec_metadata.ops.role import grant_right
             grant_right(Path(ns.file), ns.ref, ns.right, ns.value == "true")
@@ -250,16 +275,35 @@ def main() -> None:
                 from onec_metadata.ops.form import add_attribute as form_add_attr
                 form_add_attr(Path(ns.file), ns.name, ns.type_ref)
             elif ns.fmcmd in ("add-group", "add-decoration", "move", "set-title",
-                              "add-table", "add-column", "add-column-group"):
+                              "add-table", "add-column", "add-column-group",
+                              "add-button", "add-command", "add-list", "add-event", "add-checkbox", "remove"):
                 from onec_metadata.ops import form_structure as fs
-                if ns.fmcmd == "add-table":
+                if ns.fmcmd == "add-checkbox":
+                    fs.add_checkbox(Path(ns.file), ns.name, ns.data_path, ns.parent, ns.position)
+                elif ns.fmcmd == "remove":
+                    fs.remove_item(Path(ns.file), ns.name)
+                elif ns.fmcmd == "add-event":
+                    fs.add_event(Path(ns.file), ns.event, ns.handler)
+                elif ns.fmcmd == "add-button":
+                    fs.add_button(Path(ns.file), ns.name, ns.command, ns.parent, ns.position)
+                elif ns.fmcmd == "add-command":
+                    titles = {}
+                    for kv in ns.title:
+                        lang, sep, text = kv.partition("=")
+                        if not sep or not lang:
+                            raise OpPreconditionError(f"--title '{kv}': ожидается ЯЗЫК=ТЕКСТ")
+                        titles[lang] = text
+                    fs.add_command(Path(ns.file), ns.name, titles, ns.action)
+                elif ns.fmcmd == "add-list":
+                    fs.add_list(Path(ns.file), ns.name, ns.main_table, ns.main)
+                elif ns.fmcmd == "add-table":
                     fs.add_table(Path(ns.file), ns.name, ns.data_path, ns.parent, ns.position)
                 elif ns.fmcmd == "add-column":
                     fs.add_column(Path(ns.file), ns.name, ns.parent, ns.data_path, ns.position, ns.edit_mode)
                 elif ns.fmcmd == "add-column-group":
                     fs.add_column_group(Path(ns.file), ns.name, ns.parent, ns.position)
                 elif ns.fmcmd == "add-group":
-                    fs.add_group(Path(ns.file), ns.name, ns.parent, ns.position)
+                    fs.add_group(Path(ns.file), ns.name, ns.parent, ns.position, ns.kind)
                 elif ns.fmcmd == "add-decoration":
                     fs.add_decoration(Path(ns.file), ns.name, ns.parent, ns.position, ns.kind)
                 elif ns.fmcmd == "move":
