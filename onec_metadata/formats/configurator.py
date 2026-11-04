@@ -18,6 +18,8 @@ XML-парсер по спецификации нормализует CRLF→LF,
 для такого входа не byte-perfect. На фикстурах и типовых выгрузках УТ не
 встречается; round-trip тест поймает регресс, если встретится.
 """
+import hashlib
+import os
 from pathlib import Path
 
 from lxml import etree
@@ -63,13 +65,14 @@ class Doc:
         self.decl_newline = decl_newline        # перевод строки после <?xml?>
         self.trailing_newline = trailing_newline  # хвост файла ("" если нет)
         self.has_bom = has_bom                  # Конфигуратор: да; EDT: нет
+        self.src_hash = None                    # sha1 файла при чтении: save не затирает чужую правку
 
     def __getattr__(self, name):
         return getattr(self.tree, name)
 
 
 def load(path: Path) -> Doc:
-    raw = path.read_bytes()
+    raw = raw_all = path.read_bytes()
     has_bom = raw.startswith(BOM.encode("utf-8"))
     if has_bom:
         raw = raw[len(BOM.encode("utf-8")):]
@@ -92,7 +95,9 @@ def load(path: Path) -> Doc:
     protected = body_text.rstrip("\r\n").replace("\r\n", "&#13;\n")
     tree = etree.ElementTree(
         etree.fromstring(protected.encode("utf-8"), _PARSER))
-    return Doc(tree, decl_newline, trailing_newline, has_bom=has_bom)
+    doc = Doc(tree, decl_newline, trailing_newline, has_bom=has_bom)
+    doc.src_hash = hashlib.sha1(raw_all).hexdigest()
+    return doc
 
 
 def place_after(anchor, new) -> None:
@@ -144,4 +149,10 @@ def save(doc: Doc, path: Path) -> None:
     body = body.replace("&#13;\n", "\r\n").replace("&#13;", "\r")
     bom = BOM if doc.has_bom else ""
     text = bom + XML_DECL + doc.decl_newline + body + doc.trailing_newline
-    path.write_bytes(text.encode("utf-8"))
+    data = text.encode("utf-8")
+    if doc.src_hash and path.exists() and hashlib.sha1(path.read_bytes()).hexdigest() != doc.src_hash:
+        from onec_metadata.ops import OpPreconditionError
+        raise OpPreconditionError(f"{path.name}: файл изменён другим процессом после чтения, правка не записана, повторите команду")
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_bytes(data)
+    os.replace(tmp, path)                       # целиком или никак

@@ -21,6 +21,7 @@
   пустое значение — удалить свойство (вернуть умолчание).
 """
 import json
+import math
 from pathlib import Path
 
 from lxml import etree
@@ -93,11 +94,15 @@ def _parse(tag: str, value: str):
             elif k == "height":
                 try:
                     height = float(v)
+                    if not (math.isfinite(height) and 0 < height <= 1000):
+                        raise ValueError
                 except ValueError:
-                    raise OpPreconditionError(f"Шрифт '{value}': height не число") from None
+                    raise OpPreconditionError(f"Шрифт '{value}': height — не конечное положительное число") from None
             elif k in _FONT_FLAGS and not v:
                 flags.add(k)
             elif k == "scale" and v.isdigit():
+                if not 0 < int(v) <= 1000:
+                    raise OpPreconditionError(f"Шрифт '{value}': scale вне 1..1000")
                 scale = v
             else:
                 raise OpPreconditionError(f"Шрифт '{value}': неизвестный параметр '{o}'")

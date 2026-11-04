@@ -127,8 +127,10 @@ def move_item(form_path: Path, name: str, parent: str = ".", position: str = "la
     cfg.save(doc, form_path)
 
 
-def set_title(form_path: Path, name: str, titles: dict) -> None:
-    """Заголовок элемента на языках `titles` ({"ru": "...", "en": "..."}) — порядок языков как задан."""
+def set_title(form_path: Path, name: str, titles: dict, replace_all: bool = False) -> None:
+    """Заголовок элемента на языках `titles` ({"ru": "...", "en": "..."}).
+
+    По умолчанию меняет только указанные языки, остальные сохраняет; replace_all — заменить весь Title."""
     if not titles:
         raise OpPreconditionError("set-title: нужен хотя бы один язык")
     doc, root = _load(form_path)
@@ -140,11 +142,18 @@ def set_title(form_path: Path, name: str, titles: dict) -> None:
     title = etree.Element(_q("Title"))
     if ctx.endswith("Decoration"):
         title.set("formatted", "false")
-    for lang, text in titles.items():
+    old = el.find(_q("Title"))
+    merged = {}
+    if old is not None and not replace_all:
+        for it in old.findall(f"{{{_V8}}}item"):
+            merged[it.findtext(f"{{{_V8}}}lang")] = it.findtext(f"{{{_V8}}}content") or ""
+        if old.get("formatted") is not None:
+            title.set("formatted", old.get("formatted"))
+    merged.update(titles)
+    for lang, text in merged.items():
         item = etree.SubElement(title, f"{{{_V8}}}item")
         etree.SubElement(item, f"{{{_V8}}}lang").text = lang
         etree.SubElement(item, f"{{{_V8}}}content").text = text
-    old = el.find(_q("Title"))
     if old is not None:
         ws = _indent_before(old)
         title.tail = old.tail
@@ -198,8 +207,8 @@ def _container(root, parent, create):
 
 
 def _next_id(root):
-    items = _items(root)
-    ids = [int(x) for x in items.xpath(".//@id")] if items is not None else []
+    # id уникальны на всю форму: служебные элементы (меню, панели) лежат вне корневого ChildItems
+    ids = [int(x) for x in root.xpath(".//@id") if x.isdigit()]
     return max([i for i in ids if i > 0], default=0) + 1
 
 
