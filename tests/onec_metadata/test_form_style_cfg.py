@@ -124,12 +124,19 @@ def test_unknown_property_rejected(tmp_path):
     assert work.read_bytes() == raw
 
 
-def test_default_value_not_written_like_platform_dump(tmp_path):
-    """Выгрузка Конфигуратора не пишет умолчание: United=true у группы — свойство снимается."""
+def test_explicit_value_written_even_if_default(tmp_path):
+    """Заданное значение пишется явно, даже если совпало с таблицей умолчаний (она не привязана к версии)."""
+    work = _copy(tmp_path)
+    set_style(work, "ГруппаИсторияИзменений", {"united": "true"})
+    assert _el(work, "ГруппаИсторияИзменений").find("lf:United", NS).text == "true"
+
+
+def test_omit_defaults_like_platform_dump(tmp_path):
+    """С omit_defaults — как выгрузка Конфигуратора: United=true у группы снимается."""
     work = _copy(tmp_path)
     set_style(work, "ГруппаИсторияИзменений", {"united": "false"})
     assert _el(work, "ГруппаИсторияИзменений").find("lf:United", NS).text == "false"
-    set_style(work, "ГруппаИсторияИзменений", {"united": "true"})
+    set_style(work, "ГруппаИсторияИзменений", {"united": "true"}, omit_defaults=True)
     assert _el(work, "ГруппаИсторияИзменений").find("lf:United", NS) is None
 
 def test_pure_style_font_token_no_scale(tmp_path):

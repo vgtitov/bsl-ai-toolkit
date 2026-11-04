@@ -42,13 +42,17 @@ _FONT_FLAGS = ("bold", "italic", "underline", "strikeout")
 _PICTURE_KINDS = {"common": "CommonPicture", "std": "StdPicture"}
 
 
-def set_style(form_path: Path, item: str, props: dict) -> None:
-    """Задать элементу `item` (имя элемента; `.` — сама форма) свойства `props`."""
+def set_style(form_path: Path, item: str, props: dict, omit_defaults: bool = False) -> None:
+    """Задать элементу `item` (имя элемента; `.` — сама форма) свойства `props`.
+
+    Заданное значение пишется ЯВНО. `omit_defaults=True` (только Конфигуратор) — не писать значение, равное
+    умолчанию из `data/cfg_form_defaults.json`, как это делает выгрузка: нужно для сравнения байт в байт с
+    выгрузкой. Таблица собрана по корпусу и к версии платформы не привязана, поэтому по умолчанию не сжимаем."""
     form_path = Path(form_path)
     if form_path.suffix == ".form":
         fmt = _Edt()
     elif form_path.suffix == ".xml":
-        fmt = _Cfg()
+        fmt = _Cfg(omit_defaults)
     else:
         raise OpPreconditionError("set-style: ожидается Form.form (EDT) или Form.xml (Конфигуратор)")
     doc = cfg.load(form_path)
@@ -197,6 +201,9 @@ class _Edt:
 class _Cfg:
     unit = "\t"
 
+    def __init__(self, omit_defaults=False):
+        self.omit_defaults = omit_defaults
+
     def find_item(self, root, item):
         if item in (".", "", None):
             return root
@@ -213,8 +220,9 @@ class _Cfg:
         return f"{{{_LF}}}{tag}"
 
     def normalize(self, host, tag, spec):
-        """Значение, равное умолчанию платформы, выгрузка не пишет — снимаем свойство."""
-        if spec[0] == "text" and _DEFAULTS_CFG.get(_ctx(host), {}).get(tag) == spec[1]:
+        """С omit_defaults значение, равное умолчанию (выгрузка его не пишет), снимаем; иначе пишем явно."""
+        if (self.omit_defaults and spec[0] == "text"
+                and _DEFAULTS_CFG.get(_ctx(host), {}).get(tag) == spec[1]):
             return ("remove",)
         return spec
 
