@@ -572,7 +572,7 @@ def find_secrets(text: str, kind: str = "text", strings=None, comments=None, whe
     for lm in re.finditer(r"[^\n]+", text):                 # командная строка 1С: ... /N логин /P пароль (контекст и /P в одной строке, любой длины)
         if "/" not in lm.group() or not _ONEC_CTX.search(lm.group()):
             continue
-        for m in list(_ONEC_P.finditer(lm.group())) + [q for q in _ONEC_PQ.finditer(lm.group()) if "/" not in q.group("val")]:
+        for m in list(_ONEC_P.finditer(lm.group())) + [q for q in _ONEC_PQ.finditer(lm.group()) if "/" not in q.group("val") or re.search(r"\d", q.group("val"))]:
             v = m.group("val")
             if _safe_value(v.strip('"'), False) or PH_RX.fullmatch(v):
                 continue

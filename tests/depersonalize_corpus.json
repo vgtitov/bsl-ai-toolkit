@@ -1397,5 +1397,14 @@
 "123456"
 ],
 "kind": "text"
+},
+{
+"id": "S30",
+"text": "1cv8.exe ENTERPRISE \"/Pab/cd12 x\"",
+"keep": [],
+"hide": [
+"cd12"
+],
+"kind": "text"
 }
 ]
