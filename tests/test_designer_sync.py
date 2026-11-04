@@ -337,3 +337,56 @@ def test_repo_objects_file_unique_per_call(monkeypatch):
                    objects=["ОбщийМодуль.X"], workdir=r"C:\w")
         logs.add(r.run_calls[0].rsplit("/Out ", 1)[1].split()[0])
     assert len(put) == 2 and len(logs) == 2          # и список объектов, и журнал — свои на вызов
+
+
+def test_base_and_tab_are_rejected_like_other_command_parts():
+    import pytest
+    from onec_metadata.apply.runner import conn_arg, designer_cmd, pass_arg
+    with pytest.raises(ValueError):
+        conn_arg('srv\\Base" & calc & rem "')
+    with pytest.raises(ValueError):
+        designer_cmd('srv\\B&x', "u", "p", "/UpdateDBCfg", [], "l")
+    with pytest.raises(ValueError):
+        pass_arg("ab\tcd")
+    assert conn_arg(r"srv\Base") == r"/S srv\Base"
+    assert conn_arg(r'/F"C:\Bases\x"') == r'/F"C:\Bases\x"'
+
+
+def test_base_quotes_and_edge_tabs_cannot_smuggle_options():
+    import pytest
+    from onec_metadata.apply.runner import conn_arg
+    for bad in ['srv\\Base" /Nbad "', '\tsrv\\Base', 'srv\\Base\t', 'File="C:\\x" /Nbad', '/F"C:\\x" /Nbad "y"']:
+        with pytest.raises(ValueError):
+            conn_arg(bad)
+    assert conn_arg('/IBConnectionString"File=C:\\b;"') == '/IBConnectionString"File=C:\\b;"'
+
+
+def test_quoted_path_with_ampersand_stays_valid():
+    from onec_metadata.apply.runner import conn_arg
+    assert conn_arg(r'/F"C:\Bases\R&D\base"') == r'/F"C:\Bases\R&D\base"'
+
+
+def test_ready_flag_must_be_a_single_argument():
+    import pytest
+    from onec_metadata.apply.runner import conn_arg
+    for bad in ['/F /Nbad /Pxx "y"', '/S srv\\B /Nbad', '/IBConnectionString /Nbad "File=x;"']:
+        with pytest.raises(ValueError):
+            conn_arg(bad)
+    assert conn_arg(r"/S srv\Base") == r"/S srv\Base"
+
+
+def test_flag_case_quoted_file_and_plain_name_with_option():
+    import pytest
+    from onec_metadata.apply.runner import conn_arg
+    for bad in [r"/s srv\Base /Nbad", r"srv\Base /Nbad", '/f /Nbad "y"']:
+        with pytest.raises(ValueError):
+            conn_arg(bad)
+    assert conn_arg('File="C:\\Bases\\Main";') == '/F"C:\\Bases\\Main"'
+    assert conn_arg(r"C:\Program Files\base") == '/F"C:\\Program Files\\base"'
+
+
+def test_quoted_server_flag_and_file_case():
+    from onec_metadata.apply.runner import conn_arg
+    assert conn_arg('/S"srv\\Main"') == '/S"srv\\Main"'
+    assert conn_arg('FILE=C:\\Bases\\Main;') == '/F"C:\\Bases\\Main"'
+    assert conn_arg('file="C:\\Bases\\Main";') == '/F"C:\\Bases\\Main"'

@@ -180,7 +180,7 @@ def mask_password(cmd: str) -> str:
 
 # Символы, которые ломают строку для cmd.exe или кавычки CreateProcess: значение с ними
 # рвёт команду, а маска скрывает пароль не целиком (ab"cd ef → в логе остаётся хвост).
-_CMD_UNSAFE = set('"&|<>^%\r\n')
+_CMD_UNSAFE = set('"&|<>^%\r\n\t')
 
 
 def check_cmd_safe(value, what: str = "значение") -> None:
@@ -213,14 +213,36 @@ def conn_arg(ib: str) -> str:
     - `File=…`/путь (диск `X:\\…` или UNC `\\\\…`) — файловая база `/F"путь"`;
     - иначе — клиент-серверная `сервер\\база` → `/S сервер\\база`."""
     s = ib.strip()
-    if s.startswith("/S") or s.startswith("/F") or s.startswith("/IBConnectionString"):
+    check_cmd_safe(ib[len(ib.rstrip()):] + ib[:len(ib) - len(ib.lstrip())], "база")   # края до strip: \t, \r, \n
+    if re.match(r"(?i)/(S|F|IBConnectionString)", s):
+        # готовый флаг - ровно один аргумент: /S сервер\база, /F"путь", /IBConnectionString"..."
+        if not re.fullmatch(r'(?i)/S ?[^\s"]+|/F[^\s"]+|/F"[^"]+"|/S ?"[^"]+"|/IBConnectionString[^\s"]+|/IBConnectionString"[^"]+"', s):
+            raise ValueError("база: готовый флаг должен быть одним аргументом, без дополнительных параметров")
+        body = s[s.index('"'):].strip('"') if '"' in s else s
+        _check_base(body if '"' in s else s, quoted='"' in s)
         return s
-    if s.startswith("File="):
-        return '/F"%s"' % s[len("File="):]
-    is_path = bool(re.match(r"^[A-Za-z]:[\\/]", s)) or s.startswith("\\\\") or s.startswith("/")
+    m = re.fullmatch(r'(?i)File="?([^"]+?)"?;?', s)
+    path = m.group(1) if m else s
+    is_path = bool(m) or bool(re.match(r"^[A-Za-z]:[\\/]", s)) or s.startswith("\\\\") or s.startswith("/")
+    if '"' in path:
+        raise ValueError("база содержит недопустимые для командной строки символы: \"")
     if is_path:
-        return '/F"%s"' % s
+        _check_base(path, quoted=True)               # пробелы в пути ок: он уйдёт в кавычках
+        return '/F"%s"' % path
+    _check_base(s, quoted=False)
+    if re.search(r"\s", s):
+        raise ValueError("база: имя сервера и базы без пробелов (иначе дополнительный параметр)")
     return "/S %s" % s
+
+
+def _check_base(value: str, quoted: bool) -> None:
+    """Вне кавычек - полный запрет метасимволов; внутри & ^ | < > литералы, % раскрывается, управляющие нельзя."""
+    if quoted:
+        for c in "%\r\n\t":
+            if c in value:
+                raise ValueError("база содержит недопустимые для командной строки символы")
+    else:
+        check_cmd_safe(value, "база")
 
 
 def enterprise_cmd(ib: str, user: str, pwd: str, execute_epf: str,
