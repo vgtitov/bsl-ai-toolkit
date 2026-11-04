@@ -12,15 +12,29 @@ import json
 import os
 import subprocess
 import sys
+import time
 
 SCRIPTS = os.path.dirname(os.path.abspath(__file__))
 MAX_OUT = 4000                      # не раздувать контекст агента
+BUDGET = 50                         # секунд на все проверки: хуку в settings.json дано 60, убитый хук оставлял бы дочерние процессы
+_T0 = time.monotonic()
+
+# stdio хука всегда UTF-8: на Windows по умолчанию cp1251/cp1252, путь с кириллицей (объекты 1С)
+# декодировался неверно, файл «не находился», проверки молча не шли, а кириллица в ответе падала.
+for _s in (sys.stdin, sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 
 def _run(script: str, *args: str) -> tuple[int, str]:
+    left = BUDGET - (time.monotonic() - _T0)
+    if left < 1:
+        return 0, ""
     try:
         r = subprocess.run([sys.executable, os.path.join(SCRIPTS, script), *args],
-                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=left)
         return r.returncode, (r.stdout or "").strip()
     except Exception:
         return 0, ""
