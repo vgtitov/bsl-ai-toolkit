@@ -194,3 +194,36 @@ def test_ssh_batch_mode_only_for_default_openssh(monkeypatch):
     monkeypatch.delenv("GIT_SSH_COMMAND")
     monkeypatch.setenv("GIT_SSH", "/w/ssh-wrapper")
     assert "GIT_SSH_COMMAND" not in consumer_pin._non_interactive_env()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="тест askpass-скрипта на sh")
+def test_credential_prompt_is_never_shown(tmp_path: Path, monkeypatch):
+    # Апстрим просит логин (401), в конфиге git стоит core.askPass: окно/запрос пароля из pre-push недопустимо.
+    import http.server
+    import threading
+
+    class Auth(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(401)
+            self.send_header("WWW-Authenticate", 'Basic realm="x"')
+            self.end_headers()
+        log_message = lambda *a: None
+    srv = http.server.HTTPServer(("127.0.0.1", 0), Auth)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    marker = tmp_path / "asked"
+    ask = tmp_path / "ask.sh"
+    ask.write_text(f"#!/bin/sh\necho asked > {marker}\necho x\n", encoding="utf-8")
+    ask.chmod(0o755)
+    cfg = tmp_path / "gitconfig"
+    cfg.write_text(f"[core]\n\taskPass = {ask}\n", encoding="utf-8")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(cfg))
+    monkeypatch.setenv("GIT_CONFIG_SYSTEM", os.devnull)
+    monkeypatch.delenv("GIT_ASKPASS", raising=False)
+    monkeypatch.delenv("SSH_ASKPASS", raising=False)
+    pin = tmp_path / "toolkit.ref"
+    pin.write_text("v1.2.3\n", encoding="utf-8")
+    try:
+        consumer_pin.check_pin(f"http://127.0.0.1:{srv.server_address[1]}/x.git", pin)
+    finally:
+        srv.shutdown()
+    assert not marker.exists(), "git вызвал askpass: запрос пароля из хука"

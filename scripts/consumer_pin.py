@@ -49,7 +49,7 @@ def _non_interactive_env() -> dict:
 
     BatchMode is added only when the default OpenSSH is used; a custom ssh (GIT_SSH, GIT_SSH_COMMAND,
     core.sshCommand: plink, wrappers, own flags) is left exactly as its owner configured it."""
-    env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GCM_INTERACTIVE="never")
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GCM_INTERACTIVE="never", GIT_ASKPASS="", SSH_ASKPASS="")  # empty GIT_ASKPASS also overrides core.askPass
     if not env.get("GIT_SSH") and not env.get("GIT_SSH_COMMAND"):
         try:
             got = subprocess.run(["git", "config", "--get", "core.sshCommand"], text=True,
