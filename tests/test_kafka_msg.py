@@ -133,3 +133,12 @@ def test_redirect_is_not_followed_cookie_stays_put():
         km._get_json(f"http://127.0.0.1:{srv.server_port}/api", headers={"Cookie": "s=1"})
     assert e.value.code == 302
     srv.server_close()
+
+
+def test_diff_values_does_not_hide_missing_field_behind_placeholder():
+    d = km.diff_values({"a": "<нет>"}, {"b": "<нет>"})
+    assert {k for k, _, _ in d} == {"a", "b"}
+
+
+def test_long_values_are_truncated_in_output():
+    assert len(km._short("x" * 500)) < 120

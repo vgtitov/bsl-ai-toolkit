@@ -189,10 +189,19 @@ def flatten(v, prefix=""):
     return out
 
 
+def _short(x, n=80):
+    """Значение для вывода: длинное обрезаем (логи CI, терминал)."""
+    r = repr(x)
+    return r if len(r) <= n else r[:n] + f"…(+{len(r) - n} зн.)"
+
+
 def diff_values(a, b, limit=20):
     fa, fb = flatten(a), flatten(b)
     keys = list(dict.fromkeys(list(fa) + list(fb)))
-    return [(k, fa.get(k, "<нет>"), fb.get(k, "<нет>")) for k in keys if fa.get(k, "<нет>") != fb.get(k, "<нет>")][:limit]
+    absent = "<нет>"
+    # "<нет>" как настоящее значение строки не должно прятать отсутствие поля
+    return [(k, fa.get(k, absent), fb.get(k, absent)) for k in keys
+            if (k in fa) != (k in fb) or fa.get(k) != fb.get(k)][:limit]
 
 
 def field_list(schema, prefix=""):
@@ -318,7 +327,7 @@ def cmd_check(reg, path, topic, as_spec):
     print(f"потребитель ({label}): прочтёт БЕЗ ОШИБКИ, НО С ИСКАЖЕНИЕМ"
           + (f"; непрочитанный хвост {rest2} байт" if rest2 else ""))
     for k, a, b in diffs:
-        print(f"    {k}: должно {a!r}, получит {b!r}")
+        print(f"    {k}: должно {_short(a)}, получит {_short(b)}")
     return 3
 
 
