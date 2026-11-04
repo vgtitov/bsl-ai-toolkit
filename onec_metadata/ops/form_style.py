@@ -100,7 +100,7 @@ def _parse(tag: str, value: str):
                     raise OpPreconditionError(f"Шрифт '{value}': height — не конечное положительное число") from None
             elif k in _FONT_FLAGS and not v:
                 flags.add(k)
-            elif k == "scale" and v.isdigit():
+            elif k == "scale" and v.isascii() and v.isdecimal():
                 if not 0 < int(v) <= 1000:
                     raise OpPreconditionError(f"Шрифт '{value}': scale вне 1..1000")
                 scale = v

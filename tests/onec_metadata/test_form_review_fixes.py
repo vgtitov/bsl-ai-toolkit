@@ -95,3 +95,27 @@ def test_save_keeps_file_mode_and_refuses_when_file_was_deleted(tmp_path):
     with pytest.raises(OpPreconditionError):
         cfg.save(doc, work)
     assert not work.exists()
+
+
+def test_save_through_symlink_keeps_link_and_checks_by_real_path(tmp_path, monkeypatch):
+    real = _form(tmp_path)
+    link = tmp_path / "Link.xml"
+    try:
+        link.symlink_to(real)
+    except OSError:
+        pytest.skip("symlink недоступен")
+    monkeypatch.chdir(tmp_path)
+    doc = cfg.load(Path("Link.xml"))
+    add_group(real, "Параллельная", parent=".")
+    with pytest.raises(OpPreconditionError):
+        cfg.save(doc, tmp_path / "Link.xml")        # тот же файл, другое написание пути
+    doc = cfg.load(link)
+    cfg.save(doc, link)
+    assert link.is_symlink()
+
+
+def test_font_scale_with_unicode_digit_is_diagnosed(tmp_path):
+    work = tmp_path / "Form.xml"
+    shutil.copy(FIX / "form_style_cfg.xml", work)
+    with pytest.raises(OpPreconditionError):
+        set_style(work, "ОбщаяИнформация", {"font": "style:NormalTextFont,face=A,scale=²"})

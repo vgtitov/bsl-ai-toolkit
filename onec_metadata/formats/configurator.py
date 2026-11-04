@@ -100,7 +100,7 @@ def load(path: Path) -> Doc:
         etree.fromstring(protected.encode("utf-8"), _PARSER))
     doc = Doc(tree, decl_newline, trailing_newline, has_bom=has_bom)
     doc.src_hash = hashlib.sha1(raw_all).hexdigest()
-    doc.src_path = path
+    doc.src_path = path.resolve()
     return doc
 
 
@@ -149,6 +149,7 @@ def remove_children(container, to_remove) -> None:
 
 
 def save(doc: Doc, path: Path) -> None:
+    path = path.resolve()                        # через symlink пишем в целевой файл, ссылка остаётся
     body = etree.tostring(doc.tree, encoding="unicode")
     body = body.replace("&#13;\n", "\r\n").replace("&#13;", "\r")
     bom = BOM if doc.has_bom else ""
