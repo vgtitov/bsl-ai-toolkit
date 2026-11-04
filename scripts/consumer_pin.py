@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import signal
 import subprocess
 import sys
 import tempfile
@@ -61,25 +62,37 @@ def _non_interactive_env() -> dict:
     return env
 
 
+def _run_limited(cmd: list, env: dict, timeout: float) -> subprocess.CompletedProcess:
+    """Run cmd; on timeout kill the WHOLE process tree (git spawns git-remote-https/ssh, which would
+    otherwise keep running and, on Windows, keep the output pipes open so the hook still hangs)."""
+    kw = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt"
+          else {"start_new_session": True})
+    proc = subprocess.Popen(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, **kw)
+    try:
+        out, err = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True, timeout=10)
+            else:
+                os.killpg(proc.pid, signal.SIGKILL)
+        except (OSError, subprocess.SubprocessError):
+            proc.kill()
+        try:
+            proc.communicate(timeout=5)
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+        raise
+    return subprocess.CompletedProcess(cmd, proc.returncode, out, err)
+
+
 def upstream_has_tag(repo: str, tag: str) -> bool:
     _require_version(tag)
     env = _non_interactive_env()
     try:
-        result = subprocess.run(
-            [
-                "git",
-                "ls-remote",
-                "--exit-code",
-                "--tags",
-                repo,
-                f"refs/tags/{tag}",
-                f"refs/tags/{tag}^{{}}",
-            ],
-            text=True,
-            capture_output=True,
-            timeout=LS_REMOTE_TIMEOUT,
-            env=env,
-        )
+        result = _run_limited(
+            ["git", "ls-remote", "--exit-code", "--tags", repo, f"refs/tags/{tag}", f"refs/tags/{tag}^{{}}"],
+            env, LS_REMOTE_TIMEOUT)
     except subprocess.TimeoutExpired as error:
         raise UpstreamUnreachable(
             f"upstream {repo} did not answer within {LS_REMOTE_TIMEOUT}s (timeout)") from error

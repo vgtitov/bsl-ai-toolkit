@@ -140,17 +140,40 @@ def test_unreachable_upstream_warns_and_passes_unless_strict(tmp_path: Path, cap
 def test_ls_remote_has_timeout_and_never_prompts(tmp_path: Path, monkeypatch):
     seen = {}
 
-    def hang(cmd, **kw):
-        seen.update(kw)
-        raise subprocess.TimeoutExpired(cmd, kw["timeout"])
-    monkeypatch.setattr(consumer_pin.subprocess, "run", hang)
+    def hang(cmd, env, timeout):
+        seen.update(env=env, timeout=timeout)
+        raise subprocess.TimeoutExpired(cmd, timeout)
+    monkeypatch.setattr(consumer_pin, "_run_limited", hang)
     pin = tmp_path / "toolkit.ref"
     pin.write_text("v1.2.3\n", encoding="utf-8")
     assert consumer_pin.check_pin("https://example.invalid/x.git", pin) == "v1.2.3"
     assert 0 < seen["timeout"] <= 60
     assert seen["env"]["GIT_TERMINAL_PROMPT"] == "0"
-    with pytest.raises(consumer_pin.PinError, match="timeout|не ответил|timed out"):
+    with pytest.raises(consumer_pin.PinError, match="timeout"):
         consumer_pin.bump_pin("https://example.invalid/x.git", pin, "v1.2.4")   # bump всегда строгий
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX: группа процессов; Windows-ветка (taskkill /T) не проверена")
+def test_timeout_kills_whole_process_tree(tmp_path: Path, monkeypatch):
+    # git порождает транспорт (git-remote-https / ssh); убитый по таймауту родитель оставлял его висеть.
+    import os
+    import time
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    pidfile = tmp_path / "child.pid"
+    fake = bindir / "git"
+    fake.write_text(f"#!/bin/sh\nsleep 60 &\necho $! > {pidfile}\nwait\n", encoding="utf-8")
+    fake.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bindir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setattr(consumer_pin, "LS_REMOTE_TIMEOUT", 1)
+    started = time.monotonic()
+    with pytest.raises(consumer_pin.UpstreamUnreachable):
+        consumer_pin.upstream_has_tag("https://example.invalid/x.git", "v1.2.3")
+    assert time.monotonic() - started < 15
+    child = int(pidfile.read_text())
+    time.sleep(0.3)
+    with pytest.raises(ProcessLookupError):
+        os.kill(child, 0)
 
 
 def test_missing_tag_still_fails_even_when_not_strict(upstream: Path, tmp_path: Path):
