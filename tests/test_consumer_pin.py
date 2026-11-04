@@ -1,5 +1,6 @@
 """Consumer pin helper tests against a real local Git remote."""
 import importlib.util
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -123,3 +124,106 @@ def test_cli_error_is_actionable_without_traceback(
     assert result.returncode == 2
     assert result.stderr.startswith("ERROR:")
     assert "Traceback" not in result.stderr
+
+
+def test_unreachable_upstream_warns_and_passes_unless_strict(tmp_path: Path, capsys):
+    # Нет сети/VPN до апстрима: проверка наличия тега не должна блокировать чужой push.
+    pin = tmp_path / "toolkit.ref"
+    pin.write_text("v1.2.3\n", encoding="utf-8")
+    gone = str(tmp_path / "нет-такого.git")
+    assert consumer_pin.check_pin(gone, pin) == "v1.2.3"
+    assert "WARNING" in capsys.readouterr().err
+    with pytest.raises(consumer_pin.PinError):
+        consumer_pin.check_pin(gone, pin, strict=True)
+
+
+def test_ls_remote_has_timeout_and_never_prompts(tmp_path: Path, monkeypatch):
+    seen = {}
+
+    def hang(cmd, env, timeout):
+        seen.update(env=env, timeout=timeout)
+        raise subprocess.TimeoutExpired(cmd, timeout)
+    monkeypatch.setattr(consumer_pin, "_run_limited", hang)
+    pin = tmp_path / "toolkit.ref"
+    pin.write_text("v1.2.3\n", encoding="utf-8")
+    assert consumer_pin.check_pin("https://example.invalid/x.git", pin) == "v1.2.3"
+    assert 0 < seen["timeout"] <= 60
+    assert seen["env"]["GIT_TERMINAL_PROMPT"] == "0"
+    with pytest.raises(consumer_pin.PinError, match="timeout"):
+        consumer_pin.bump_pin("https://example.invalid/x.git", pin, "v1.2.4")   # bump всегда строгий
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX: группа процессов; Windows-ветка (taskkill /T) не проверена")
+def test_timeout_kills_whole_process_tree(tmp_path: Path, monkeypatch):
+    # git порождает транспорт (git-remote-https / ssh); убитый по таймауту родитель оставлял его висеть.
+    import os
+    import time
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    pidfile = tmp_path / "child.pid"
+    fake = bindir / "git"
+    fake.write_text(f"#!/bin/sh\nsleep 60 &\necho $! > {pidfile}\nwait\n", encoding="utf-8")
+    fake.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bindir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setattr(consumer_pin, "LS_REMOTE_TIMEOUT", 1)
+    started = time.monotonic()
+    with pytest.raises(consumer_pin.UpstreamUnreachable):
+        consumer_pin.upstream_has_tag("https://example.invalid/x.git", "v1.2.3")
+    assert time.monotonic() - started < 15
+    child = int(pidfile.read_text())
+    time.sleep(0.3)
+    with pytest.raises(ProcessLookupError):
+        os.kill(child, 0)
+
+
+def test_missing_tag_still_fails_even_when_not_strict(upstream: Path, tmp_path: Path):
+    pin = tmp_path / "toolkit.ref"
+    pin.write_text("v9.9.9\n", encoding="utf-8")
+    with pytest.raises(consumer_pin.PinError, match="upstream"):
+        consumer_pin.check_pin(str(upstream), pin)
+
+
+def test_ssh_batch_mode_only_for_default_openssh(monkeypatch):
+    monkeypatch.delenv("GIT_SSH", raising=False)
+    monkeypatch.delenv("GIT_SSH_COMMAND", raising=False)
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CONFIG_SYSTEM", os.devnull)
+    assert consumer_pin._non_interactive_env()["GIT_SSH_COMMAND"] == "ssh -o BatchMode=yes"
+    monkeypatch.setenv("GIT_SSH_COMMAND", "plink -i /k")           # чужой клиент не трогаем
+    assert consumer_pin._non_interactive_env()["GIT_SSH_COMMAND"] == "plink -i /k"
+    monkeypatch.delenv("GIT_SSH_COMMAND")
+    monkeypatch.setenv("GIT_SSH", "/w/ssh-wrapper")
+    assert "GIT_SSH_COMMAND" not in consumer_pin._non_interactive_env()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="тест askpass-скрипта на sh")
+def test_credential_prompt_is_never_shown(tmp_path: Path, monkeypatch):
+    # Апстрим просит логин (401), в конфиге git стоит core.askPass: окно/запрос пароля из pre-push недопустимо.
+    import http.server
+    import threading
+
+    class Auth(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(401)
+            self.send_header("WWW-Authenticate", 'Basic realm="x"')
+            self.end_headers()
+        log_message = lambda *a: None
+    srv = http.server.HTTPServer(("127.0.0.1", 0), Auth)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    marker = tmp_path / "asked"
+    ask = tmp_path / "ask.sh"
+    ask.write_text(f"#!/bin/sh\necho asked > {marker}\necho x\n", encoding="utf-8")
+    ask.chmod(0o755)
+    cfg = tmp_path / "gitconfig"
+    cfg.write_text(f"[core]\n\taskPass = {ask}\n", encoding="utf-8")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(cfg))
+    monkeypatch.setenv("GIT_CONFIG_SYSTEM", os.devnull)
+    monkeypatch.delenv("GIT_ASKPASS", raising=False)
+    monkeypatch.delenv("SSH_ASKPASS", raising=False)
+    pin = tmp_path / "toolkit.ref"
+    pin.write_text("v1.2.3\n", encoding="utf-8")
+    try:
+        consumer_pin.check_pin(f"http://127.0.0.1:{srv.server_address[1]}/x.git", pin)
+    finally:
+        srv.shutdown()
+    assert not marker.exists(), "git вызвал askpass: запрос пароля из хука"
