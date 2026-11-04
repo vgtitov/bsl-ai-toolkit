@@ -110,10 +110,13 @@ def build_parser() -> argparse.ArgumentParser:
     fma.add_argument("file", help="путь к Forms/<Имя>/Ext/Form.xml (или Form.form EDT)")
     fma.add_argument("--name", required=True, help="имя реквизита формы")
     fma.add_argument("--type", dest="type_ref", required=True, help="тип реквизита")
+    fma.add_argument("--parent", help="реквизит-таблица формы: добавить в неё колонку (только EDT Form.form)")
     fmf = fmsub.add_parser("add-field")
     fmf.add_argument("file", help="путь к Forms/<Имя>/Ext/Form.xml (Конфигуратор)")
     fmf.add_argument("--name", required=True, help="имя элемента (InputField)")
     fmf.add_argument("--data-path", required=True, help="привязка данных, напр. Объект.Артикул")
+    fmf.add_argument("--parent", help="контейнер (таблица/группа): поле встаёт внутрь (только EDT Form.form)")
+    fmf.add_argument("--position", help="first | last | before:Имя | after:Имя (с --parent)")
     fms = fmsub.add_parser("set-style",
                            help="оформление элемента в свойствах формы (EDT и Конфигуратор)")
     fms.add_argument("file", help="Forms/<Имя>/Form.form (EDT) или Forms/<Имя>/Ext/Form.xml (Конфигуратор)")
@@ -248,7 +251,7 @@ def main() -> None:
         elif ns.cmd == "form":
             if ns.fmcmd == "add-attribute":
                 from onec_metadata.ops.form import add_attribute as form_add_attr
-                form_add_attr(Path(ns.file), ns.name, ns.type_ref)
+                form_add_attr(Path(ns.file), ns.name, ns.type_ref, parent=ns.parent)
             elif ns.fmcmd in ("add-group", "add-decoration", "move", "set-title",
                               "add-table", "add-column", "add-column-group"):
                 from onec_metadata.ops import form_structure as fs
@@ -293,7 +296,8 @@ def main() -> None:
                 set_style(Path(ns.file), ns.item, props, omit_defaults=ns.omit_defaults)
             else:
                 from onec_metadata.ops.form import add_field as form_add_field
-                form_add_field(Path(ns.file), ns.name, ns.data_path)
+                form_add_field(Path(ns.file), ns.name, ns.data_path,
+                               parent=ns.parent, position=ns.position)
     except (OpPreconditionError, UnknownFormatError) as e:
         print(f"Ошибка предусловия: {e}", file=sys.stderr)
         sys.exit(2)
