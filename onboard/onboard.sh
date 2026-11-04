@@ -126,5 +126,6 @@ cat <<EOF
 [ ] BSL-инструменты: detect_tools уже нашёл/скачал платформу/jar'ы и прописал env. Что [нет] — доложи и повтори uv run scripts/detect_tools.py (мост BSL_LS_MCP — из репо mcp/bsl_ls_mcp.py).
 [ ] Git-идентичность площадки и токен push — см. docs/git.md.
 [ ] Перезапусти Claude Code в $WORKDIR -> подтверди MCP.
+[ ] Второе мнение (ревью другой моделью): python scripts/second_opinion.py status — покажет, что настроено и как получить недостающее (docs/WORKFLOW_GUARDS.md).
 [ ] Self-test: спроси onec-code (find_object) — ответ по коду из $SRC_DIR (или из центра, если подключён).
 EOF

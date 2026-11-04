@@ -65,6 +65,24 @@ GPT_SUBMENU_TRIGGER = "GPT"
 ALL_MODELS = [*MODEL_MENU_LABEL, "gpt-latest"]
 DEFAULT_MODEL = "gpt-latest"
 
+EXIT_LIMIT = 75      # дневной лимит Copilot: отдельный код, вызывающий переходит к следующему звену цепочки
+# Страница отвечает обычным текстом, а не ошибкой: «You've used your daily chat limit. Please try again later.
+# Upgrade to keep going». Фразы en и ru, регистр не важен; список общий с operkontur-work-bundle (copilot_delegate).
+LIMIT_PHRASES = ("daily chat limit", "reached your limit", "try again later", "upgrade to keep going", "used your daily",
+                 "дневной лимит", "достигли лимита", "достигли дневного лимита", "суточный лимит", "повторите попытку позже")
+LIMIT_MAX = 500      # длиннее: это ревью, которое случайно говорит про лимиты, а не сообщение страницы
+
+
+class LimitError(RuntimeError):
+    """Copilot ответил сообщением о лимите. Это не ответ на вопрос."""
+
+
+def is_limit(text: str) -> bool:
+    """Короткий ответ-заглушка про лимит. Список фраз общий с scripts/second_opinion.py (тест сверяет)."""
+    t = (text or "").strip().casefold()
+    return 0 < len(t) < LIMIT_MAX and any(ph in t for ph in LIMIT_PHRASES)
+
+
 _STOP_MARKERS = ("\nMessage Copilot", "\nAI-generated content may be incorrect")
 
 for _s in (sys.stdout, sys.stderr):
@@ -313,6 +331,32 @@ def ask(prompt: str, model: str = DEFAULT_MODEL, new_chat: bool = True,
         return _ask_once(prompt, model, new_chat, headless, wait_timeout, files)
 
 
+def _send(page, box, wait_s: float = 8.0) -> None:
+    """Отправка. 24.09.2026: Enter больше не отправляет, нужна кнопка Send. 05.11.2026: в скрытом режиме fill не
+    шлёт настоящих событий ввода и Send остаётся disabled. Ждём enabled, при необходимости «будим» поле реальными
+    клавишами и ждём снова; кнопки нет совсем: Enter."""
+    send = page.get_by_role("button", name="Send")
+
+    def enabled_within(sec: float) -> bool:
+        end = time.time() + sec
+        while time.time() < end:
+            try:
+                if send.count() and send.first.is_enabled():
+                    return True
+            except Exception:
+                pass
+            time.sleep(0.3)
+        return False
+
+    if not enabled_within(1.5) and send.count():
+        box.press("End"); box.press("Space"); box.press("Backspace")
+        enabled_within(wait_s)
+    if send.count():
+        send.first.click()
+    else:
+        box.press("Enter")
+
+
 def _ask_once(prompt: str, model: str, new_chat: bool, headless: bool, wait_timeout: int, files=None) -> str:
     from playwright.sync_api import sync_playwright
     with _ProfileLock(), sync_playwright() as p:
@@ -394,11 +438,7 @@ def _ask_once(prompt: str, model: str, new_chat: bool, headless: bool, wait_time
         box = page.get_by_role("textbox", name="Message Copilot")
         box.click()
         box.fill(prompt)
-        send = page.get_by_role("button", name="Send")      # 24.09.2026: Enter больше не отправляет
-        if send.count():
-            send.first.click()
-        else:
-            box.press("Enter")
+        _send(page, box)
 
         deadline = time.time() + wait_timeout
         last_text, stable_since = "", None
@@ -419,6 +459,9 @@ def _ask_once(prompt: str, model: str, new_chat: bool, headless: bool, wait_time
             last_text = cur
 
         answer = extract_last_answer(last_text)
+        if is_limit(answer):
+            ctx.close()
+            raise LimitError(answer.strip()[:200])
         try:                                    # подсказки-кнопки после ответа («Предложи ещё варианты»)
             chips = {b.inner_text().strip() for b in page.get_by_role("button").all()}
             lines = answer.rstrip().split("\n")
@@ -456,6 +499,9 @@ def main():
     try:
         answer = ask(a.prompt, model=a.model, new_chat=not a.continue_chat,
                      headless=False if a.visible else None, wait_timeout=a.wait_timeout, files=a.file)
+    except LimitError as e:
+        print(f"⚠ Лимит Copilot: {e}", file=sys.stderr)
+        return EXIT_LIMIT
     except RuntimeError as e:
         print(f"⚠ {e}", file=sys.stderr)
         return 2
