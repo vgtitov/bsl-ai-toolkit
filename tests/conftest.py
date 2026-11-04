@@ -11,3 +11,18 @@ if sys.platform == "win32" and not shutil.which("sh"):
         if (git / "bin" / "sh.exe").is_file():
             os.environ["PATH"] = f"{git / 'bin'}{os.pathsep}{git / 'usr' / 'bin'}{os.pathsep}{os.environ['PATH']}"
             break
+
+
+import pytest  # noqa: E402
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+
+
+@pytest.fixture(autouse=True)
+def _no_real_limit_pause(monkeypatch, tmp_path):
+    """Состояние Copilot (пауза лимита, профиль входа) лежит в ~/.cache разработчика: без изоляции оно роняло тесты."""
+    import second_opinion
+
+    monkeypatch.setattr(second_opinion, "PAUSE_DIR", tmp_path / "limit_skip_conftest")
+    # вход в Copilot у разработчика (профиль в ~/.cache) не должен менять результат тестов «доверенного ассистента нет»
+    monkeypatch.setattr(second_opinion, "COPILOT_PROFILE", tmp_path / "no_copilot_profile")
