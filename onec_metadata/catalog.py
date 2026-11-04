@@ -45,7 +45,7 @@ SUPPORTED: dict[str, frozenset] = {
     "HTTPService": frozenset({"add_child"}),
     "WebService": frozenset({"add_child"}),
     # подсистема: включение объекта в состав (командный интерфейс) — оба формата
-    "Subsystem": frozenset({"subsystem_add_content"}),
+    "Subsystem": frozenset({"subsystem_add_content", "subsystem_remove_content"}),
     # роль: выдать/установить право объекта (Rights.xml Конфигуратора)
     "Role": frozenset({"role_grant_right"}),
     # управляемая форма (P4): реквизит формы (id-пространство, ns logform)

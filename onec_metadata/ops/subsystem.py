@@ -70,3 +70,26 @@ def _add_content_edt(path: Path, object_ref: str) -> None:
     new.text = object_ref
     cfg.place_after(items[-1], new)
     cfg.save(doc, path)
+
+
+def remove_content(subsystem_path: Path, object_ref: str) -> None:
+    """Исключить объект из состава подсистемы (Конфигуратор и EDT). Последний элемент не удаляем:
+    пустой состав пишется иначе (`<Content/>`), это отдельная операция."""
+    validate_object_ref(object_ref)
+    doc = cfg.load(subsystem_path)
+    if str(subsystem_path).endswith(".mdo"):
+        container = doc.getroot()
+        items = container.xpath("content")
+    else:
+        contents = doc.xpath("//md:Content", namespaces=cfg.NS)
+        if not contents:
+            raise OpPreconditionError("У подсистемы нет элемента Content")
+        container = contents[0]
+        items = container.xpath("xr:Item", namespaces=cfg.NS)
+    hit = [i for i in items if i.text == object_ref]
+    if not hit:
+        raise OpPreconditionError(f"Объекта '{object_ref}' нет в составе подсистемы")
+    if len(items) == 1:
+        raise OpPreconditionError("Это единственный элемент состава - пустой состав отдельная операция")
+    cfg.remove_children(container, hit)
+    cfg.save(doc, subsystem_path)

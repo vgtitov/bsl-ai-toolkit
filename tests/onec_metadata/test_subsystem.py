@@ -98,3 +98,15 @@ def test_edt_add_content_byte_perfect_tail(tmp_path):
     tmp2 = tmp_path / "rt.mdo"
     cfg.save(doc, tmp2)
     assert tmp2.read_bytes() == raw
+
+
+def test_remove_content_round_trip(tmp_path):
+    """Удаление обратно добавлению: файл байт-в-байт как до add_content."""
+    from onec_metadata.ops.subsystem import remove_content
+    work = _copy(tmp_path)
+    before = work.read_bytes()
+    add_content(work, "Document.Заказ")
+    remove_content(work, "Document.Заказ")
+    assert work.read_bytes() == before
+    with pytest.raises(OpPreconditionError):
+        remove_content(work, "Document.Нет")

@@ -33,13 +33,162 @@ def _q(tag):
 
 # ---------- операции ----------
 
-def add_group(form_path: Path, name: str, parent: str = ".", position: str = "last") -> None:
+_GROUP_KINDS = ("Usual", "Pages", "Page")
+
+
+def add_group(form_path: Path, name: str, parent: str = ".", position: str = "last", kind: str = "Usual") -> None:
+    """Группа: Usual — обычная (`Behavior=Usual`), Pages — группа страниц, Page — страница (только в Pages).
+    Шаблон страниц — как у Конфигуратора: элемент + ExtendedTooltip; отображение — через set-style."""
+    if kind not in _GROUP_KINDS:
+        raise OpPreconditionError(f"Вид группы '{kind}': ожидается {' | '.join(_GROUP_KINDS)}")
+
     def build(next_id):
-        el = etree.Element(_q("UsualGroup"), name=name, id=str(next_id))
-        etree.SubElement(el, _q("Behavior")).text = "Usual"
+        el = etree.Element(_q("UsualGroup" if kind == "Usual" else kind), name=name, id=str(next_id))
+        if kind == "Usual":
+            etree.SubElement(el, _q("Behavior")).text = "Usual"
+        etree.SubElement(el, _q("ExtendedTooltip"), name=f"{name}РасширеннаяПодсказка", id=str(next_id + 1))
+        return el
+    _add(form_path, name, parent, position, build, kind=kind)
+
+
+def add_button(form_path: Path, name: str, command: str, parent: str = ".", position: str = "last") -> None:
+    """Кнопка команды: `Form.Command.<Имя>` (команда формы, см. add_command) или команда объекта
+    (`Catalog.<Имя>.Command.<Имя>`, `CommonCommand.<Имя>`). Шаблон — как у Конфигуратора:
+    Type=UsualButton, CommandName, ExtendedTooltip; заголовок — set-title, вид — set-style."""
+    if "." not in command:
+        raise OpPreconditionError(f"Команда '{command}': ожидается Form.Command.<Имя> или <Объект>.Command.<Имя>")
+    if command.startswith("Form.Command."):
+        _, root = _load(form_path)
+        cmd_name = command.split(".", 2)[2]
+        if not root.xpath("lf:Commands/lf:Command[@name=$n]", namespaces=cfg.NS, n=cmd_name):
+            raise OpPreconditionError(f"Команды формы '{cmd_name}' нет: сначала form add-command")
+
+    def build(next_id):
+        el = etree.Element(_q("Button"), name=name, id=str(next_id))
+        etree.SubElement(el, _q("Type")).text = "UsualButton"
+        etree.SubElement(el, _q("CommandName")).text = command
         etree.SubElement(el, _q("ExtendedTooltip"), name=f"{name}РасширеннаяПодсказка", id=str(next_id + 1))
         return el
     _add(form_path, name, parent, position, build)
+
+
+def add_command(form_path: Path, name: str, titles: dict, action: str = "") -> None:
+    """Команда формы: Title и ToolTip на языках titles, Action — обработчик в модуле формы
+    (по умолчанию имя команды). id команд — своя нумерация, как у Конфигуратора."""
+    validate_name(name)
+    if not titles:
+        raise OpPreconditionError("add-command: нужен заголовок хотя бы на одном языке")
+    doc, root = _load(form_path)
+    cmds = root.find(_q("Commands"))
+    if cmds is None:
+        cmds = etree.Element(_q("Commands"))
+        _insert_at(root, cmds, _anchor_after(root, "Form", "Commands"))
+    if cmds.xpath("lf:Command[@name=$n]", namespaces=cfg.NS, n=name):
+        raise OpPreconditionError(f"Команда формы '{name}' уже существует")
+    ids = [int(x) for x in cmds.xpath("lf:Command/@id", namespaces=cfg.NS)]
+    el = etree.Element(_q("Command"), name=name, id=str(max(ids, default=0) + 1))
+    for tag in ("Title", "ToolTip"):
+        t = etree.SubElement(el, _q(tag))
+        for lang, text in titles.items():
+            item = etree.SubElement(t, f"{{{_V8}}}item")
+            etree.SubElement(item, f"{{{_V8}}}lang").text = lang
+            etree.SubElement(item, f"{{{_V8}}}content").text = text
+    etree.SubElement(el, _q("Action")).text = action or name
+    _insert_at(cmds, el, None)
+    cfg.save(doc, form_path)
+
+
+def add_list(form_path: Path, name: str, main_table: str, main: bool = False) -> None:
+    """Реквизит формы «динамический список» по основной таблице (`Catalog.X`, `InformationRegister.X`),
+    без произвольного запроса; Settings — как пишет Конфигуратор (ListSettings с новыми userSettingID)."""
+    import uuid
+    validate_name(name)
+    if main_table.count(".") != 1:
+        raise OpPreconditionError(f"Основная таблица '{main_table}': ожидается Вид.Имя, напр. Catalog.Товары")
+    doc, root = _load(form_path)
+    attrs = root.find(_q("Attributes"))
+    if attrs is None:
+        attrs = etree.Element(_q("Attributes"))
+        _insert_at(root, attrs, _anchor_after(root, "Form", "Attributes"))
+    if attrs.xpath("lf:Attribute[@name=$n]", namespaces=cfg.NS, n=name):
+        raise OpPreconditionError(f"Реквизит формы '{name}' уже существует")
+    if main and attrs.xpath("lf:Attribute[lf:MainAttribute='true']", namespaces=cfg.NS):
+        raise OpPreconditionError("Основной реквизит у формы уже есть")
+    ids = [int(x) for x in attrs.xpath("lf:Attribute/@id", namespaces=cfg.NS)]
+    el = etree.Element(_q("Attribute"), name=name, id=str(max(ids, default=0) + 1))
+    t = etree.SubElement(el, _q("Type"))
+    etree.SubElement(t, f"{{{_V8}}}Type").text = "cfg:DynamicList"
+    if main:
+        etree.SubElement(el, _q("MainAttribute")).text = "true"
+    s = etree.SubElement(el, _q("Settings"))
+    s.set(f"{{{cfg.NS['xsi']}}}type", "DynamicList")
+    etree.SubElement(s, _q("ManualQuery")).text = "false"
+    etree.SubElement(s, _q("DynamicDataRead")).text = "true"
+    etree.SubElement(s, _q("MainTable")).text = main_table
+    ls = etree.SubElement(s, _q("ListSettings"))
+    dcs = cfg.NS["dcsset"]
+    for part in ("filter", "order", "conditionalAppearance"):
+        p = etree.SubElement(ls, f"{{{dcs}}}{part}")
+        etree.SubElement(p, f"{{{dcs}}}viewMode").text = "Normal"
+        etree.SubElement(p, f"{{{dcs}}}userSettingID").text = str(uuid.uuid4())
+    etree.SubElement(ls, f"{{{dcs}}}itemsViewMode").text = "Normal"
+    etree.SubElement(ls, f"{{{dcs}}}itemsUserSettingID").text = str(uuid.uuid4())
+    _insert_at(attrs, el, None)
+    cfg.save(doc, form_path)
+
+
+def add_checkbox(form_path: Path, name: str, data_path: str, parent: str = ".", position: str = "last") -> None:
+    """Флажок (CheckBoxField) с привязкой DataPath. Шаблон - как у Конфигуратора: DataPath, CheckBoxType=Auto,
+    ContextMenu, ExtendedTooltip; переключатель - set-style CheckBoxType=Switcher, заголовок справа -
+    TitleLocation=Right."""
+    def build(next_id):
+        el = etree.Element(_q("CheckBoxField"), name=name, id=str(next_id))
+        etree.SubElement(el, _q("DataPath")).text = data_path
+        etree.SubElement(el, _q("CheckBoxType")).text = "Auto"
+        etree.SubElement(el, _q("ContextMenu"), name=f"{name}КонтекстноеМеню", id=str(next_id + 1))
+        etree.SubElement(el, _q("ExtendedTooltip"), name=f"{name}РасширеннаяПодсказка", id=str(next_id + 2))
+        return el
+    _add(form_path, name, parent, position, build)
+
+
+def remove_item(form_path: Path, name: str) -> None:
+    """Удалить элемент формы со всем вложенным (не реквизит). Опустевшая группа пишется без ChildItems,
+    как у Конфигуратора. Ссылки на элемент из кода модуля - забота вызывающего."""
+    doc, root = _load(form_path)
+    el = _find(root, name)
+    src = el.getparent()
+    if etree.QName(src).localname != "ChildItems":      # …РасширеннаяПодсказка/…КонтекстноеМеню — часть элемента
+        raise OpPreconditionError(f"'{name}' — служебная часть элемента, а не элемент формы: удалять его нельзя")
+    cfg.remove_children(src, [el])
+    if not len(src) and src.getparent() is not root:
+        cfg.remove_children(src.getparent(), [src])
+    cfg.save(doc, form_path)
+
+
+def add_event(form_path: Path, event: str, handler: str) -> None:
+    """Обработчик события самой формы: `<Events><Event name="OnCreateAtServer">Процедура</Event></Events>`,
+    место - по таблице порядка формы. Процедура в модуле формы пишется отдельно (код, не метаданные)."""
+    validate_name(handler)
+    if not event.isascii() or not event.isalpha():
+        raise OpPreconditionError(f"Событие '{event}': имя события платформы латиницей, напр. OnCreateAtServer")
+    doc, root = _load(form_path)
+    events = root.find(_q("Events"))
+    if events is None:
+        events = etree.Element(_q("Events"))
+        _insert_at(root, events, _anchor_after(root, "Form", "Events"))
+    if events.xpath("lf:Event[@name=$n]", namespaces=cfg.NS, n=event):
+        raise OpPreconditionError(f"У формы уже есть обработчик события '{event}'")
+    el = etree.Element(_q("Event"), name=event)
+    el.text = handler
+    _insert_at(events, el, None)
+    cfg.save(doc, form_path)
+
+
+def _anchor_after(owner, ctx, tag):
+    """Первый существующий элемент, который по таблице порядка идёт после tag (None — в конец)."""
+    order = _ORDER_CFG.get(ctx, [])
+    later = set(order[order.index(tag) + 1:])
+    return next((c for c in owner if isinstance(c.tag, str) and etree.QName(c).localname in later), None)
 
 
 def add_decoration(form_path: Path, name: str, parent: str = ".", position: str = "last",
@@ -221,7 +370,7 @@ def _next_id(root):
     return max([i for i in ids if i > 0], default=0) + 1
 
 
-def _add(form_path, name, parent, position, build, in_table=False):
+def _add(form_path, name, parent, position, build, in_table=False, kind=None):
     validate_name(name)
     doc, root = _load(form_path)
     owner = None if parent in (".", "", None) else _find(root, parent)
@@ -230,11 +379,17 @@ def _add(form_path, name, parent, position, build, in_table=False):
         raise OpPreconditionError(
             f"'{name}': колонка/группа колонок — только в таблицу или группу колонок; "
             f"прочие элементы — не в таблицу (родитель '{parent}' — {owner_kind})")
+    if (kind == "Page") != (owner_kind == "Pages"):
+        raise OpPreconditionError(f"'{name}': страница (Page) — только в группу страниц (Pages), "
+                                  f"в группу страниц — только страницы (родитель '{parent}' — {owner_kind})")
     el = build(_next_id(root))
     # проверяем и имена вложенных частей (…РасширеннаяПодсказка, …КонтекстноеМеню, …КоманднаяПанель):
     # их дубль даёт форму с неоднозначными именами, которую Конфигуратор может не загрузить
+    # Имена элементов - своё пространство: реквизит или команда формы с тем же именем не конфликт
+    # (у типовых форм реквизит «Список» и таблица «Список»).
     for n in [el.get("name")] + el.xpath(".//@name"):
-        if root.xpath(".//*[@name=$n]", n=n):
+        if root.xpath("(lf:AutoCommandBar | lf:ChildItems)/descendant-or-self::*[@name=$n]",
+                      namespaces=cfg.NS, n=n):
             raise OpPreconditionError(f"Элемент формы '{n}' уже существует")
     # пустая форма без корневого ChildItems: контейнер создаётся на своём месте по таблице порядка
     _insert(_container(root, parent, create=True), el, position)
