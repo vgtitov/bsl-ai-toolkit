@@ -6,6 +6,9 @@
   literal-font    — шрифт задан по месту (faceName/height/флаги), а не ссылкой на шрифт-элемент стиля;
   literal-color   — цвет задан по месту (RGB), а не элементом стиля (`style:`) или `web:`;
   command-bar     — у формы не скрыта командная панель (`commandBarLocation` не `None`).
+  group-horizontal-if-possible — у обычной группы не задано направление (умолчание «горизонтально, если возможно»,
+                    результат зависит от ширины окна); гайд: ориентироваться на 1280 × 768 и задать явно;
+  group-title-word — показанный заголовок обычной группы начинается со слова «Группа» (его добавляет платформа).
 Скрытые элементы и их содержимое не проверяются (EDT: нет `<visible>true</visible>`;
 Конфигуратор: `<Visible>false</Visible>`).
 """
@@ -34,11 +37,12 @@ class Issue:
 
 CHECKS = {"titles": ("title-lang", "title-no-own"),
           "tokens": ("literal-font", "literal-color"),
-          "command-bar": ("command-bar",)}
+          "command-bar": ("command-bar",),
+          "layout": ("group-horizontal-if-possible", "group-title-word")}
 
 
 def lint_form(form_path: Path, langs=("ru", "en"), checks=tuple(CHECKS)) -> list:
-    """`checks` — группы проверок: titles, tokens, command-bar (по умолчанию все). Формы, где фирменное
+    """`checks` — группы проверок: titles, tokens, command-bar, layout (по умолчанию все). Формы, где фирменное
     оформление не принято (только компоновка), проверять `checks=("titles",)`."""
     unknown = set(checks) - set(CHECKS)
     if unknown:
@@ -80,6 +84,14 @@ def _lint_edt(root, langs):
                 out.append(Issue("title-no-own", name,
                                  "колонка без своего заголовка (возьмётся синоним реквизита) — задать " +
                                  "/".join(langs)))
+            if (it.get(_XT) or "").endswith("FormGroup") and it.findtext("type") == "UsualGroup":
+                direction = it.findtext("extInfo/group") or "HorizontalIfPossible"
+                if direction == "HorizontalIfPossible":
+                    out.append(Issue("group-horizontal-if-possible", name,
+                                     "направление группы не задано — задать Vertical/Horizontal/AlwaysHorizontal"))
+                ru = next((t.findtext("value") for t in it.findall("title") if t.findtext("key") == "ru"), "")
+                if it.findtext("showTitle") != "false" and (ru or "").startswith("Группа"):
+                    out.append(Issue("group-title-word", name, "в заголовке группы слово «Группа» — убрать"))
             own = list(it) + list(it.find("extInfo") if it.find("extInfo") is not None else [])
             for p in own:
                 if not isinstance(p.tag, str) or p.tag == "items":
@@ -122,6 +134,18 @@ def _lint_cfg(root, langs):
                 out.append(Issue("title-no-own", name,
                                  "колонка без своего заголовка (возьмётся синоним реквизита) — задать " +
                                  "/".join(langs)))
+            if tag == "UsualGroup":
+                direction = it.findtext(f"{{{_LF}}}Group") or "HorizontalIfPossible"
+                if direction == "HorizontalIfPossible":
+                    out.append(Issue("group-horizontal-if-possible", name,
+                                     "направление группы не задано — задать Vertical/Horizontal/AlwaysHorizontal"))
+                ru = ""
+                if title is not None:
+                    for x in title.findall(f"{{{_V8}}}item"):
+                        if x.findtext(f"{{{_V8}}}lang") == "ru":
+                            ru = x.findtext(f"{{{_V8}}}content") or ""
+                if it.findtext(f"{{{_LF}}}ShowTitle") != "false" and ru.startswith("Группа"):
+                    out.append(Issue("group-title-word", name, "в заголовке группы слово «Группа» — убрать"))
             for p in it:
                 if not isinstance(p.tag, str):
                     continue
