@@ -218,6 +218,30 @@ def _add_attribute_edt(form_path: Path, name: str, type_ref: str) -> None:
     cfg.save(doc, form_path)
 
 
+def remove_attribute(form_path: Path, name: str, parent: str | None = None) -> None:
+    """Удалить реквизит формы или (с `parent`) колонку реквизита-таблицы. Только EDT Form.form.
+    Отказ, если на него ещё ссылается элемент формы (dataPath / footerDataPath)."""
+    if not str(form_path).endswith(".form"):
+        raise OpPreconditionError("remove-attribute пока только для EDT (Form.form)")
+    doc = cfg.load(form_path)
+    root = doc.getroot()
+    owner_path = f"{parent}.{name}" if parent else name
+    if parent:
+        owners = [a for a in root.xpath("attributes") if a.findtext("name") == parent]
+        pool = owners[0].findall("columns") if owners else []
+    else:
+        pool = root.xpath("attributes")
+    hits = [a for a in pool if a.findtext("name") == name]
+    if not hits:
+        raise OpPreconditionError(f"Реквизит формы '{owner_path}' не найден")
+    used = [s for s in root.xpath(".//items//segments/text() | .//items/*/segments/text()")
+            if s == owner_path or s.startswith(owner_path + ".")]
+    if used:
+        raise OpPreconditionError(f"На '{owner_path}' ссылаются элементы формы - сначала удалите их")
+    cfg.remove_children(hits[0].getparent(), hits)
+    cfg.save(doc, form_path)
+
+
 def _next_attribute_id_edt(root) -> int:
     """id реквизитов формы и колонок их таблиц — ОДНО пространство (реальная форма: таблица
     id=5, её колонки 26..30 и 6), поэтому max берётся по всем <id> реквизитов и колонок."""

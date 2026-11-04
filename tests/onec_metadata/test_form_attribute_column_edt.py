@@ -78,6 +78,25 @@ def test_add_attribute_edt_id_skips_column_ids(tmp_path):
     assert a.xpath("id/text()") == ["8"]
 
 
+def test_remove_column_edt(tmp_path):
+    from onec_metadata.ops.form import remove_attribute
+    work = _copy(tmp_path)
+    before = (FIX / "form_valuetable_edt.form").read_text(encoding="utf-8")
+    add_attribute(work, "Цена", "String", parent="Товары")
+    remove_attribute(work, "Цена", parent="Товары")
+    assert work.read_text(encoding="utf-8") == before          # добавить+удалить = исходный файл
+    with pytest.raises(OpPreconditionError):
+        remove_attribute(work, "Цена", parent="Товары")         # нет такой колонки
+
+
+def test_remove_attribute_edt_refuses_when_referenced(tmp_path):
+    """Реквизит/колонку, на которую ссылается элемент формы (dataPath), не удаляем молча."""
+    from onec_metadata.ops.form import remove_attribute
+    work = _copy(tmp_path)
+    with pytest.raises(OpPreconditionError):
+        remove_attribute(work, "Количество", parent="Товары")   # поле ТоварыКоличество ссылается
+
+
 def test_add_column_configurator_not_supported_yet(tmp_path):
     work = tmp_path / "Form.xml"
     shutil.copy(FIX / "form.xml", work)

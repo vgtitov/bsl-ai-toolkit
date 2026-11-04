@@ -79,6 +79,17 @@ def test_add_field_sample_prefers_input_field(tmp_path):
     assert new.findtext("type") == "InputField"
 
 
+def test_set_style_footer_data_path_is_datapath(tmp_path):
+    """footerDataPath в EDT - form:DataPath с segments (как в ERP); простой текст EDT выбрасывает."""
+    from onec_metadata.ops.form_style import set_style
+    work = _copy(tmp_path)
+    set_style(work, "ТоварыКоличество", {"footerDataPath": "ИтогоКоличество"})
+    col = [c for c in _table(cfg.load(work)).findall("items") if c.findtext("name") == "ТоварыКоличество"][0]
+    fdp = col.find("footerDataPath")
+    assert fdp.get(cfg.q("xsi", "type")) == "form:DataPath"
+    assert fdp.xpath("segments/text()") == ["ИтогоКоличество"]
+
+
 def test_add_field_parent_errors(tmp_path):
     work = _copy(tmp_path)
     with pytest.raises(OpPreconditionError):
