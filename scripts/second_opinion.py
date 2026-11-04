@@ -37,6 +37,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -114,9 +115,49 @@ def copilot_cmd() -> str:
     return ""
 
 
+EXIT_LIMIT = 75      # copilot_adapter.py: дневной лимит Copilot, ответом это не считается
+COPILOT_LAST_WHY = ""
+# Общий признак лимита (как в operkontur-work-bundle, copilot_delegate); список дублирует copilot_adapter.LIMIT_PHRASES
+LIMIT_PHRASES = ("daily chat limit", "reached your limit", "try again later", "upgrade to keep going", "used your daily",
+                 "дневной лимит", "достигли лимита", "достигли дневного лимита", "суточный лимит", "повторите попытку позже")
+LIMIT_MAX = 500
+PAUSE_DIR = Path(os.environ.get("AI_TOOLKIT_LIMIT_SKIP_DIR") or Path.home() / ".cache" / "ai_toolkit_limit_skip")
+PAUSE_HOURS = 6
+
+
+def is_limit(text: str) -> bool:
+    """Короткий ответ с кодом 0, который на деле отказ из-за лимита: ответом не считается, звено пропускается."""
+    t = (text or "").strip().casefold()
+    return 0 < len(t) < LIMIT_MAX and any(ph in t for ph in LIMIT_PHRASES)
+
+
+def paused_until(name: str) -> float:
+    """Unix-время конца паузы звена или 0. Пока пауза идёт, страницу и сеть не трогаем."""
+    try:
+        until = float((PAUSE_DIR / name).read_text().strip())
+    except (OSError, ValueError):
+        return 0.0
+    return until if until > time.time() else 0.0
+
+
+def set_pause(name: str, hours: float = PAUSE_HOURS) -> None:
+    try:
+        PAUSE_DIR.mkdir(parents=True, exist_ok=True)
+        (PAUSE_DIR / name).write_text(str(time.time() + hours * 3600))
+    except OSError:
+        pass                                            # пауза — оптимизация, без неё просто повторим вызов
+
+
 def copilot(prompt: str, files=()) -> str | None:
+    global COPILOT_LAST_WHY
+    COPILOT_LAST_WHY = ""
     cmd = copilot_cmd()
     if not cmd:
+        return None
+    until = paused_until("copilot")
+    if until:
+        COPILOT_LAST_WHY = f"лимит Copilot, пауза до {datetime.fromtimestamp(until):%H:%M}"
+        print(f"⚠ Copilot пропущен: {COPILOT_LAST_WHY}", flush=True)
         return None
     quote = (lambda f: subprocess.list2cmdline([str(f)])) if os.name == "nt" else (lambda f: shlex.quote(str(f)))
     cmd += "".join(" --file " + quote(f) for f in files)     # вложения читаются целиком, лимит запроса не мешает
@@ -147,7 +188,17 @@ def copilot(prompt: str, files=()) -> str | None:
                     pipe.close()
         print("⚠ Copilot: таймаут", flush=True)
         return None
+    if proc.returncode == EXIT_LIMIT:
+        set_pause("copilot")
+        COPILOT_LAST_WHY = "лимит Copilot (дневной), пауза записана"
+        print("⚠ Copilot: лимит Copilot (дневной). Это не ответ, перехожу к следующему звену.", flush=True)
+        return None
     text = (out or b"").decode("utf-8", errors="replace")
+    if proc.returncode == 0 and is_limit(text):        # страница ответила текстом про лимит с кодом 0
+        set_pause("copilot")
+        COPILOT_LAST_WHY = "лимит Copilot (дневной), пауза записана"
+        print("⚠ Copilot: ответ оказался сообщением о лимите, следующее звено.", flush=True)
+        return None
     return text if proc.returncode == 0 and text.strip() else None
 
 
@@ -296,11 +347,11 @@ def ask(prompt: str, chain=TEXT_CHAIN, codex=codex_exec, files=(), risk: str = "
             full = prompt + ("\n\nВложения (прочитай по путям перед ответом):\n" + "\n".join(files) if files else "")
             with tempfile.TemporaryDirectory() as tmp:
                 out = codex(["exec", "--skip-git-repo-check", "-s", "read-only", "-"], Path(tmp), stdin=full)
-            if out:
+            if out and not is_limit(out):
                 return "codex", out
         else:
             ans = fns[name](prompt, files)
-            if ans:
+            if ans and not is_limit(ans):
                 return name, ans
     return "", ""
 
@@ -316,6 +367,24 @@ def copilot_why_not() -> str:
     if not (COPILOT_PROFILE.is_dir() and any(COPILOT_PROFILE.iterdir())):
         return "вход не выполнен (python scripts/copilot_setup.py --login)"
     return ""
+
+
+def hints() -> str:
+    """Одна строка «Что сделать» по звеньям, которые не настроены или на паузе. Только имена переменных и команды,
+    без значений. Формат общий с operkontur-work-bundle (second_opinion.HINTS)."""
+    out = []
+    if not shutil.which("codex"):
+        out.append("Codex: установить и войти (python scripts/codex_setup.py, затем codex login)")
+    else:
+        out.append("Codex: если лимит, ждать сброса окна 5 ч или недели (не ждать, ревью идёт дальше); если не вошли, codex login")
+    until = paused_until("copilot")
+    if until:
+        out.append(f"Copilot: дневной лимит, пауза до {datetime.fromtimestamp(until):%H:%M}")
+    elif copilot_why_not():
+        out.append(f"Copilot: {copilot_why_not()}")
+    if not (os.environ.get("OPENROUTER_API_KEY") and os.environ.get("AI_TOOLKIT_NOTRAIN") == "1"):
+        out.append("OpenRouter: OPENROUTER_API_KEY и AI_TOOLKIT_NOTRAIN=1 в .env (ключ выпускает владелец на openrouter.ai/keys)")
+    return "Что сделать: " + "; ".join(out)
 
 
 def probe_copilot() -> tuple[bool, str]:
@@ -339,6 +408,7 @@ def status(probe: bool = False) -> int:
         print(f"Проба Copilot: {'ok' if ok else 'НЕ ПРОЙДЕНА'}, {msg}")
     print("Модель без обучения:", "включена" if os.environ.get("OPENROUTER_API_KEY")
           and os.environ.get("AI_TOOLKIT_NOTRAIN") == "1" else "выключена (OPENROUTER_API_KEY + AI_TOOLKIT_NOTRAIN=1)")
+    print(hints())
     return 0
 
 
@@ -377,7 +447,8 @@ def main(argv=None) -> int:
     else:
         who, body = ask(read_stdin_utf8() if a.text == "-" else a.text, files=a.file, risk=a.risk)
     if not who:
-        print(f"Второе мнение недоступно: {body or 'ни одно звено цепочки не ответило, проверь `status`'}. Готовым не считать.")
+        print(f"Второе мнение недоступно: {body or COPILOT_LAST_WHY or 'ни одно звено цепочки не ответило, проверь `status`'}. Готовым не считать.")
+        print(hints())
         return 2
     print(body)
     print(f"\nПроверял: {who}. Отчёт: {_report(a.cmd, who, body)}")
