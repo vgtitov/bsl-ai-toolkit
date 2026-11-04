@@ -43,9 +43,25 @@ def read_pin(pin_file: Path) -> str:
     return _require_version(lines[0])
 
 
+def _non_interactive_env() -> dict:
+    """Git must never wait for a password/passphrase/host-key answer in a hook (ssh ignores GIT_TERMINAL_PROMPT)."""
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GCM_INTERACTIVE="never")
+    if "GIT_SSH" not in env:  # a custom ssh wrapper is the owner's business
+        base = env.get("GIT_SSH_COMMAND", "")
+        if not base:
+            try:
+                got = subprocess.run(["git", "config", "--get", "core.sshCommand"], text=True,
+                                     capture_output=True, timeout=5)
+                base = got.stdout.strip()
+            except (OSError, subprocess.TimeoutExpired):
+                base = ""
+        env["GIT_SSH_COMMAND"] = f"{base or 'ssh'} -o BatchMode=yes"
+    return env
+
+
 def upstream_has_tag(repo: str, tag: str) -> bool:
     _require_version(tag)
-    env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GCM_INTERACTIVE="never")
+    env = _non_interactive_env()
     try:
         result = subprocess.run(
             [
