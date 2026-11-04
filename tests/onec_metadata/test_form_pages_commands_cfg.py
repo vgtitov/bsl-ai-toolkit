@@ -183,3 +183,24 @@ def test_crlf_and_bom_preserved(form):
     raw = form.read_bytes()
     assert raw.startswith(b"\xef\xbb\xbf")
     assert b"\n" not in raw.replace(b"\r\n", b"")
+
+
+def test_review_guards_move_pages_command_ref_list_source(form):
+    """move не обходит правило страниц; ссылка на команду и основная таблица разбираются по сегментам."""
+    from onec_metadata.ops.form_structure import add_button, add_list, move_item
+    add_group(form, "Страницы", kind="Pages")
+    add_group(form, "Стр1", parent="Страницы", kind="Page")
+    add_group(form, "Обычная")
+    before = form.read_bytes()
+    for bad_move in (("Обычная", "Страницы"), ("Стр1", ".")):
+        with pytest.raises(OpPreconditionError):
+            move_item(form, *bad_move)
+    for cmd in ("foo.bar", "Catalog..Command.X", "Catalog.Товар.X", "CommonCommand.", "Form.Command"):
+        with pytest.raises(OpPreconditionError):
+            add_button(form, "Кн", cmd)
+    for table in (".Товары", "Catalog.", "Unknown.Товары", "Catalog.Тов ары", "Catalog.A.B"):
+        with pytest.raises(OpPreconditionError):
+            add_list(form, "Список2", table)
+    assert form.read_bytes() == before
+    add_button(form, "КнОбщая", "CommonCommand.Печать")
+    add_button(form, "КнОбъекта", "Catalog.Товары.Command.Открыть")

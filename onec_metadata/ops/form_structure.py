@@ -36,6 +36,32 @@ def _q(tag):
 _GROUP_KINDS = ("Usual", "Pages", "Page")
 
 
+def _check_page_parent(name, kind, owner_kind, parent):
+    """Страница (Page) — только в группу страниц (Pages), в группу страниц — только страницы."""
+    if (kind == "Page") != (owner_kind == "Pages"):
+        raise OpPreconditionError(f"'{name}': страница (Page) — только в группу страниц (Pages), "
+                                  f"в группу страниц — только страницы (родитель '{parent}' — {owner_kind})")
+
+
+# Источники динамического списка (основная таблица Вид.Имя)
+_LIST_SOURCES = ("Catalog", "Document", "DocumentJournal", "Enum", "ChartOfCharacteristicTypes", "ChartOfAccounts",
+                 "ChartOfCalculationTypes", "InformationRegister", "AccumulationRegister", "AccountingRegister",
+                 "CalculationRegister", "BusinessProcess", "Task", "ExchangePlan")
+
+
+def _check_command_ref(command):
+    """Form.Command.<Имя> | CommonCommand.<Имя> | <Вид>.<Объект>.Command.<Имя> — сегменты непустые, имена допустимые."""
+    parts = command.split(".")
+    ok = (len(parts) == 3 and parts[:2] == ["Form", "Command"]) or (len(parts) == 2 and parts[0] == "CommonCommand") \
+        or (len(parts) == 4 and parts[2] == "Command" and parts[0].isascii() and parts[0].isalpha())
+    if not ok:
+        raise OpPreconditionError(f"Команда '{command}': ожидается Form.Command.<Имя>, CommonCommand.<Имя> "
+                                  "или <Вид>.<Объект>.Command.<Имя>")
+    for p in parts[1:]:
+        if p != "Command":
+            validate_name(p)
+
+
 def add_group(form_path: Path, name: str, parent: str = ".", position: str = "last", kind: str = "Usual") -> None:
     """Группа: Usual — обычная (`Behavior=Usual`), Pages — группа страниц, Page — страница (только в Pages).
     Шаблон страниц — как у Конфигуратора: элемент + ExtendedTooltip; отображение — через set-style."""
@@ -55,8 +81,7 @@ def add_button(form_path: Path, name: str, command: str, parent: str = ".", posi
     """Кнопка команды: `Form.Command.<Имя>` (команда формы, см. add_command) или команда объекта
     (`Catalog.<Имя>.Command.<Имя>`, `CommonCommand.<Имя>`). Шаблон — как у Конфигуратора:
     Type=UsualButton, CommandName, ExtendedTooltip; заголовок — set-title, вид — set-style."""
-    if "." not in command:
-        raise OpPreconditionError(f"Команда '{command}': ожидается Form.Command.<Имя> или <Объект>.Command.<Имя>")
+    _check_command_ref(command)
     if command.startswith("Form.Command."):
         _, root = _load(form_path)
         cmd_name = command.split(".", 2)[2]
@@ -103,8 +128,11 @@ def add_list(form_path: Path, name: str, main_table: str, main: bool = False) ->
     без произвольного запроса; Settings — как пишет Конфигуратор (ListSettings с новыми userSettingID)."""
     import uuid
     validate_name(name)
-    if main_table.count(".") != 1:
-        raise OpPreconditionError(f"Основная таблица '{main_table}': ожидается Вид.Имя, напр. Catalog.Товары")
+    kind_, _, tname = main_table.partition(".")
+    if kind_ not in _LIST_SOURCES or not tname or "." in tname:
+        raise OpPreconditionError(f"Основная таблица '{main_table}': ожидается Вид.Имя, вид — "
+                                  f"{', '.join(_LIST_SOURCES)}")
+    validate_name(tname)
     doc, root = _load(form_path)
     attrs = root.find(_q("Attributes"))
     if attrs is None:
@@ -274,6 +302,7 @@ def move_item(form_path: Path, name: str, parent: str = ".", position: str = "la
     if kind == "ColumnGroup" and not to_table or to_table != from_table:
         raise OpPreconditionError(f"'{name}': колонки переносятся только внутри таблицы, "
                                   f"прочие элементы — вне таблиц (родитель '{parent}' — {owner_kind})")
+    _check_page_parent(name, kind, owner_kind, parent)            # move не обходит правило страниц
     dest = _container(root, parent, create=True)
     if el is dest.getparent() or dest.getparent() in el.iterdescendants():
         raise OpPreconditionError(f"Нельзя перенести '{name}' в самого себя или во вложенный элемент")
@@ -379,9 +408,7 @@ def _add(form_path, name, parent, position, build, in_table=False, kind=None):
         raise OpPreconditionError(
             f"'{name}': колонка/группа колонок — только в таблицу или группу колонок; "
             f"прочие элементы — не в таблицу (родитель '{parent}' — {owner_kind})")
-    if (kind == "Page") != (owner_kind == "Pages"):
-        raise OpPreconditionError(f"'{name}': страница (Page) — только в группу страниц (Pages), "
-                                  f"в группу страниц — только страницы (родитель '{parent}' — {owner_kind})")
+    _check_page_parent(name, kind, owner_kind, parent)
     el = build(_next_id(root))
     # проверяем и имена вложенных частей (…РасширеннаяПодсказка, …КонтекстноеМеню, …КоманднаяПанель):
     # их дубль даёт форму с неоднозначными именами, которую Конфигуратор может не загрузить
