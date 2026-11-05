@@ -202,18 +202,36 @@ def installed_plugin() -> tuple[str, Path] | None:
     return best.name, best / "hooks"
 
 
-def _timed(cmd: list[str], stdin: str = "") -> float | None:
+def _timed(cmd: list[str], stdin: str = "", limit: int = 10) -> float | None:
     import time
     t = time.monotonic()
     try:
-        r = subprocess.run(cmd, input=stdin, capture_output=True, text=True, timeout=10)
+        r = subprocess.run(cmd, input=stdin, capture_output=True, text=True, timeout=limit)
     except (OSError, subprocess.TimeoutExpired):
         return None
     return time.monotonic() - t if r.returncode == 0 else None
 
 
+def shell_probes() -> list[tuple[str, list[str]]]:
+    """Оболочки, через которые Claude Code запускает команду хука на Windows: Git Bash и PowerShell."""
+    if os.name != "nt":
+        return []
+    probes = []
+    # не shutil.which("bash"): в PATH первым может стоять bash.exe из WSL, а не Git Bash
+    roots = [os.environ.get(v) for v in ("ProgramW6432", "ProgramFiles", "LOCALAPPDATA")]
+    cands = [os.environ.get("CLAUDE_CODE_GIT_BASH_PATH")] + [str(Path(r) / sub / "Git" / "bin" / "bash.exe")
+                                                              for r in roots if r for sub in ("", "Programs")]
+    bash = next((c for c in cands if c and Path(c).is_file()), None)
+    if bash:
+        probes += [("Git Bash -c", [bash, "-c", "true"]), ("Git Bash -lc (с профилем)", [bash, "-lc", "true"])]
+    ps = shutil.which("powershell")
+    if ps:
+        probes += [("PowerShell -NoProfile", [ps, "-NoProfile", "-Command", "1"]), ("PowerShell с профилем", [ps, "-Command", "1"])]
+    return probes
+
+
 def check_hook() -> list[str]:
-    """Замер (до 2 x 10 с) холодного старта node и хука Ponytail; предупреждение, если дольше SLOW_HOOK_SEC."""
+    """Замер (худший случай около 40 с: хук и node по 10 с, четыре оболочки по 5 с) холодного старта node и хука Ponytail; предупреждение, если дольше SLOW_HOOK_SEC."""
     node = shutil.which("node")
     found = installed_plugin()
     if not node or not found:
@@ -224,8 +242,18 @@ def check_hook() -> list[str]:
     # хук первым: он и есть холодный запуск, голый node после него уже прогрет
     hook = _timed([node, str(hooks / "ponytail-mode-tracker.js")], '{"prompt":"x","hook_event_name":"UserPromptSubmit"}')
     base = _timed([node, "-e", "1"])
-    fmt = lambda v: "ошибка или больше 10 с" if v is None else f"{v:.2f} с"
+    fmt = lambda v: "ошибка или таймаут" if v is None else f"{v:.2f} с"
     out.append(f"  [ok] запуск: node {fmt(base)}, хук {fmt(hook)}")
+    slow_shell = []
+    for name, cmd in shell_probes():
+        v = _timed(cmd, limit=5)
+        out.append(f"  [ok] оболочка {name}: {fmt(v)}")
+        if v is None or v > SLOW_HOOK_SEC:
+            slow_shell.append(name)
+    if slow_shell:
+        out.append(f"  [!] медленная оболочка ({', '.join(slow_shell)}): Claude Code запускает хук через неё, причина обычно в профиле "
+                   "(~/.bash_profile, ~/.bashrc или $PROFILE PowerShell) или антивирусе. Что сделать: закомментировать тяжёлое в профиле "
+                   "(conda, nvm, сетевые диски, Import-Module), исключить bash.exe и powershell.exe из проверки антивируса, прислать эти цифры")
     if any(v is None or v > SLOW_HOOK_SEC for v in (base, hook)):
         who = "сам node" if base is None or base > SLOW_HOOK_SEC else "хук"
         if os.name == "nt":

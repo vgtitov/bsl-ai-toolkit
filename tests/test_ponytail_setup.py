@@ -99,6 +99,29 @@ def test_check_hook_reports_version_and_slow_start():
         os.environ.update(saved)
 
 
+def test_slow_shell_is_reported():
+    import shutil
+    if not shutil.which("node"):
+        return
+    saved_probes, saved_limit, saved_env = ps.shell_probes, ps.SLOW_HOOK_SEC, dict(os.environ)
+    try:
+        with tempfile.TemporaryDirectory() as t:
+            os.environ["CLAUDE_CONFIG_DIR"] = t
+            _fake_plugin(t, "5.3.2").joinpath("ponytail-mode-tracker.js").write_text("process.exit(0)")
+            ps.SLOW_HOOK_SEC = 0.3
+            ps.shell_probes = lambda: [("медленная", [sys.executable, "-c", "import time; time.sleep(0.6)"]),
+                                       ("быстрая", [sys.executable, "-c", "pass"])]
+            ps.SLOW_HOOK_SEC = 0.4
+            text = "\n".join(ps.check_hook())
+            assert "оболочка медленная:" in text and "[!] медленная оболочка (медленная)" in text and "профил" in text
+            assert "быстрая)" not in text
+        assert saved_probes() == [] or os.name == "nt"
+    finally:
+        ps.shell_probes, ps.SLOW_HOOK_SEC = saved_probes, saved_limit
+        os.environ.clear()
+        os.environ.update(saved_env)
+
+
 def test_all():
     saved = dict(os.environ)
     try:
@@ -199,5 +222,6 @@ if __name__ == "__main__":
     test_generated_off_is_not_opt_out()
     test_rule_block_rejects_broken_markers()
     test_check_hook_reports_version_and_slow_start()
+    test_slow_shell_is_reported()
     test_all()
     print("OK: ponytail_setup")
