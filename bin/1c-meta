@@ -109,6 +109,31 @@ def build_parser() -> argparse.ArgumentParser:
 
     fm = sub.add_parser("form", help="правка управляемых форм")
     fmsub = fm.add_subparsers(dest="fmcmd", required=True)
+    fac = fmsub.add_parser("add-attribute-column", help="колонка реквизита формы «таблица значений» (Конфигуратор)")
+    fac.add_argument("file")
+    fac.add_argument("--attribute", required=True)
+    fac.add_argument("--name", required=True)
+    fac.add_argument("--type", dest="type_ref", required=True, help="String | Boolean | Date | Number:N[.M] | cfg:CatalogRef.Имя")
+    fac.add_argument("--title", action="append", default=[], help="ru=Текст (повторяемый)")
+    faf = fmsub.add_parser("add-form-attribute", help="реквизит формы с нуля: String | Number:N | Boolean | Date | v8:ValueListType | dcsset:SettingsComposer | cfg:XRef.Имя (Конфигуратор)")
+    faf.add_argument("file")
+    faf.add_argument("--name", required=True)
+    faf.add_argument("--type", dest="type_ref", required=True)
+    faf.add_argument("--title", action="append", default=[], help="ru=Текст (повторяемый)")
+    frc = fmsub.add_parser("remove-attribute-column", help="удалить колонку реквизита формы (Конфигуратор)")
+    frc.add_argument("file")
+    frc.add_argument("--attribute", required=True)
+    frc.add_argument("--name", required=True)
+    fra = fmsub.add_parser("remove-attribute", help="удалить реквизит формы без привязанных элементов (Конфигуратор)")
+    fra.add_argument("file")
+    fra.add_argument("--name", required=True)
+    frm = fmsub.add_parser("remove-command", help="удалить команду формы без кнопок (Конфигуратор)")
+    frm.add_argument("file")
+    frm.add_argument("--name", required=True)
+    fct = fmsub.add_parser("set-command-title", help="заголовок и подсказка команды формы (Конфигуратор)")
+    fct.add_argument("file")
+    fct.add_argument("--name", required=True)
+    fct.add_argument("--title", action="append", default=[], help="ru=Текст (повторяемый)")
     fma = fmsub.add_parser("add-attribute")
     fma.add_argument("file", help="путь к Forms/<Имя>/Ext/Form.xml (или Form.form EDT)")
     fma.add_argument("--name", required=True, help="имя реквизита формы")
@@ -271,7 +296,23 @@ def main() -> None:
                     print(e, file=sys.stderr)
                     sys.exit(1)
         elif ns.cmd == "form":
-            if ns.fmcmd == "add-attribute":
+            if ns.fmcmd in ("add-attribute-column", "remove-attribute-column", "remove-attribute", "add-form-attribute",
+                            "remove-command", "set-command-title"):
+                from onec_metadata.ops import form_attributes as fa
+                tt = dict(x.split("=", 1) for x in getattr(ns, "title", []) or [])
+                if ns.fmcmd == "add-form-attribute":
+                    fa.add_form_attribute(Path(ns.file), ns.name, ns.type_ref, tt)
+                elif ns.fmcmd == "add-attribute-column":
+                    fa.add_attribute_column(Path(ns.file), ns.attribute, ns.name, ns.type_ref, tt)
+                elif ns.fmcmd == "remove-attribute-column":
+                    fa.remove_attribute_column(Path(ns.file), ns.attribute, ns.name)
+                elif ns.fmcmd == "remove-attribute":
+                    fa.remove_attribute(Path(ns.file), ns.name)
+                elif ns.fmcmd == "remove-command":
+                    fa.remove_command(Path(ns.file), ns.name)
+                else:
+                    fa.set_command_title(Path(ns.file), ns.name, tt)
+            elif ns.fmcmd == "add-attribute":
                 from onec_metadata.ops.form import add_attribute as form_add_attr
                 form_add_attr(Path(ns.file), ns.name, ns.type_ref)
             elif ns.fmcmd in ("add-group", "add-decoration", "move", "set-title",
