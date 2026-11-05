@@ -122,6 +122,28 @@ def test_slow_shell_is_reported():
         os.environ.update(saved_env)
 
 
+def test_parse_hook_log_reads_real_claude_lines():
+    log = (
+        '2026-11-05T08:46:42.329Z [DEBUG] Hooks: SessionStart:startup [node "C:\\x\\ponytail-activate.js"] (plugin ponytail@ponytail) finished with status 0 (929ms)\n'
+        '2026-11-05T08:46:44.861Z [DEBUG] Hooks: UserPromptSubmit [node "C:\\x\\ponytail-mode-tracker.js"] (plugin ponytail@ponytail) finished with status 0 (305ms)\n'
+        '2026-11-05T08:46:45.000Z [DEBUG] Hooks: UserPromptSubmit [node "C:\\x\\ponytail-mode-tracker.js"] (plugin ponytail@ponytail) timed out after 15s\n'
+        '2026-11-05T08:46:46.000Z [DEBUG] something else\n')
+    rows = ps.parse_hook_log(log)
+    assert [r["ms"] for r in rows] == [929, 305, None]
+    assert rows[2]["timed_out"] and rows[0]["plugin"] == "ponytail@ponytail" and rows[1]["event"] == "UserPromptSubmit"
+
+
+def test_probe_real_without_claude():
+    saved = dict(os.environ)
+    try:
+        os.environ["PATH"] = ""
+        assert "claude не найден" in ps.probe_real_hooks()[0]
+        assert ps.main(["--probe-real"]) == 0
+    finally:
+        os.environ.clear()
+        os.environ.update(saved)
+
+
 def test_all():
     saved = dict(os.environ)
     try:
@@ -223,5 +245,7 @@ if __name__ == "__main__":
     test_rule_block_rejects_broken_markers()
     test_check_hook_reports_version_and_slow_start()
     test_slow_shell_is_reported()
+    test_parse_hook_log_reads_real_claude_lines()
+    test_probe_real_without_claude()
     test_all()
     print("OK: ponytail_setup")
