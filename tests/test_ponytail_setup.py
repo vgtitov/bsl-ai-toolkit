@@ -66,6 +66,39 @@ def test_claude_disabled_odd_settings():
         os.environ.update(saved)
 
 
+def _fake_plugin(root, ver):
+    h = Path(root) / "plugins" / "cache" / "ponytail" / "ponytail" / ver / "hooks"
+    h.mkdir(parents=True)
+    (h / "ponytail-mode-tracker.js").write_text("process.stdin.resume();setTimeout(()=>process.exit(0),SLEEP)")
+    return h
+
+
+def test_check_hook_reports_version_and_slow_start():
+    import shutil
+    if not shutil.which("node"):
+        return
+    saved = dict(os.environ)
+    saved_limit = ps.SLOW_HOOK_SEC
+    try:
+        with tempfile.TemporaryDirectory() as t:
+            os.environ["CLAUDE_CONFIG_DIR"] = t
+            assert ps.installed_plugin() is None and ps.check_hook() == []
+            _fake_plugin(t, "5.3.2").joinpath("ponytail-mode-tracker.js").write_text("process.exit(0)")
+            h = _fake_plugin(t, "10.0.1")                     # 10 > 5 числом, а не строкой
+            h.joinpath("ponytail-mode-tracker.js").write_text("setTimeout(()=>process.exit(0),700)")
+            assert ps.installed_plugin()[0] == "10.0.1"
+            ps.SLOW_HOOK_SEC = 0.3                            # хук 0.7 с дольше порога
+            text = "\n".join(ps.check_hook())
+            assert "версия плагина Ponytail: 10.0.1" in text and "проверена" in text
+            assert "[!] медленно" in text and "Что сделать" in text and "версию плагина" in text
+            ps.SLOW_HOOK_SEC = 30
+            assert "[!]" not in "\n".join(ps.check_hook())
+    finally:
+        ps.SLOW_HOOK_SEC = saved_limit
+        os.environ.clear()
+        os.environ.update(saved)
+
+
 def test_all():
     saved = dict(os.environ)
     try:
@@ -165,5 +198,6 @@ if __name__ == "__main__":
     test_claude_disabled_odd_settings()
     test_generated_off_is_not_opt_out()
     test_rule_block_rejects_broken_markers()
+    test_check_hook_reports_version_and_slow_start()
     test_all()
     print("OK: ponytail_setup")
