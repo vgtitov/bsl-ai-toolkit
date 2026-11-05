@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import signal
 import subprocess
 import sys
 import tempfile
@@ -17,6 +18,13 @@ STRICT_VERSION = re.compile(
 
 class PinError(RuntimeError):
     """Consumer pin contract violation."""
+
+
+class UpstreamUnreachable(PinError):
+    """Upstream did not answer (no network, VPN down, timeout): the tag could not be checked either way."""
+
+
+LS_REMOTE_TIMEOUT = 20  # seconds; pre-push must not hang when the upstream is unreachable
 
 
 def _require_version(value: str) -> str:
@@ -36,34 +44,83 @@ def read_pin(pin_file: Path) -> str:
     return _require_version(lines[0])
 
 
+def _non_interactive_env() -> dict:
+    """Git must never wait for a password/passphrase/host-key answer in a hook (ssh ignores GIT_TERMINAL_PROMPT).
+
+    BatchMode is added only when the default OpenSSH is used; a custom ssh (GIT_SSH, GIT_SSH_COMMAND,
+    core.sshCommand: plink, wrappers, own flags) is left exactly as its owner configured it."""
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GCM_INTERACTIVE="never", GIT_ASKPASS="", SSH_ASKPASS="")  # empty GIT_ASKPASS also overrides core.askPass
+    if not env.get("GIT_SSH") and not env.get("GIT_SSH_COMMAND"):
+        try:
+            got = subprocess.run(["git", "config", "--get", "core.sshCommand"], text=True,
+                                 capture_output=True, timeout=5)
+            custom = bool(got.stdout.strip())
+        except (OSError, subprocess.TimeoutExpired):
+            custom = True  # unknown: do not guess
+        if not custom:
+            env["GIT_SSH_COMMAND"] = "ssh -o BatchMode=yes"
+    return env
+
+
+def _run_limited(cmd: list, env: dict, timeout: float) -> subprocess.CompletedProcess:
+    """Run cmd; on timeout kill the WHOLE process tree (git spawns git-remote-https/ssh, which would
+    otherwise keep running and, on Windows, keep the output pipes open so the hook still hangs)."""
+    kw = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt"
+          else {"start_new_session": True})
+    proc = subprocess.Popen(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, **kw)
+    try:
+        out, err = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True, timeout=10)
+            else:
+                os.killpg(proc.pid, signal.SIGKILL)
+        except (OSError, subprocess.SubprocessError):
+            proc.kill()
+        try:
+            proc.communicate(timeout=5)
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+        raise
+    return subprocess.CompletedProcess(cmd, proc.returncode, out, err)
+
+
 def upstream_has_tag(repo: str, tag: str) -> bool:
     _require_version(tag)
-    result = subprocess.run(
-        [
-            "git",
-            "ls-remote",
-            "--exit-code",
-            "--tags",
-            repo,
-            f"refs/tags/{tag}",
-            f"refs/tags/{tag}^{{}}",
-        ],
-        text=True,
-        capture_output=True,
-    )
-    if result.returncode != 0:
-        reason = result.stderr.strip() or result.stdout.strip()
-        detail = f": {reason}" if reason else ""
-        raise PinError(
-            f"upstream tag {tag} is unavailable in {repo}{detail}")
+    env = _non_interactive_env()
+    try:
+        result = _run_limited(
+            ["git", "ls-remote", "--exit-code", "--tags", repo, f"refs/tags/{tag}", f"refs/tags/{tag}^{{}}"],
+            env, LS_REMOTE_TIMEOUT)
+    except subprocess.TimeoutExpired as error:
+        raise UpstreamUnreachable(
+            f"upstream {repo} did not answer within {LS_REMOTE_TIMEOUT}s (timeout)") from error
+    except OSError as error:
+        raise UpstreamUnreachable(f"cannot run git: {error}") from error
+    reason = result.stderr.strip() or result.stdout.strip()
+    detail = f": {reason}" if reason else ""
+    if result.returncode == 2:  # --exit-code: the remote answered, no such ref
+        raise PinError(f"upstream tag {tag} is unavailable in {repo}{detail}")
+    if result.returncode != 0:  # 128 and others: network, DNS, auth, bad URL
+        raise UpstreamUnreachable(f"upstream {repo} is not reachable{detail}")
     if not result.stdout.strip():
         raise PinError(f"upstream tag {tag} is unavailable in {repo}")
     return True
 
 
-def check_pin(repo: str, pin_file: Path) -> str:
+def check_pin(repo: str, pin_file: Path, strict: bool = False) -> str:
+    """Pin must be valid SemVer and, when upstream answers, an existing tag.
+
+    No answer from upstream (offline, VPN down) is a warning, not an error: it must not block an
+    unrelated push. strict=True (or ONEC_PIN_STRICT=1) makes it an error again."""
     tag = read_pin(pin_file)
-    upstream_has_tag(repo, tag)
+    try:
+        upstream_has_tag(repo, tag)
+    except UpstreamUnreachable as error:
+        if strict or os.environ.get("ONEC_PIN_STRICT") == "1":
+            raise
+        print(f"WARNING: tag check skipped, {error}", file=sys.stderr)
     return tag
 
 
@@ -105,6 +162,8 @@ def _parser() -> argparse.ArgumentParser:
     check = commands.add_parser("check", help="validate the current pin")
     check.add_argument("--repo", required=True)
     check.add_argument("--pin-file", required=True, type=Path)
+    check.add_argument("--strict", action="store_true",
+                       help="treat an unreachable upstream as an error (default: warning)")
 
     bump = commands.add_parser(
         "bump", help="validate and atomically update the pin")
@@ -118,7 +177,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         if args.command == "check":
-            tag = check_pin(args.repo, args.pin_file)
+            tag = check_pin(args.repo, args.pin_file, args.strict)
             print(f"OK: {args.pin_file} pins existing upstream tag {tag}")
         else:
             bump_pin(args.repo, args.pin_file, args.tag)

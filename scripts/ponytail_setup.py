@@ -36,6 +36,8 @@ REPO = "DietrichGebert/ponytail"
 MODES = ("off", "lite", "full", "ultra")
 ROOT = Path(__file__).resolve().parents[1]
 RULE_SRC = ROOT / "core" / "AGENTS.md"
+VERIFIED_PLUGIN = "5.3.2"   # версия, на которой измерен запуск хука (Work PC, Windows)
+SLOW_HOOK_SEC = 3.0         # у Claude Code на хук 5-15 с; больше 3 с на холодном старте уже тревога
 BEGIN, END = "<!-- check-existing-first:begin -->", "<!-- check-existing-first:end -->"
 
 
@@ -184,6 +186,142 @@ AGENTS = {
 }
 
 
+def installed_plugin() -> tuple[str, Path] | None:
+    """Самая новая версия плагина в кэше Claude Code: (версия, каталог hooks)."""
+    base = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+    root = base / "plugins" / "cache" / "ponytail" / "ponytail"
+    def key(d: Path):
+        return tuple(int(x) if x.isdigit() else 0 for x in re.split(r"[.\-]", d.name))
+    try:
+        dirs = [d for d in root.iterdir() if (d / "hooks" / "ponytail-mode-tracker.js").is_file()]
+    except OSError:
+        return None
+    if not dirs:
+        return None
+    best = max(dirs, key=key)
+    return best.name, best / "hooks"
+
+
+def _timed(cmd: list[str], stdin: str = "", limit: int = 10) -> float | None:
+    import time
+    t = time.monotonic()
+    try:
+        r = subprocess.run(cmd, input=stdin, capture_output=True, text=True, timeout=limit)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return time.monotonic() - t if r.returncode == 0 else None
+
+
+def shell_probes() -> list[tuple[str, list[str]]]:
+    """Оболочки, через которые Claude Code запускает команду хука на Windows: Git Bash и PowerShell."""
+    if os.name != "nt":
+        return []
+    probes = []
+    # не shutil.which("bash"): в PATH первым может стоять bash.exe из WSL, а не Git Bash
+    roots = [os.environ.get(v) for v in ("ProgramW6432", "ProgramFiles", "LOCALAPPDATA")]
+    cands = [os.environ.get("CLAUDE_CODE_GIT_BASH_PATH")] + [str(Path(r) / sub / "Git" / "bin" / "bash.exe")
+                                                              for r in roots if r for sub in ("", "Programs")]
+    bash = next((c for c in cands if c and Path(c).is_file()), None)
+    if bash:
+        probes += [("Git Bash -c", [bash, "-c", "true"]), ("Git Bash -lc (с профилем)", [bash, "-lc", "true"])]
+    ps = shutil.which("powershell")
+    if ps:
+        probes += [("PowerShell -NoProfile", [ps, "-NoProfile", "-Command", "1"]), ("PowerShell с профилем", [ps, "-Command", "1"])]
+    return probes
+
+
+def check_hook() -> list[str]:
+    """Замер (худший случай около 40 с: хук и node по 10 с, четыре оболочки по 5 с) холодного старта node и хука Ponytail; предупреждение, если дольше SLOW_HOOK_SEC."""
+    node = shutil.which("node")
+    found = installed_plugin()
+    if not node or not found:
+        return []
+    ver, hooks = found
+    out = [f"  [ok] версия плагина Ponytail: {ver}" + ("" if ver == VERIFIED_PLUGIN else
+           f" (проверена {VERIFIED_PLUGIN}: если хук тормозит, сообщи версию)")]
+    # хук первым: он и есть холодный запуск, голый node после него уже прогрет
+    hook = _timed([node, str(hooks / "ponytail-mode-tracker.js")], '{"prompt":"x","hook_event_name":"UserPromptSubmit"}')
+    base = _timed([node, "-e", "1"])
+    fmt = lambda v: "ошибка или таймаут" if v is None else f"{v:.2f} с"
+    out.append(f"  [ok] запуск: node {fmt(base)}, хук {fmt(hook)}")
+    slow_shell = []
+    for name, cmd in shell_probes():
+        v = _timed(cmd, limit=5)
+        out.append(f"  [ok] оболочка {name}: {fmt(v)}")
+        if v is None or v > SLOW_HOOK_SEC:
+            slow_shell.append(name)
+    if slow_shell:
+        out.append(f"  [!] медленная оболочка ({', '.join(slow_shell)}): Claude Code запускает хук через неё, причина обычно в профиле "
+                   "(~/.bash_profile, ~/.bashrc или $PROFILE PowerShell) или антивирусе. Что сделать: закомментировать тяжёлое в профиле "
+                   "(conda, nvm, сетевые диски, Import-Module), исключить bash.exe и powershell.exe из проверки антивируса, прислать эти цифры")
+    if any(v is None or v > SLOW_HOOK_SEC for v in (base, hook)):
+        who = "сам node" if base is None or base > SLOW_HOOK_SEC else "хук"
+        if os.name == "nt":
+            todo = ("Что сделать: 1) исключить node.exe и папку .claude из проверки антивируса (Defender: Параметры защиты от вирусов, Исключения); "
+                    "2) замерить Measure-Command { node -e 1 } в PowerShell: дольше 3 с значит антивирус; если здесь быстро, а Claude Code всё равно ругается, подозрение на профиль PowerShell ($PROFILE), замер его не видит; "
+                    "3) не держать профиль и .claude на сетевом диске или в OneDrive; 4) прислать эти цифры и версию плагина")
+        else:
+            todo = ("Что сделать: замерить `time node -e 1`; проверить защиту, которая сканирует node; "
+                    "если здесь быстро, а Claude Code ругается, подозрение на профиль оболочки (замер его не видит); "
+                    "не держать ~/.claude на сетевом диске; прислать цифры и версию плагина")
+        out.append(f"  [!] медленно ({who}): Claude Code прервёт хук по таймауту и покажет «hook timed out». " + todo)
+    return out
+
+
+_HOOK_LINE = re.compile(r"Hooks: (\S+) \[(.*?)\](?: \(plugin ([^)]*)\))? (finished with status (-?\d+) \((\d+)ms\)|timed out[^\n]*)")
+
+
+def parse_hook_log(text: str) -> list[dict]:
+    """Строки отладочного журнала Claude Code «Hooks: <событие> [<команда>] ... finished with status N (X ms)» -> записи."""
+    rows = []
+    for line in text.splitlines():
+        m = _HOOK_LINE.search(line)
+        if not m:
+            continue
+        timed_out = m.group(5) is None
+        rows.append({"event": m.group(1), "cmd": m.group(2), "plugin": m.group(3) or "",
+                     "ms": None if timed_out else int(m.group(6)), "status": None if timed_out else int(m.group(5)),
+                     "timed_out": timed_out})
+    return rows
+
+
+def probe_real_hooks() -> list[str]:
+    """Один настоящий запуск `claude -p` с журналом хуков: время хуков так, как их видит сам Claude Code (стоит один короткий запрос)."""
+    import tempfile
+    exe = shutil.which("claude")
+    if not exe:
+        return ["  [-] claude не найден, настоящий запуск хуков не замерить"]
+    with tempfile.TemporaryDirectory() as d:
+        log = Path(d) / "hooks.txt"
+        try:
+            # из пустой временной папки: проектные CLAUDE.md и хуки текущего каталога в замер не попадают и никуда не уходят
+            r = subprocess.run([exe, "--debug=hooks", "--debug-file", str(log), "-p", "ответь: ок"], stdin=subprocess.DEVNULL,
+                               capture_output=True, text=True, timeout=180, cwd=d)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            return [f"  [!] запуск claude не завершился: {e}"]
+        try:
+            rows = parse_hook_log(log.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            return ["  [!] журнал хуков не создан"]
+    if r.returncode != 0:
+        return [f"  [!] claude -p завершился с ошибкой (код {r.returncode}): {(r.stderr or r.stdout).strip()[:200]}; "
+                "войди в Claude Code (claude, затем /login) и повтори"]
+    pony = [h for h in rows if "ponytail" in (h["plugin"] + h["cmd"]).lower()]
+    out = [f"  [ok] хуков в журнале: {len(rows)}, из них Ponytail: {len(pony)}"]
+    for h in pony:
+        what = "ТАЙМАУТ" if h["timed_out"] else f"{h['ms']} мс, код {h['status']}"
+        out.append(f"       Ponytail {h['event']}: {what}")
+    slow = [h for h in rows if h["timed_out"] or (h["ms"] or 0) > SLOW_HOOK_SEC * 1000]
+    for h in slow:
+        out.append(f"  [!] медленный или прерванный хук {h['event']} ({h['plugin'] or h['cmd'][:60]}): "
+                   + ("таймаут" if h["timed_out"] else f"{h['ms']} мс"))
+    if not pony:
+        out.append("  [-] хуков Ponytail в запуске нет: плагин выключен или не установлен")
+    elif not slow:
+        out.append("  [ok] в настоящем запуске хуки укладываются в 3 с: если ошибка остаётся, она случается не на старте, а позже в сессии (пришли журнал `claude --debug=hooks --debug-file <файл>` за время ошибки)")
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--mode", choices=MODES, help="режим по умолчанию; без флага — по роли: analyst → off, иначе lite")
@@ -192,8 +330,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--project", type=Path, help="каталог проекта: дописать правило в его AGENTS.md")
     ap.add_argument("--no-plugin", action="store_true", help="плагин не ставить, только правило")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--probe-real", action="store_true",
+                    help="только замер: один настоящий запуск claude -p с журналом хуков (один короткий запрос), без установки")
     a = ap.parse_args(argv)
     a.mode = a.mode or mode_for_role(a.role)
+    if a.probe_real:
+        print("\n".join(probe_real_hooks()))
+        return 0
 
     if a.project:
         print("  [ok] " + write_rule(a.project, a.dry_run))
@@ -216,6 +359,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  [!] {name}: не поставился (сеть?), вручную: {name} " + " ; ".join(" ".join(s) for s in steps))
     if installed:
         print("  [ok] " + set_default_mode(a.mode, a.dry_run))
+    if installed and not a.dry_run:
+        for line in check_hook():
+            print(line)
     if not shutil.which("node"):
         print("  [!] node не найден: хуки Ponytail молчат, скиллы /ponytail работают")
     return 0  # установка Ponytail необязательна и не должна валить онбординг

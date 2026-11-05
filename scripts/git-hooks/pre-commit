@@ -39,7 +39,8 @@ if [ -n "$files" ]; then
 
   if [ -n "$guard" ]; then   # detector не найден — не мешаем чужим репозиториям
     # shellcheck disable=SC2086
-    echo "$files" | xargs "$py" "$guard"
+    # NUL-разделитель: пробел или кавычка в пути (xargs без -0 режет по пробелам и падает на апострофе)
+    printf '%s\n' "$files" | tr '\n' '\0' | xargs -0 "$py" "$guard"
     rc=$?
     if [ "$rc" -ne 0 ]; then
       echo "" >&2
@@ -67,7 +68,7 @@ if [ -n "$rfiles" ]; then
 
   if [ -n "$rguard" ]; then
     # shellcheck disable=SC2086
-    echo "$rfiles" | xargs "$py" "$rguard"
+    printf '%s\n' "$rfiles" | tr '\n' '\0' | xargs -0 "$py" "$rguard"
     rc=$?
     if [ "$rc" -ne 0 ]; then
       echo "" >&2

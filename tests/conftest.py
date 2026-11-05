@@ -11,3 +11,25 @@ if sys.platform == "win32" and not shutil.which("sh"):
         if (git / "bin" / "sh.exe").is_file():
             os.environ["PATH"] = f"{git / 'bin'}{os.pathsep}{git / 'usr' / 'bin'}{os.pathsep}{os.environ['PATH']}"
             break
+
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _isolated_limit_pause(monkeypatch, tmp_path):
+    """Пауза звена second_opinion лежит в домашней папке: настоящая пауза не должна ломать тесты, тесты не пишут в неё."""
+    monkeypatch.setenv("AI_TOOLKIT_LIMIT_SKIP_DIR", str(tmp_path / "limit_skip"))
+
+
+@pytest.fixture(autouse=True)
+def _no_real_copilot_login(monkeypatch, tmp_path):
+    """Вход в Copilot лежит в ~/.cache/ai_toolkit_copilot_profile: при нём second_opinion сам находит встроенный адаптер и
+    тесты «Copilot не настроен» ходят в живую модель. Домой подставляем пустую папку (и перечитывание модуля её видит)."""
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    so = sys.modules.get("second_opinion")
+    if so is not None:                                  # модуль уже импортирован при сборе тестов со старым домом
+        monkeypatch.setattr(so, "COPILOT_PROFILE", home / ".cache" / "ai_toolkit_copilot_profile")

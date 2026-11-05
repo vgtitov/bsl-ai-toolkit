@@ -70,7 +70,7 @@ cp -r <src> <src>_before               # эталон для verify
 1c-meta attr add <Объект.xml> --name X --type xs:string --synonym "..."
 1c-meta form set-style <Form.form|Form.xml> --item <Элемент|.> \
     --set backColor=style:<ЦветСтиля> --set font=style:<ШрифтСтиля>   # оформление в свойствах формы
-1c-meta form lint <Form.form|Form.xml> [--langs ru,en]              # языки, токены стиля, панель
+1c-meta form lint <Form.form|Form.xml> [--langs ru,en]              # языки, токены стиля, панель, направление/заголовок групп
 1c-meta form add-group <Form.xml> --name <Группа> [--parent <Группа|.>] [--position first|last|before:X|after:X]
 1c-meta form add-decoration <Form.xml> --name <Надпись> [--parent …] [--position …] [--kind Label|Picture]
 1c-meta form move <Form.xml> --name <Элемент> --parent <Группа|.> [--position …]   # структура: Конфигуратор (СНГ)
@@ -78,6 +78,14 @@ cp -r <src> <src>_before               # эталон для verify
 1c-meta form add-table <Form.xml> --name <Таблица> --data-path Объект.<ТЧ> [--parent …] [--position …]
 1c-meta form add-column <Form.xml> --name <Колонка> --parent <Таблица|ГруппаКолонок> --data-path Объект.<ТЧ>.<Реквизит>
 1c-meta form add-column-group <Form.xml> --name <Группа> --parent <Таблица|ГруппаКолонок>
+1c-meta form add-group <Form.xml> --name <Группа> --kind Pages|Page [--parent <ГруппаСтраниц>]  # страницы
+1c-meta form add-command <Form.xml> --name <Команда> --title ru=<Текст> [--action <Обработчик>]
+1c-meta form add-button <Form.xml> --name <Кнопка> --command Form.Command.<Команда> [--parent …]
+1c-meta form add-event <Form.xml> --event OnCreateAtServer --handler <Процедура>
+1c-meta form add-checkbox <Form.xml> --name <Флажок> --data-path Объект.<Реквизит> [--parent …]
+1c-meta form add-list <Form.xml> --name Список --main-table Catalog.<Имя> [--main]
+1c-meta form remove <Form.xml> --name <Элемент>
+1c-meta subsystem remove-content <Подсистема.xml|.mdo> --ref Document.<Имя>
 # затем python: onec_metadata.apply — upload_tree → load_extension →
 # dump_extension → fetch_tree → roundtrip_verify(before, after, {целевые файлы})
 ```

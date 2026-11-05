@@ -66,6 +66,84 @@ def test_claude_disabled_odd_settings():
         os.environ.update(saved)
 
 
+def _fake_plugin(root, ver):
+    h = Path(root) / "plugins" / "cache" / "ponytail" / "ponytail" / ver / "hooks"
+    h.mkdir(parents=True)
+    (h / "ponytail-mode-tracker.js").write_text("process.stdin.resume();setTimeout(()=>process.exit(0),SLEEP)")
+    return h
+
+
+def test_check_hook_reports_version_and_slow_start():
+    import shutil
+    if not shutil.which("node"):
+        return
+    saved = dict(os.environ)
+    saved_limit = ps.SLOW_HOOK_SEC
+    try:
+        with tempfile.TemporaryDirectory() as t:
+            os.environ["CLAUDE_CONFIG_DIR"] = t
+            assert ps.installed_plugin() is None and ps.check_hook() == []
+            _fake_plugin(t, "5.3.2").joinpath("ponytail-mode-tracker.js").write_text("process.exit(0)")
+            h = _fake_plugin(t, "10.0.1")                     # 10 > 5 числом, а не строкой
+            h.joinpath("ponytail-mode-tracker.js").write_text("setTimeout(()=>process.exit(0),700)")
+            assert ps.installed_plugin()[0] == "10.0.1"
+            ps.SLOW_HOOK_SEC = 0.3                            # хук 0.7 с дольше порога
+            text = "\n".join(ps.check_hook())
+            assert "версия плагина Ponytail: 10.0.1" in text and "проверена" in text
+            assert "[!] медленно" in text and "Что сделать" in text and "версию плагина" in text
+            ps.SLOW_HOOK_SEC = 30
+            assert "[!]" not in "\n".join(ps.check_hook())
+    finally:
+        ps.SLOW_HOOK_SEC = saved_limit
+        os.environ.clear()
+        os.environ.update(saved)
+
+
+def test_slow_shell_is_reported():
+    import shutil
+    if not shutil.which("node"):
+        return
+    saved_probes, saved_limit, saved_env = ps.shell_probes, ps.SLOW_HOOK_SEC, dict(os.environ)
+    try:
+        with tempfile.TemporaryDirectory() as t:
+            os.environ["CLAUDE_CONFIG_DIR"] = t
+            _fake_plugin(t, "5.3.2").joinpath("ponytail-mode-tracker.js").write_text("process.exit(0)")
+            ps.SLOW_HOOK_SEC = 0.3
+            ps.shell_probes = lambda: [("медленная", [sys.executable, "-c", "import time; time.sleep(0.6)"]),
+                                       ("быстрая", [sys.executable, "-c", "pass"])]
+            ps.SLOW_HOOK_SEC = 0.4
+            text = "\n".join(ps.check_hook())
+            assert "оболочка медленная:" in text and "[!] медленная оболочка (медленная)" in text and "профил" in text
+            assert "быстрая)" not in text
+        assert saved_probes() == [] or os.name == "nt"
+    finally:
+        ps.shell_probes, ps.SLOW_HOOK_SEC = saved_probes, saved_limit
+        os.environ.clear()
+        os.environ.update(saved_env)
+
+
+def test_parse_hook_log_reads_real_claude_lines():
+    log = (
+        '2026-11-05T08:46:42.329Z [DEBUG] Hooks: SessionStart:startup [node "C:\\x\\ponytail-activate.js"] (plugin ponytail@ponytail) finished with status 0 (929ms)\n'
+        '2026-11-05T08:46:44.861Z [DEBUG] Hooks: UserPromptSubmit [node "C:\\x\\ponytail-mode-tracker.js"] (plugin ponytail@ponytail) finished with status 0 (305ms)\n'
+        '2026-11-05T08:46:45.000Z [DEBUG] Hooks: UserPromptSubmit [node "C:\\x\\ponytail-mode-tracker.js"] (plugin ponytail@ponytail) timed out after 15s\n'
+        '2026-11-05T08:46:46.000Z [DEBUG] something else\n')
+    rows = ps.parse_hook_log(log)
+    assert [r["ms"] for r in rows] == [929, 305, None]
+    assert rows[2]["timed_out"] and rows[0]["plugin"] == "ponytail@ponytail" and rows[1]["event"] == "UserPromptSubmit"
+
+
+def test_probe_real_without_claude():
+    saved = dict(os.environ)
+    try:
+        os.environ["PATH"] = ""
+        assert "claude не найден" in ps.probe_real_hooks()[0]
+        assert ps.main(["--probe-real"]) == 0
+    finally:
+        os.environ.clear()
+        os.environ.update(saved)
+
+
 def test_all():
     saved = dict(os.environ)
     try:
@@ -165,5 +243,9 @@ if __name__ == "__main__":
     test_claude_disabled_odd_settings()
     test_generated_off_is_not_opt_out()
     test_rule_block_rejects_broken_markers()
+    test_check_hook_reports_version_and_slow_start()
+    test_slow_shell_is_reported()
+    test_parse_hook_log_reads_real_claude_lines()
+    test_probe_real_without_claude()
     test_all()
     print("OK: ponytail_setup")

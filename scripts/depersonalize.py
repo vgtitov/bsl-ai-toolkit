@@ -174,7 +174,7 @@ _CYR2LAT = str.maketrans("авсенкмортху", "abcehkmoptxy")
 
 
 def normalize(text: str) -> str:
-    t = unicodedata.normalize("NFKC", text)
+    t = "№".join(unicodedata.normalize("NFKC", part) for part in text.split("№"))          # № остаётся №, не No
     t = "".join(" " if unicodedata.category(c) == "Zs" else c for c in t if unicodedata.category(c) != "Cf")
     return t.replace("\r\n", "\n")
 
@@ -218,6 +218,17 @@ def _luhn(d: str) -> bool:
     return s % 10 == 0
 
 
+def _card_ok(d: str) -> bool:
+    """Номер без слова «карта»: длина 15/16/19, префикс платёжной системы (Visa 4, Mastercard 51-55 и 2221-2720, Amex 34/37, Мир 2200-2204, UnionPay/Maestro/Discover 5x-6x, JCB 35, БелКарт 9112) и Luhn.
+    Артикулы, EAN (13), ряды 1000 2000 3000 4000 и даты через пробел сюда не попадают."""
+    n = len(d)
+    if n not in (15, 16, 19) or not _luhn(d):
+        return False
+    if n == 15:
+        return d[:2] in ("34", "37")
+    return re.match(r"4|5\d|6\d|35|22(?:0[0-4]|2[1-9]|[3-9])|2[3-6]|27(?:[01]|20)|9112", d) is not None
+
+
 def _inn_ok(d: str) -> bool:
     def cs(w):
         return sum(int(a) * b for a, b in zip(d, w)) % 11 % 10
@@ -244,14 +255,16 @@ def _entropy(s: str) -> float:
 
 _TOKEN_RXS = [
     ("приватный ключ", re.compile(r"BEGIN [A-Z ]*PRIVATE KEY")),
-    ("aws", re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")),
-    ("github", re.compile(r"\bgh[pousr]_[A-Za-z0-9]{30,}")),
-    ("gitlab", re.compile(r"\bglpat-[\w-]{16,}")),
-    ("openai", re.compile(r"\bsk-[A-Za-z0-9_-]{20,}")),
+    ("aws", re.compile(r"(?<![A-Za-z0-9])(?:AKIA|ASIA)[0-9A-Z]{16}(?![A-Za-z0-9])")),
+    ("github", re.compile(r"(?<![A-Za-z0-9])gh[pousr]_[A-Za-z0-9]{30,}")),
+    ("gitlab", re.compile(r"(?<![A-Za-z0-9])glpat-[\w-]{16,}")),
+    ("openai", re.compile(r"(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{20,}")),
     ("slack", re.compile(r"\bxox[baprs]-[\w-]{10,}")),
-    ("jwt", re.compile(r"\beyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{5,}")),
+    ("jwt", re.compile(r"\beyJ[\w-]{8,}\.[\w-]{2,}\.[\w-]{5,}")),
     ("telegram", re.compile(r"\b\d{8,10}:[A-Za-z0-9_-]{35}\b")),
     ("bearer", re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{20,}")),
+    ("basic", re.compile(r"(?i)\bauthorization[ \t]*[:=][ \t]*basic[ \t]+[A-Za-z0-9+/]{2,}={0,2}")),                 # Authorization: Basic base64(логин:пароль)
+    ("stripe", re.compile(r"(?<![A-Za-z0-9])[sr]k_(?:live|test)_[A-Za-z0-9]{10,}")),
     ("пароль в url", re.compile(r"://[^/\s:@]+:[^/\s@]{3,}@")),
 ]
 _SECRET_KEY = (r"[\w.-]{0,40}(?:password|passwd|pwd|secret|token|api[_-]?key|apikey|access[_-]?key|private[_-]?key|credential"
@@ -266,6 +279,11 @@ _SAFE_VAL = [re.compile(p) for p in (
     r"[*xX•#]{3,}|…|\.\.\.", r"<[A-Za-zА-Яа-яЁё _-]{2,30}>", r"`(?:[A-Z][A-Z0-9_]{2,}|[a-z][a-z0-9]*(?:_[a-z0-9]+)+)`", r"(?i)none|null|nil|true|false|undefined|\"\"|''|%\d+|%[sd]|\{\d+\}|&[A-Za-zА-Яа-яЁё_]+|\$\d+|_\d{1,3}_|#\d{1,3}#|%\d{1,3}%|<\d{1,3}>|\[\d{1,3}\]", r"\[[А-ЯЁA-Z]+_\d+\]")]
 _CODE_REFS = [re.compile(r"[A-Za-z_А-Яа-яЁё][\wА-Яа-яЁё]*(?:\.[A-Za-z_А-Яа-яЁё][\wА-Яа-яЁё]*)+"), re.compile(r"[A-Za-z_А-Яа-яЁё][\wА-Яа-яЁё.]*\(\s*(?:[A-Za-z_А-Яа-яЁё][\wА-Яа-яЁё]*)?\s*\)")]
 _IDENT = re.compile(r"[A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё]*")
+_BASIC_BARE = re.compile(r"(?i)\bbasic[ \t]+(?P<val>[A-Za-z0-9+/]{4,}={0,2})(?![A-Za-z0-9+/=])")
+_ONEC_PQ = re.compile(r"(?i)\"/P(?P<val>[^\"\n]+)\"")                 # весь аргумент в кавычках: "/Pпароль с пробелами"; путь с «/» внутри не пароль
+_ONEC_CTX = re.compile(r"(?i)1cv8c?|1cestart|enterprise|designer|/[nsf][ \t]")
+_ONEC_P = re.compile(r"(?i)(?<!\S)/P[ \t]*(?P<val>\"[^\"\n]+\"|'[^'\n]+'|[^\s\"']+)")
+_HEX_SECRET_CTX = re.compile(r"(?i)(?:key|secret|token|pass\w*|pwd|auth\w*|bearer|credential\w*|парол\w*|секрет\w*|токен\w*|ключ\w*|salt|соль)[\"'\]]*\s*[:=]?\s*[\"'(\[{]*$")
 _HEX = re.compile(r"(?<![A-Za-z0-9])[0-9a-fA-F]{32,}(?![A-Za-z0-9])")
 _B64 = re.compile(r"(?<![A-Za-z0-9+/_=-])[A-Za-z0-9+/_=-]{32,}(?![A-Za-z0-9+/_=-])")
 
@@ -544,6 +562,21 @@ def find_secrets(text: str, kind: str = "text", strings=None, comments=None, whe
         if kind == "code" and text[pos:pos + 1] in ("\"", "'") and _in(strings, pos - 1) and not _in(strings, pos):
             continue                                        # значение закончилось вместе со строкой: дальше выражение кода
         mark("значение секретного поля", pos, "флаг командной строки", v)
+    for m in _BASIC_BARE.finditer(text):                    # «Basic <base64>» без слова Authorization: секрет, если это base64 от «логин:пароль»
+        try:
+            raw = base64.b64decode(m.group("val") + "=" * (-len(m.group("val")) % 4), validate=True)
+        except Exception:
+            continue
+        if b":" in raw:
+            mark("значение секретного поля", m.start("val"), "Basic", m.group("val"))
+    for lm in re.finditer(r"[^\n]+", text):                 # командная строка 1С: ... /N логин /P пароль (контекст и /P в одной строке, любой длины)
+        if "/" not in lm.group() or not _ONEC_CTX.search(lm.group()):
+            continue
+        for m in list(_ONEC_P.finditer(lm.group())) + [q for q in _ONEC_PQ.finditer(lm.group()) if "/" not in q.group("val") or re.search(r"\d", q.group("val"))]:
+            v = m.group("val")
+            if _safe_value(v.strip('"'), False) or PH_RX.fullmatch(v):
+                continue
+            mark("значение секретного поля", lm.start() + m.start("val"), "флаг /P", v)
     text_nu = _URL_MASK.sub(lambda m: " " * len(m.group()), text)       # идентификаторы в ссылках не секреты (сама ссылка заменяется)
     for m in _HEX.finditer(text_nu):
         ls = text.rfind("\n", 0, m.start()) + 1
@@ -554,6 +587,9 @@ def find_secrets(text: str, kind: str = "text", strings=None, comments=None, whe
                   or text[max(0, m.start() - 7):m.start()] == "sha256:" and len(m.group()) == 64)
         if not ok_ctx and len(m.group()) == 32 and re.search(r"(?i)(?:guid|uuid|уникальныйидентификатор)[\s:=\"'(]{0,12}$", text[max(0, m.start() - 30):m.start()]):
             ok_ctx = True                                   # 128 бит рядом с GUID/UUID в коде 1С: идентификатор объекта, не ключ
+        pre_ = line[:m.start() - ls]
+        if not ok_ctx and not _HEX_SECRET_CTX.search(pre_) and (len(m.group()) in (40, 64) or (len(m.group()) == 32 and re.search(r"(?i)(?:md5|checksum|контрольн\w*\s+сумм\w*|guid|uuid)[\s:=\"'(]{0,6}$", pre_))):
+            ok_ctx = True                                   # md5/sha1/sha256/GUID без дефисов, коммит, «From <sha>»: идентификатор; блок только при слове key/secret/token/пароль непосредственно перед значением
         if not ok_ctx:
             mark("hex-ключ", m.start(), "", m.group())
     for m in _B64.finditer(text_nu):
@@ -568,8 +604,9 @@ def find_secrets(text: str, kind: str = "text", strings=None, comments=None, whe
                                text_nu[ls3:m.start()].rsplit(";", 1)[-1]) is not None          # секретный ключ непосредственно перед значением, в пределах оператора
         if _name_like(t) and not (secret_ctx and (re.search(r"\d", t) or kind == "code")):
             continue                                        # CamelCase из слов (перечни колонок и полей, имена) без секретного ключа перед значением
-        if (re.search(r"\d", t) and re.search(r"[A-Za-z]", t) and not re.fullmatch(r"[0-9a-fA-F]+", t)
-                and _entropy(t) >= 4.0 and t.count("/") + t.count("-") < 3):
+        tv = t.split("=", 1)[1] if re.search(r"=[^=]", t) else t       # NAME=значение: имя переменной не часть токена, оцениваем значение (base64 держит = только в конце)
+        if (re.search(r"\d", tv) and re.search(r"[A-Za-z]", tv) and not re.fullmatch(r"[0-9a-fA-F]+", tv)
+                and _entropy(tv) >= 4.0 and tv.count("/") + tv.count("-") < 3):
             mark("высокоэнтропийный токен", m.start(), "", t)
     return sorted(found)
 
@@ -772,9 +809,21 @@ def diff_regions(text: str, lang: str):
 _PATR = r"(?:ович|евич|ьич|овна|евна|ична|ьевна|ьевич|оглы|кызы)(?:а|у|ем|ом|е|ы|и|ой|ым)?"
 _CAP = r"[А-ЯЁ][а-яё]{2,}"
 _NOTFIRST = (r"(?!(?:Потом|Тогда|Затем|Вчера|Сегодня|Завтра|Здесь|Сейчас|Кстати|Также|Если|Когда|Вот|Тут|Там|Позже|Раньше|Ещё|Уже|Мне|Тебе|Ему|Ей|Нам|Вам|Им|Это|Эти|"
-             r"Тот|Все|Всё|Для|При|После|Перед|Вместе|Спасибо|Привет|Добрый|Уважаемый|Дорогой|Коллеги|Позвонил|Написал|Ответил)\b)")      # слово фразы, не фамилия
+             r"Тот|Все|Всё|Для|При|После|Перед|Вместе|Спасибо|Привет|Добрый|Уважаемый|Дорогой|Коллеги|Позвонил|Написал|Ответил|[А-ЯЁ][а-яё]{1,}(?:йте|ьте|ите)(?:сь)?)\b)")      # слово фразы, не фамилия
 _CUR = r"(?:руб\w*|р\.|BYN|BYR|USD|EUR|RUB|₽|\$|€|долл\w*|евро)"
 _MONTHS = "января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря"
+
+_ORG_FILLER = re.compile(r"(?i)(?<!\w)(?:НЕ|БУДЕТ|УКАЗАН\w*|ОПРЕДЕЛЕН\w*|СОЗДАН\w*|ЗАПОЛНЕН\w*)(?!\w)")      # «ООО НЕ УКАЗАНО» — служебная фраза, не название
+
+
+def _dob_ok(v: str) -> bool:
+    m = re.fullmatch(r"(\d{1,2})[./-](\d{1,2})[./-]\d{2,4}", v.strip())
+    if not m:
+        d = re.match(r"\d{1,2}", v.strip())                                                  # «5 марта 1990»: день 1..31
+        return d is None or 1 <= int(d.group()) <= 31
+    a, b = int(m.group(1)), int(m.group(2))
+    return (1 <= a <= 31 and 1 <= b <= 12) or (1 <= a <= 12 and 1 <= b <= 31)             # день.месяц или месяц/день
+
 
 _FIXED = [   # (вид, regex, группа или 0, приоритет, проверка, порог уровня)
     ("EMAIL", re.compile(r"(?<![\w.+-])[\w.+-]{1,64}@[\w-]{1,63}(?:\.[\w-]{1,63}){1,8}"), 0, 1, None, "light"),
@@ -787,17 +836,30 @@ _FIXED = [   # (вид, regex, группа или 0, приоритет, про
     ("ТЕЛЕФОН", re.compile(r"(?<![\w+.:-])(?:80|0)(?:25|29|33|44|17)[\s()-]*\d{3}[\s-]*\d{2}[\s-]*\d{2}(?![\d:])"), 0, 1, None, "light"),     # РБ без +375
     ("ТЕЛЕФОН", re.compile(r"(?<![\w+.:-])\(?(?:25|29|33|44)\)?[\s-]\d{3}[\s-]\d{2}[\s-]\d{2}(?![\d:])"), 0, 2, None, "light"),            # (29) 123-45-67
     ("НИК", re.compile(r"(?<![\w/@.])@[A-Za-z]\w{4,31}"), 0, 1, None, "light"),
-    ("ИНН", re.compile(r"(?i)\bинн\b\D{0,12}?(\d{12}|\d{10})(?!\d)"), 1, 1, None, "light"),
-    ("УНП", re.compile(r"(?i)\bунп\b\D{0,12}?(\d{9})(?!\d)"), 1, 1, None, "light"),
+    ("НИК", re.compile(r"(?i)(?<![\w@./-])(?:t\.me|telegram\.me|vk\.com|vk\.ru|ok\.ru|instagram\.com|facebook\.com|fb\.com|wa\.me|viber\.click)/[\w.+-]{2,64}(?:/[\w.+-]{1,64}){0,2}"), 0, 1, None, "light"),   # ссылки без http
+    ("НИК", re.compile(r"(?i)(?<![\w])live:[\w.-]{3,64}"), 0, 1, None, "light"),                                                                                            # Skype
+    ("НИК", re.compile(r"(?i)(?<![A-Za-zА-Яа-яЁё0-9_])(?:tg|tlg|telegram|телеграм|тг|skype|скайп|vk|вк|insta|instagram|инста|viber|вайбер|whatsapp|ватсап)[ \t]*[:=][ \t]*@?([A-Za-z0-9_][\w.-]{2,31})(?![\w-])"), 1, 1, None, "light"),
+    ("ИНН", re.compile(r"(?i)(?<![A-Za-zА-Яа-яЁё_])инн(?![A-Za-zА-Яа-яЁё_])[^\d\n;]{0,30}?(?:\r?\n[ \t]*)?(\d{12}|\d{10})(?!\d)"), 1, 1, None, "light"),
+    ("УНП", re.compile(r"(?i)(?<![A-Za-zА-Яа-яЁё_])унп(?![A-Za-zА-Яа-яЁё_])[^\d\n;]{0,30}?(?:\r?\n[ \t]*)?(\d{9}|\d{3}[ -]\d{3}[ -]\d{3})(?!\d)"), 1, 1, None, "light"),
+    ("ИНН", re.compile(r"(?i)(?<![A-Za-zА-Яа-яЁё_])(?:бин|иин|bin|iin)(?![A-Za-zА-Яа-яЁё_])[^\d\n;]{0,30}?(?:\r?\n[ \t]*)?(\d{12}|\d{3}[ -]?\d{3}[ -]?\d{3}[ -]?\d{3})(?!\d)"), 1, 1, None, "light"),   # БИН/ИИН Казахстана, 12 цифр
+    ("СНИЛС", re.compile(r"(?i)(?<![A-Za-zА-Яа-яЁё_])снилс(?![A-Za-zА-Яа-яЁё_])[^\d\n;]{0,30}?(?:\r?\n[ \t]*)?(\d{3}[- ]?\d{3}[- ]?\d{3}[ -]?\d{2})(?!\d)"), 1, 1, None, "light"),
     ("ИНН", re.compile(r"(?<!\d)(?:\d{12}|\d{10})(?!\d)"), 0, 3, _inn_ok, "light"),
-    ("КАРТА", re.compile(r"(?<!\d)\d(?:[ -]?\d){12,18}(?!\d)"), 0, 1, lambda v: _luhn(re.sub(r"\D", "", v)), "light"),
+    ("КАРТА", re.compile(r"(?i)(?<![A-Za-zА-Яа-яЁё0-9_])(?:карт\w*|card|pan|visa|master\s?card|maestro|белкарт|belkart)(?![A-Za-zА-Яа-яЁё_])[^\d\n]{0,20}?(\d(?:[ \t-]?\d){12,18})"), 1, 1,
+     lambda v: _luhn(re.sub(r"\D", "", v)), "light"),                                  # номер рядом со словом «карта»: Luhn достаточно
+    ("КАРТА", re.compile(r"(?<![A-Za-zА-Яа-яЁё\d_-])\d(?:[ \t-]?\d){14,18}(?![\dA-Za-zА-Яа-яЁё_-])"), 0, 1, lambda v: _card_ok(re.sub(r"\D", "", v)), "light"),   # без слова: 15/16/19 цифр, префикс платёжной системы и Luhn
     ("IBAN", re.compile(r"\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?\b"), 0, 1, _iban_ok, "light"),
     ("ИДНОМЕР", re.compile(r"\b\d{7}[A-Z]\d{3}[A-Z]{2}\d\b"), 0, 1, None, "light"),
     ("ПАСПОРТ", re.compile(r"\b[A-Z]{2}\d{7}\b"), 0, 2, None, "light"),
+    ("ПАСПОРТ", re.compile(r"(?<!\w)(?:MP|KH|AB|BM|HB|KB|MC|PP|SP|МР|КН|АВ|ВМ|НВ|КВ|МС|РР|СР)[ ]?\d{7}(?!\w)"), 0, 2, None, "light"),
+    ("ПАСПОРТ", re.compile(r"(?i)(?<!\w)паспорт(?:а|у|ом|е|ы|ов)?(?!\w)[ \t]*(?:(?:№|No|N|сери[яи]|номер|\.|:)[ \t]*)*([A-ZА-ЯЁ]{2}[ \t]?(?:(?:номер|№|No)[ \t]*)?\d{7}|\d{2}[ \t]?\d{2}[ \t,]*(?:(?:номер|№|No)[ \t]*)?\d{6}|\d{6,10})(?!\w)"), 1, 1, None, "light"),
+    ("РОЖДЕНИЕ", re.compile(rf"(?i)(?<!\w)(?:дата рождения|рожд(?:ения|[её]н|ена)|д\.[ \t]?р\.|д/р|родил(?:ся|ась)|born|dob)[^\d\r\n]{{0,12}}?(\d{{1,2}}[./-]\d{{1,2}}[./-]\d{{2,4}}|\d{{1,2}}[ \t]+(?:{_MONTHS})[ \t]+\d{{4}}(?:[ \t]?г\.?)?)"), 1, 1, _dob_ok, "light"),
     ("СНИЛС", re.compile(r"\b\d{3}-\d{3}-\d{3}[ -]\d{2}\b"), 0, 1, None, "light"),
     ("СЕРВЕР", re.compile(r"(?<![\w.-])([A-Za-z][\w-]*(?:\.[\w-]+)*):(?:15[4-9]\d)\b"), 1, 1, lambda v: v.lower() not in ("localhost",), "light"),   # сервер:порт кластера 1С
     ("СЕРВЕР", re.compile(r"(?i)\b(?:Srvr|Server|Data Source)\s*=\s*(?:\"{1,2})?([^\";\r\n]+)"), 1, 1, None, "light"),
     ("БАЗА", re.compile(r"(?i)\b(?:Ref|Database|Initial Catalog)\s*=\s*(?:\"{1,2})?([^\";\r\n]+)"), 1, 1, None, "light"),
+    ("ПОЛЬЗОВАТЕЛЬ", re.compile(r"(?i)(?<![A-Za-zА-Яа-яЁё0-9_])(?:login|логин|user[ _]?name)(?![A-Za-zА-Яа-яЁё0-9_])[\"']?[ \t]*[:=][ \t]*[\"']{1,2}((?:[^\"'\\\n]|\\.)+)[\"']{1,2}"), 1, 1, None, "light"),
+    ("ПОЛЬЗОВАТЕЛЬ", re.compile(r"(?i)(?<![A-Za-zА-Яа-яЁё0-9_])(?:login|логин|user[ _]?name)(?![A-Za-zА-Яа-яЁё0-9_])[\"']?[ \t]*[:=][ \t]*[«“„]([^»”\n]+)[»”]"), 1, 1, None, "light"),
+    ("ПОЛЬЗОВАТЕЛЬ", re.compile(r"(?i)(?<![A-Za-zА-Яа-яЁё0-9_])(?:login|логин|user[ _]?name)(?![A-Za-zА-Яа-яЁё0-9_])[\"']?[ \t]*[:=][ \t]*(?:\"{1,2})?([^\"';,&\s«“„]+)"), 1, 1, None, "light"),
     ("ПОЛЬЗОВАТЕЛЬ", re.compile(r"(?i)\b(?:Usr|Uid|User Id)\s*=\s*(?:\"{1,2})?([^\";\r\n]+)"), 1, 1, None, "light"),
     ("ПУТЬ", re.compile(r"(?i)\bFile\s*=\s*(?:\"{1,2})?([^\";\r\n]+)"), 1, 1, None, "light"),
     ("ПОЛЬЗОВАТЕЛЬ", re.compile(r"(?i)(?:/Users/|/home/|[A-Z]:\\Users\\)((?!Shared\b|Public\b|Default\b|runner\b|root\b)[^/\\\s]+)"), 1, 1, None, "light"),
@@ -805,7 +867,9 @@ _FIXED = [   # (вид, regex, группа или 0, приоритет, про
     ("ЧЕЛОВЕК", re.compile(rf"\b{_NOTFIRST}{_CAP}[ \t]+[А-ЯЁ][а-яё]+{_PATR}\b(?:[ \t]+{_CAP}\b)?"), 0, 3, None, "standard"),
     ("ЧЕЛОВЕК", re.compile(rf"\b{_NOTFIRST}{_CAP}[ \t]+[А-ЯЁ]\.\s?[А-ЯЁ]\."), 0, 3, None, "standard"),
     ("ЧЕЛОВЕК", re.compile(rf"\b[А-ЯЁ]\.\s?[А-ЯЁ]\.\s+{_CAP}"), 0, 3, None, "standard"),
-    ("АДРЕС", re.compile(r"\b(?:ул|пр|просп|пр-т|пер|бул|б-р|пл)\.?\s+[А-ЯЁ][\w.-]+(?:\s+[А-ЯЁ][\w-]+)?(?:,?\s*(?:д|дом)\.?\s*\d+[а-яА-Я/]?(?:\s*,?\s*(?:кв|оф)\.?\s*\d+)?)?"), 0, 3, None, "standard"),
+    ("АДРЕС", re.compile(r"\b(?i:ул|улица|пр|просп|проспект|пр-т|пер|переулок|бул|бульвар|б-р|пл|наб|набережная)\.?\s+[А-ЯЁ0-9][\w.-]*(?:\s+(?:лет|летия|года|[Мм]ая|[Мм]арта|[Аа]преля|[Сс]ентября|[Оо]ктября|[Нн]оября|[А-ЯЁ][\w-]+)){0,3}(?:,?\s*(?:(?i:дом|д)\.?\s*)?\d+(?:\s*(?i:корп|к|стр|с)\.?\s*\d+|[а-яА-Я/])?(?:\s*,?\s*(?i:квартира|кв|оф|офис)\.?\s*\d+)?)?"), 0, 3, None, "standard"),
+    ("АДРЕС", re.compile(r"(?<![А-ЯЁа-яё])[А-ЯЁ][А-Яа-яЁё]+(?:-[А-ЯЁа-яё]+)?[ \t]+(?i:ул\.|улица|пер\.|переулок|пр-т|просп\.|проспект|б-р|бульвар|пл\.|площадь|наб\.|набережная|шоссе)[ \t]*,?[ \t]*(?i:д\.?[ \t]*)?\d+(?:[ \t]*(?i:корп|к|стр|с)\.?[ \t]*\d+|[А-Яа-я])?(?:[ \t]*[,/-][ \t]*(?i:к(?:орп)?\.?|стр\.?)?[ \t]*\d+)?(?:,?[ \t]*(?i:кв\.?|оф\.?|офис|комн?\.?)[ \t]*\d+)?"), 0, 2, None, "standard"),   # «Тверская ул., 7, кв. 5»
+    ("ОРГ", re.compile(r"(?<![\wА-ЯЁа-яё])(?:СООО|ИООО|ЧТУП|ЧПУП|РУП|КУП|ООО|ЗАО|ОАО|ОДО|ЧУП|ПАО|АО|УП|ИП|КФХ)[ \t]+(?:«[^«»\n]{1,80}»|\"[^\"\n]{1,80}\"|[А-ЯЁA-Z0-9][\w-]+(?:[ \t]+(?:(?:и|&)[ \t]+)?[А-ЯЁA-Z0-9][\w-]+){0,2}(?:[ \t]+[А-ЯЁ]\.[ \t]?[А-ЯЁ]\.)?)(?![\w])"), 0, 3, lambda v: re.search(r'[«"]', v) is not None or _ORG_FILLER.search(v) is None, "orgs"),   # организация: только класс private (решение 04.11.2026); ceiling: название без кавычек берёт до трёх слов с заглавной, строчный хвост не отделить
     ("СУММА", re.compile(rf"(?<![\w.])\d{{1,3}}(?:[ ]\d{{3}})+(?:[.,]\d{{1,2}})?\s?{_CUR}(?![\w])|(?<![\w.])\d+(?:[.,]\d{{1,2}})?\s?{_CUR}(?![\w])|[$€]\s?\d[\d ,.]*\d"), 0, 3, None, "amounts"),
     ("ЧИСЛО", re.compile(r"(?<![\w.])\d{9,12}(?![\w])"), 0, 4, None, "strict"),
 ]
@@ -836,6 +900,9 @@ class _Dict:
             canon = group[0] if group else ""
             for s in group:
                 self._add("ЧЕЛОВЕК", f"p{gi}", canon, s)
+                ws = _WORD.findall(skel(s))
+                if len(ws) > 1 and any(len(w) < 4 for w in ws):          # короткие слова имени в основы не идут: «Ли Ван» целиком, без склонения
+                    self.literals.append(("ЧЕЛОВЕК", f"p{gi}", s.strip()))
         for s in d.orgs:
             if re.fullmatch(r"[^\W\d_]+", s.strip()):
                 self._add("ОРГ", f"o{skel(s)}", s, s)
@@ -884,7 +951,7 @@ _SPEECH = re.compile(r"(?i)(?:писал[аи]?|ответил[аи]?|спрос
                      r"уточнить|ответить|позвонить|напомнить|по словам|со слов|сообщить|подсказал[аи]?|возразил[аи]?)[ \t]*[—–:,-]?[ \t]+")
 _SUR = re.compile(r"[а-я]{2,}(?:ов|ев)(?:а|у|ым|ом|ой|ы|е|ых)?|[а-я]{2,}(?:ин|ын)(?:у|ым|ом|ой|ы|е|ых)?|[а-я]{2,}(?:ск|цк)(?:ий|ого|ому|им|ом|ая|ой|ую|ие|их)|"
                   r"[а-я]{2,}енко(?:м|у)?|[а-я]{2,}(?:чук|юк|ук)(?:а|у|ом|е)?|[а-я]{2,}(?:ов|ев)ич(?:а|у|ем)?")
-_NOT_SUR = re.compile(r"магазин|господин|витамин|румын|армян|грузин|ческ|ическ|минск|москов|русск|белорусск|украинск|польск|европейск|"
+_NOT_SUR = re.compile(r"бензин|керосин|аспирин|магазин|господин|витамин|румын|армян|грузин|ческ|ическ|минск|москов|русск|белорусск|украинск|польск|европейск|"
                       r"американск|китайск|английск|немецк|французск|итальянск|испанск|греческ|латинск|славянск|казахск|литовск|"
                       r"латвийск|эстонск|грузинск|армянск|ростов|псков|львов|киров|харьков|ковров|горьк|мужск|женск|городск|"
                       r"сельск|общественн|человеческ|штатив|учебник|ботинок|глазов|коров|свинов|дробин|былин|причин|картин|"
@@ -894,6 +961,11 @@ _NOT_SUR = re.compile(r"магазин|господин|витамин|румы�
 _NOT_SUR = re.compile(_NOT_SUR.pattern + r"|основ|слов|остров|обнов|плагин|админ|корзин|истин|тишин|длин|клиентск|консьюмер|файлов|этапов|"
                       r"строков|размер|ордер|таймер|сервер|бандл|шагов|узлов|блоков|модулов|заголов|образов|прототип|протокол|"
                       r"продуктов|проектов|вопросов|пунктов|логин|остин|пастырск|хозяин|часов|черновик|боев|достов|боевик|участков|производств")
+
+
+_SUR_LOOSE = re.compile(r"[а-я]{3,}(?:ий|ик|ец|ко|ло|ай|ун|ак|як|ан|ян|ей|ур|аш|ёк|ек|ач|арь|ярь|аль|ель|оль)")        # фамилия без -ов/-ин перед именем в начале фразы («Хоружий Алексей»)
+_NOT_SUR = re.compile(_NOT_SUR.pattern + r"")
+_STREET_NEXT = re.compile(r"[ \t]+(?:ул|пр|просп|пер|бул|б-р|пл|наб)\b\.?|[ \t]+(?:улица|проспект|переулок|бульвар|площадь|набережная|шоссе)\b")
 
 
 @functools.lru_cache(maxsize=1 << 16)
@@ -910,13 +982,47 @@ def _sentence_start(text: str, pos: int) -> bool:
     return j < 0 or not (text[j].isalnum() or text[j] in ",)»")
 
 
+_CAPS_W = re.compile(r"(?<!\w)[А-ЯЁ]{3,}(?!\w)")
+_CAPS_PATS = ("SFP", "FSP", "FPS", "FP", "SF", "FS", "PF")                                      # Ф фамилия, И имя, О отчество
+
+
+def _caps_cls(w: str) -> str:
+    l = skel(w)
+    if re.fullmatch(r"[а-я]{2,}" + _PATR, l):
+        return "P"
+    if _is_first(l):
+        return "F"
+    return "S" if _SUR.fullmatch(l) and not _notsur(l) else "X"
+
+
+def _caps_people(text, out, dyn):
+    """ПРОПИСНОЙ ФИО («КЛИЕНТ ИВАНОВ ИВАН ИВАНОВИЧ»): границы по классам слов цепочки, слова фразы остаются."""
+    ws = [(m.start(), m.end(), _caps_cls(m.group())) for m in _CAPS_W.finditer(text)]
+    i = 0
+    while i < len(ws):
+        pat = next((p for p in _CAPS_PATS if i + len(p) <= len(ws) and all(
+            ws[i + k][2] == c and (k == 0 or re.fullmatch(r"[ \t]*,?[ \t]+", text[ws[i + k - 1][1]:ws[i + k][0]])) for k, c in enumerate(p))), None)
+        if not pat:
+            i += 1
+            continue
+        part = ws[i:i + len(pat)]
+        a, b = part[0][0], part[-1][1]
+        sur = next((skel(text[x:y]) for x, y, c in part if c == "S"), None)
+        key = "s" + _stem(sur) if sur else "c" + skel(text[part[0][0]:part[0][1]])
+        _cand(out, a, b, "ЧЕЛОВЕК", key, text[a:b], 3)
+        if sur and len(_stem(sur)) >= 4:
+            dyn[_stem(sur)] = ("ЧЕЛОВЕК", key, text[a:b], False)
+        i += len(pat)
+
+
 def _name_heur(text, sk, out, dyn):
     """Имена без словаря и NER: Имя Фамилия по списку частых имён, фамилия по окончанию и после глаголов общения."""
-    caps = [(m.start(), m.end()) for m in re.finditer(r"[А-ЯЁ][а-яё]{2,}", text)]
+    caps = [(m.start(), m.end()) for m in re.finditer(r"(?<![А-Яа-яЁё])[А-ЯЁ][а-яё]{2,}(?![А-Яа-яЁё])", text)]       # слова внутри CamelCase-идентификаторов (РеализацияТоваровУслуг) не имена
     speech_ends = {m.end() for m in _SPEECH.finditer(text)}                                 # где сразу после глагола общения идёт слово
     toks = collections.Counter(m.group() for m in re.finditer(r"[А-Яа-яЁё]+", text))             # один проход: слова текста
     stems_cnt = collections.Counter(_stem(t.lower().replace("ё", "е")) for t in toks.elements()) if len(toks) < 200000 else collections.Counter()
     taken = set()
+    _caps_people(text, out, dyn)
     for (s1, e1), (s2, e2) in zip(caps, caps[1:]):
         if not re.fullmatch(r"[ \t]+", text[e1:s2]):
             continue
@@ -926,7 +1032,7 @@ def _name_heur(text, sk, out, dyn):
             continue
         sur, a, b = (w2, s2, e2) if f1 else (w1, s1, e1)
         lowseen = (text[a].lower() + text[a + 1:b]) in toks
-        if (lowseen and not f1) or (not f1 and _NOT_SUR.search(sur)) or (not f1 and not _SUR.fullmatch(sur) and _sentence_start(text, s1)):
+        if (lowseen and not f1) or (not f1 and _NOT_SUR.search(sur)) or (not f1 and not _SUR.fullmatch(sur) and not _SUR_LOOSE.fullmatch(sur) and _sentence_start(text, s1)):
             continue                                       # «Если Роман», «Вот Егора»: перед именем слово фразы, не фамилия
         st = _stem(sur)
         _cand(out, s1, e2, "ЧЕЛОВЕК", "s" + st, text[s1:e2], 3)
@@ -939,8 +1045,8 @@ def _name_heur(text, sk, out, dyn):
         if s1 in taken or e1 - s1 < 5:
             continue
         w = sk[s1:e1]
-        if _notsur(w) or _is_first(w):
-            continue
+        if _notsur(w) or _is_first(w) or _STREET_NEXT.match(text, e1):
+            continue                                        # «Тверская ул.»: название улицы не человек
         ctx = s1 in speech_ends
         sfx = _SUR.fullmatch(w) is not None
         linehead = sfx and bool(re.match(r"[ \t]*(?::|—|–| - )", text[e1:e1 + 4])) and (s1 == 0 or text[s1 - 1] == "\n")
@@ -978,13 +1084,23 @@ def _detect(text: str, dc: _Dict, profile: str, level: str, dyn: dict, ner_spans
     lv = LEVELS.index(level)
     for kind, rx, grp, prio, chk, thr in _FIXED:
         _tick()
-        if thr == "amounts":
+        if thr == "orgs":
+            if not (level == "strict" or getattr(dc, "orgs_on", False)):
+                continue
+        elif thr == "amounts":
             if not (level == "strict" or False):
                 continue
         elif LEVELS.index(thr) > lv:
             continue
         for m in rx.finditer(text):
             v = m.group(grp)
+            end_ = m.end(grp)
+            if kind == "КАРТА" and v and chk:          # «карта 4111 1111 1111 1111 123»: соседние цифры не мешают, берём самый длинный префикс с Luhn
+                pos_ = [i for i, ch_ in enumerate(v) if ch_.isdigit()]
+                for n_ in (16, 19, 15, 18, 17, 14, 13):
+                    if n_ <= len(pos_) and chk(v[:pos_[n_ - 1] + 1]):
+                        v, end_ = v[:pos_[n_ - 1] + 1], m.start(grp) + pos_[n_ - 1] + 1
+                        break
             if not v or "\x00" in v or (chk and not chk(v)) or PH_RX.fullmatch(v.strip()):
                 continue
             if kind == "IP":
@@ -1012,7 +1128,7 @@ def _detect(text: str, dc: _Dict, profile: str, level: str, dyn: dict, ner_spans
                     key = "s" + st
                     if len(st) >= 4 and level != "light":
                         dyn[st] = ("ЧЕЛОВЕК", key, v, False)
-            _cand(out, m.start(grp), m.end(grp), kind, key, v, prio)
+            _cand(out, m.start(grp), end_, kind, key, v, prio)
     sk = skel(text)
     if lv >= 1:
         _name_heur(text, sk, out, dyn)
@@ -1419,6 +1535,7 @@ def _depersonalize(text, *, profile, level, kind, lang, destination, data_class,
         rep["normalized"] = n != text
         text = n
     dc = _Dict(dictionary)
+    dc.orgs_on = dc_name == "private"                 # организации маскируем в личном (ИП, община, работодатель человека); corp и code: название фирмы не ПДн
     # --- разметка кода (до жёстких блоков: в коде имена функций и идентификаторы маркерами запрета не считаются)
     elig, strings, comments = None, [], []
     try:
@@ -1506,7 +1623,7 @@ def _depersonalize(text, *, profile, level, kind, lang, destination, data_class,
     except ValueError:
         return _blocked("code_syntax_changed", rep)
     saved = dict(_STATS)
-    leaks = _leaks(clean, dc, profile, level, ner and use_ner, sess, elig2)
+    leaks = _leaks(clean, dc, profile, level, ner and use_ner, sess, elig2, kind)
     _STATS.clear()
     _STATS.update(saved)                                    # повторный проход проверки утечек счётчики не удваивает
     rep["leaks"] = len(leaks)
@@ -1707,7 +1824,7 @@ _CAT = {"ЧЕЛОВЕК": "остаточное имя человека", "ОР�
         "ТЕЛЕФОН": "телефон", "URL": "ссылка", "НИК": "ник", "ИНН": "ИНН", "УНП": "УНП", "КАРТА": "номер карты", "IBAN": "IBAN",
         "СЕРВЕР": "адрес сервера в строке подключения", "БАЗА": "имя базы в строке подключения", "ПОЛЬЗОВАТЕЛЬ": "имя пользователя",
         "ХОСТ": "имя хоста из словаря", "ТЕРМИН": "слово из словаря", "ПУТЬ": "путь", "АДРЕС": "адрес", "СУММА": "сумма", "ЧИСЛО": "длинное число",
-        "ПАСПОРТ": "паспорт", "СНИЛС": "СНИЛС", "ИДНОМЕР": "личный номер", "МЕСТО": "место"}
+        "ПАСПОРТ": "паспорт", "РОЖДЕНИЕ": "дата рождения", "СНИЛС": "СНИЛС", "ИДНОМЕР": "личный номер", "МЕСТО": "место"}
 
 
 def _word_index(sk: str) -> dict:
@@ -1767,7 +1884,10 @@ def _repeats(text: str, chosen: list, sess) -> list:
     return out
 
 
-def _leaks(clean, dc, profile, level, use_ner, sess, elig=None) -> list:
+_DIFF_META = re.compile(r"(?m)^(?:index [0-9a-f]+\.\.[0-9a-f]+(?: \d+)?$|@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@|(?:old|new|deleted file) mode \d+$|similarity index \d+%$)")
+
+
+def _leaks(clean, dc, profile, level, use_ner, sess, elig=None, kind=None) -> list:
     """Остатки после замены. elig: для кода только строки и комментарии (имена внутри идентификаторов утечкой не считаются)."""
     masked = PH_RX.sub(lambda m: "\x00" * len(m.group(0)), clean)
     dyn: dict = {}
@@ -1775,17 +1895,18 @@ def _leaks(clean, dc, profile, level, use_ner, sess, elig=None) -> list:
 
     def make(sub):
         return _detect(sub, dc, profile, level, dyn, _ner(sub, level) if use_ner else []) + _detect_dyn(sub, dyn)
-    for s, e, kind, _k, _o, _p in _eligible_cands(masked, elig, make):
-        if kind != "ДАТА":
-            found.append((s, e, _CAT.get(kind, kind)))
+    for s, e, ckind, _k, _o, _p in _eligible_cands(masked, elig, make):
+        if ckind != "ДАТА":
+            found.append((s, e, _CAT.get(ckind, ckind)))
+    scan = _DIFF_META.sub(lambda m: "\x00" * len(m.group(0)), masked) if kind == "diff" else masked   # хэши index и номера строк @@ не ПДн
     if elig is not None:                                    # числовые ПДн в самом коде (телефон, карта, IBAN, СНИЛС): заменить нельзя, значит блок
         for kind_, rx_, grp_, _p, chk_, thr_ in _FIXED:
             if kind_ not in ("ТЕЛЕФОН", "КАРТА", "IBAN", "СНИЛС", "ИДНОМЕР") and not (kind_ in ("ИНН", "УНП") and grp_ == 1):
                 continue
-            for m in rx_.finditer(masked):
+            for m in rx_.finditer(scan):
                 v = m.group(grp_)
                 if v and "\x00" not in v and (not chk_ or chk_(v)) and not _inside(elig, m.start(grp_), m.end(grp_)):
-                    found.append((m.start(grp_), m.end(grp_), _CAT.get(kind_, kind_) + " в коде вне строк"))
+                    found.append((m.start(grp_), m.end(grp_), _CAT.get(kind_, kind_) + (" вне строк и комментариев: заменить нельзя, уберите вручную" if kind != "code" else " в коде вне строк")))
     sk = skel(masked)
     idx = _word_index(sk)
     for k, (ph, orig) in enumerate(list(sess.items.values())):
@@ -1923,6 +2044,300 @@ _EXT = {".diff": ("diff", "generic"), ".patch": ("diff", "generic"), ".json": ("
         ".os": ("code", "bsl"), ".py": ("code", "python"), ".sql": ("code", "sql"), ".env": ("config", "generic"),
         ".ini": ("config", "generic"), ".yaml": ("config", "generic"), ".yml": ("config", "generic"), ".toml": ("config", "generic"),
         ".cfg": ("config", "generic")}
+
+
+# ---------------------------------------------------------------- docx с сохранением формата
+
+_DOCX_TEXT_PART = re.compile(r"word/(?:document|header\d*|footer\d*|footnotes|endnotes|comments|glossary/document)\.xml")
+_DOCX_FLAT_PART = re.compile(r"docProps/custom\.xml|customXml/(?:(?!_rels/)[^/]+/)*(?!itemProps)[^/]+\.xml|word/(?:charts|diagrams)/[^/]+\.xml")
+_DOCX_EVENT = re.compile(r"<(/?)w:p\b[^>]*?(/?)>|<w:(t|delText|instrText)\b([^>]*?)(?<!/)>([^<]*)</w:\3>|<w:(tab|br|cr)\b[^>]*/>|<w:(fldChar)\b[^>]*>")
+_DOCX_SEP = "\n\x00\n"                                      # \x00 внутри совпадения отбрасывает его: находка не склеит соседние абзацы
+_DOCX_ATTR = re.compile(r"""\b((?:w:|wp:)?(?:descr|title|alt|instr|anchor))=(["'])(.*?)\2""")
+_DOCX_SDT = re.compile(r"""<w:(?:alias|tag)\b[^>]*?\bw:val=(["'])(.*?)\1""")
+_DOCX_DOCVAR = re.compile(r"""<w:(?:docVar|lvlText)\b[^>]*?\bw:val=(["'])(.*?)\1""")
+_DOCX_NODE = re.compile(r"(?<=>)([^<>]*[^<>\s][^<>]*)(?=<)")
+_DOCX_ANY_ATTR = re.compile(r"""\b([\w:.-]+)=(["'])(.*?)\2""")
+_DOCX_SKIP_ATTR = re.compile(r"xmlns|xsi:|schemaLocation$|(?:^|:)(?:Type|ContentType|uri|itemID|id|Id|version|rsid\w*)$")
+_DOCX_BAD_CHARS = re.compile(r"[\t\x0b\x00-\x08\x0c\x0e-\x1f]")             # структурные разделители и запрещённые в XML 1.0 знаки в w:t не пишем
+_DOCX_REL = re.compile(r"""<Relationship\b(?:[^>"']|"[^"]*"|'[^']*')*>""")
+_DOCX_TARGET = re.compile(r"""\bTarget=(["'])(.*?)\1""")
+
+
+def _x_unesc(s: str) -> str:
+    return html.unescape(s)
+
+
+def _x_esc(s: str) -> str:
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _a_esc(s: str) -> str:
+    return _x_esc(s).replace('"', "&quot;").replace("'", "&apos;")
+
+
+def _docx_text(raw: bytes) -> str:
+    """Часть как UTF-8 строго: другая кодировка или повреждение не заменяются на � молча, а отклоняют файл."""
+    try:
+        t = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise ValueError("docx_invalid")
+    if re.match(r"""<\?xml[^>]*encoding=["'](?!utf-8["'])""", t, re.I):
+        raise ValueError("docx_invalid")
+    return t
+
+
+def _docx_groups(xml: str):
+    """Группы текста части: все w:t абзаца (с табуляцией и разрывом между ними), отдельно удалённый текст и каждый код поля."""
+    paras, groups = [], {}
+    uid = fld = 0
+    for m in _DOCX_EVENT.finditer(xml):
+        if m.group(7):
+            fld += 1                                                            # поле кончилось или началось: код следующего отдельная группа
+            continue
+        if m.group(3) is None and m.group(6) is None:                          # открытие или закрытие w:p
+            if m.group(1):
+                if paras:
+                    paras.pop()
+            elif not m.group(2):
+                uid += 1
+                paras.append(uid)
+            continue
+        pid = paras[-1] if paras else 0
+        if m.group(6):
+            groups.setdefault(("p", pid, 0), []).append({"sep": "\t" if m.group(6) == "tab" else "\x0b"})
+            continue
+        name = m.group(3)
+        run = {"a": m.start(), "b": m.end(), "name": name, "attrs": m.group(4), "raw": m.group(5)}
+        groups.setdefault(({"instrText": "i", "delText": "d"}.get(name, "p"), pid, fld if name == "instrText" else 0), []).append(run)           # код поля мог быть разбит на куски
+    return [g for g in groups.values() if any("raw" in i for i in g)]
+
+
+def _g_text(g) -> str:
+    return "".join(i.get("sep") or re.sub(r"[\r\n]+", " ", _x_unesc(i["raw"])) for i in g)
+
+
+def _g_edits(g, old: str, nt: str):
+    """Новый текст раскладывается по тем же фрагментам w:t, где стоял старый: форматирование неизменённых мест остаётся."""
+    import difflib
+    ops = difflib.SequenceMatcher(None, old, nt, autojunk=False).get_opcodes()
+
+    def pos(p):
+        for tag, i1, i2, j1, j2 in ops:
+            if i1 <= p <= i2:
+                if tag == "equal":
+                    return j1 + (p - i1)
+                return j1 if p == i1 else j2
+        return len(nt)
+    edits, cur = [], 0
+    for it in g:
+        if "sep" in it:
+            cur += 1
+            continue
+        n = len(re.sub(r"[\r\n]+", " ", _x_unesc(it["raw"])))
+        piece, orig = _DOCX_BAD_CHARS.sub("", nt[pos(cur):pos(cur + n)]), old[cur:cur + n]
+        cur += n
+        if piece != orig:
+            attrs = re.sub(r'\s*xml:space=(?:"[^"]*"|\'[^\']*\')', "", it["attrs"])
+            edits.append((it["a"], it["b"], f'<w:{it["name"]} xml:space="preserve"{attrs}>{_x_esc(piece)}</w:{it["name"]}>'))
+    return edits
+
+
+class _DocxPart:
+    """Часть docx: xml-текст и места, где лежат строки для обезличивания (в порядке обхода)."""
+
+    def __init__(self, name, xml, kind):
+        self.name, self.xml, self.kind = name, xml, kind
+        self.groups, self.slots, self.rels = [], [], []        # slots: (от, до, текст) для атрибутов и простых узлов
+        if kind == "xml":
+            self.groups = _docx_groups(xml)
+            self.slots = sorted([(m.start(3), m.end(3), m.group(3)) for m in _DOCX_ATTR.finditer(xml) if m.group(3).strip()] +
+                                [(m.start(2), m.end(2), m.group(2)) for m in _DOCX_SDT.finditer(xml) if m.group(2).strip()])
+            self.lines = [_g_text(g) for g in self.groups] + [_x_unesc(s[2]) for s in self.slots]
+        elif kind == "flat":
+            nodes = [(m.start(1), m.end(1), m.group(1), "n") for m in _DOCX_NODE.finditer(xml)]
+            attrs = [(m.start(3), m.end(3), m.group(3), "a") for m in _DOCX_ANY_ATTR.finditer(xml)
+                     if not _DOCX_SKIP_ATTR.search(m.group(1)) and re.search(r"[A-Za-zА-Яа-яЁё\d]", m.group(3))
+                     and not (re.fullmatch(r"-?\d{1,10}", m.group(3)) and re.search(r"(?:^|:)(?:val|idx|x|y|cx|cy|w|h|sz|axId|count)$", m.group(1)))
+                     and not re.match(r"(?:https?://(?:schemas\.|www\.w3\.org|purl\.org)|\{[0-9A-Fa-f-]+\}$)", m.group(3))]
+            self.slots = sorted(nodes + attrs, key=lambda x: x[0])
+            self.lines = [_x_unesc(s[2]) for s in self.slots]
+        elif kind == "settings":
+            self.slots = [(m.start(2), m.end(2), m.group(2)) for m in _DOCX_DOCVAR.finditer(xml)]
+            self.lines = [_x_unesc(s[2]) for s in self.slots]
+        else:
+            self.rels = [m for m in _DOCX_REL.finditer(xml) if re.search(r"""TargetMode=["']External["']""", m.group(0)) and _DOCX_TARGET.search(m.group(0))]
+            self.lines = [_x_unesc(_DOCX_TARGET.search(m.group(0)).group(2)) for m in self.rels]
+
+    def apply(self, new_lines):
+        old, edits = self.lines, []
+        n = len(self.groups)
+        for g, o, nl in zip(self.groups, old, new_lines):
+            if nl != o:
+                edits.extend(_g_edits(g, o, nl))
+        for sl, o, nl in zip(self.slots, old[n:], new_lines[n:]):
+            if nl != o:
+                edits.append((sl[0], sl[1], _x_esc(nl) if self.kind == "flat" and sl[3] == "n" else _a_esc(nl)))
+        for m, o, nl in zip(self.rels, old, new_lines):
+            if nl != o:
+                t = _DOCX_TARGET.search(m.group(0))
+                edits.append((m.start() + t.start(2), m.start() + t.end(2), _a_esc(nl)))
+        xml = self.xml
+        for a, b, t in sorted(edits, key=lambda e: -e[0]):
+            xml = xml[:a] + t + xml[b:]
+        return xml, bool(edits)
+
+
+def _docx_clean_meta(names, read):
+    """Автор, инициалы, лица рецензентов, свойства файла, миниатюра: имя -> новый текст или None для удаления."""
+    out = {}
+    for n in names:
+        if re.fullmatch(r"word/[^/]+\.xml", n):
+            x = read(n)
+            y = re.sub(r'\b(w:author|w15:author)=(["\'])[^"\']*\2', r'\1="Автор"', x)
+            y = re.sub(r'\bw:initials=(["\'])[^"\']*\1', 'w:initials=""', y)
+            if n == "word/people.xml":
+                y = re.sub(r"<w15:person\b[\s\S]*?</w15:person>", "", y)
+            if y != x:
+                out[n] = y
+    for n, tags in (("docProps/core.xml", "dc:creator|cp:lastModifiedBy|dc:title|dc:subject|dc:description|cp:keywords|cp:category"),
+                    ("docProps/app.xml", "Company|Manager")):
+        if n in names:
+            x = read(n)
+            y = re.sub(r"(<(" + tags + r")(?:\s[^>]*)?>)[\s\S]*?(</\2>)", r"\1\3", x)
+            if y != x:
+                out[n] = y
+    thumbs = [n for n in names if re.match(r"docProps/thumbnail\.", n, re.I)]
+    for n in thumbs:
+        out[n] = None
+    if thumbs and "[Content_Types].xml" in names:
+        x = read("[Content_Types].xml")
+        y = re.sub(r"""<Override\b[^>]*PartName=["'](?:\./|/)?docProps/thumbnail[^>]*/>""", "", x, flags=re.I)
+        if y != x:
+            out["[Content_Types].xml"] = y
+    if thumbs and "_rels/.rels" in names:
+        x = read("_rels/.rels")
+        y = re.sub(r"""<Relationship\b[^>]*Target=["'](?:\./|/)?docProps/thumbnail[^>]*/>""", "", x, flags=re.I)
+        if y != x:
+            out["_rels/.rels"] = y
+    return out
+
+
+def _docx_open(raw: bytes):
+    import io
+    z = zipfile.ZipFile(io.BytesIO(raw))
+    infos = z.infolist()
+    if len(infos) > 500 or sum(i.file_size for i in infos) > 64 * 1024 * 1024 or any(
+            i.compress_size and i.file_size / i.compress_size > 200 for i in infos):
+        raise ValueError("docx_invalid")
+    if "word/document.xml" not in z.namelist():
+        raise ValueError("docx_invalid")
+    return z
+
+
+def _docx_prepare(z):
+    parts = []
+    for n in z.namelist():
+        if _DOCX_TEXT_PART.fullmatch(n):
+            parts.append(_DocxPart(n, _docx_text(z.read(n)), "xml"))
+        elif _DOCX_FLAT_PART.fullmatch(n):
+            parts.append(_DocxPart(n, _docx_text(z.read(n)), "flat"))
+        elif n in ("word/settings.xml", "word/numbering.xml"):
+            p = _DocxPart(n, _docx_text(z.read(n)), "settings")
+            if p.slots:
+                parts.append(p)
+        elif n.endswith(".rels"):
+            p = _DocxPart(n, _docx_text(z.read(n)), "rels")
+            if p.rels:
+                parts.append(p)
+    return parts
+
+
+def _docx_warnings(names):
+    w = []
+    if any(re.match(r"word/(?!_rels/).*\.(?:mht|mhtml|htm|html|rtf)$", n, re.I) for n in names):
+        w.append("в документе есть вставки HTML или RTF: их текст не обрабатывается, удалите вставки или проверьте отдельно")
+    if any(re.match(r"word/(embeddings|activeX)/", n) for n in names):
+        w.append("в документе есть вложенные файлы: они не обработаны, удалите их или проверьте отдельно")
+    if any(n.startswith("word/media/") for n in names):
+        w.append("в документе есть картинки: текст на них не обрабатывается")
+    return w
+
+
+def _docx_write(z, parts, results, clean_meta):
+    import io
+    changed, new = 0, {}
+    for p, nl in zip(parts, results):
+        xml, ch = p.apply(nl)
+        if ch:
+            new[p.name] = xml
+            changed += 1
+    names = set(z.namelist())
+    meta = _docx_clean_meta(names, lambda n: new[n] if n in new else _docx_text(z.read(n))) if clean_meta else {}
+    new.update({k: v for k, v in meta.items() if v is not None})
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as out:
+        for i in z.infolist():
+            if i.filename in meta and meta[i.filename] is None:
+                continue
+            out.writestr(i.filename, new[i.filename].encode("utf-8") if i.filename in new else z.read(i.filename))
+    return buf.getvalue(), changed, len(meta)
+
+
+def _docx_split(text, n_lines):
+    out = text.split(_DOCX_SEP) if n_lines else []
+    if len(out) != n_lines:
+        raise ValueError("docx_lines_mismatch")
+    return out
+
+
+def depersonalize_docx(raw: bytes, **kw):
+    """docx в docx: формат сохраняется, тексты частей, подписи картинок, свойства документа и внешние ссылки обезличиваются общей
+    нумерацией меток; автор, инициалы, свойства файла и миниатюра очищаются. Возвращает (Result, bytes или None). При блокировке
+    файл не создаётся."""
+    try:
+        z = _docx_open(raw)
+        parts = _docx_prepare(z)
+    except (zipfile.BadZipFile, ValueError, KeyError):
+        return _blocked("docx_invalid", {"counts": {}}), None
+    names = z.namelist()
+    if any(re.match(r"word/(embeddings|activeX)/", n) or re.match(r"word/(?!_rels/).*\.(?:mht|mhtml|htm|html|rtf)$", n, re.I) for n in names):
+        return _blocked("docx_embedded_unprocessed", {"counts": {}, "hint": "в документе вложенные файлы (embeddings, activeX) или вставки HTML/RTF: "
+                                                    "их содержимое не обезличивается; удалите вложения или обработайте отдельно"}), None
+    lines = [ln for p in parts for ln in p.lines]
+    kw.setdefault("kind", "text")
+    r = depersonalize(_DOCX_SEP.join(lines), **kw)
+    if not r.ok:
+        return r, None
+    try:
+        out = _docx_split(r.clean, len(lines))
+    except ValueError:
+        return _blocked("docx_lines_mismatch", r.report), None
+    k, results = 0, []
+    for p in parts:
+        results.append(out[k:k + len(p.lines)])
+        k += len(p.lines)
+    try:
+        data, changed, meta = _docx_write(z, parts, results, True)
+    except (zipfile.BadZipFile, ValueError, KeyError):
+        return _blocked("docx_invalid", r.report), None
+    r.report["docx"] = {"parts": len(parts), "lines": len(lines), "parts_changed": changed, "meta_cleaned": meta}
+    r.report["warnings"] = list(r.report.get("warnings", [])) + _docx_warnings(z.namelist())
+    return r, data
+
+
+def restore_docx(raw: bytes, mapping: dict, sent_tokens=None):
+    """Обратная подстановка в docx по карте: (RestoreResult по всему тексту, bytes)."""
+    z = _docx_open(raw)
+    parts = _docx_prepare(z)
+    lines = [ln for p in parts for ln in p.lines]
+    rr = restore_checked(_DOCX_SEP.join(lines), mapping, sent_tokens)
+    out = _docx_split(rr.text, len(lines))
+    k, results = 0, []
+    for p in parts:
+        results.append(out[k:k + len(p.lines)])
+        k += len(p.lines)
+    data, _, _ = _docx_write(z, parts, results, False)
+    return rr, data
 
 
 class InputError(Exception):
@@ -2074,9 +2489,57 @@ def _enc_label(label: str, text: str, bom: bytes) -> str:
     return label or "unknown"
 
 
+def _emit(data, path, out_path, map_path, r, a, guard):
+    """Запись результата (с проверкой пути) и карты; общая для текста и docx."""
+    if out_path:
+        bad = _target_ok(out_path, *(guard or (None, {path.resolve()})))                      # сначала проверка пути, потом создание каталогов
+        if not bad:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            bad = _target_ok(out_path, *(guard or (None, {path.resolve()})))
+        if bad:
+            print(json.dumps({"ok": False, "reason": bad, "stage": "write"}, ensure_ascii=False), file=sys.stderr)
+            print(f"ошибка: запись отклонена ({bad}): путь через symlink ведёт на входной файл или за пределы каталога результатов", file=sys.stderr)
+            return 2, bad
+        _write_private(out_path, data)
+    else:
+        sys.stdout.buffer.write(data)
+    if map_path:
+        write_map(map_path, r.mapping, a.allow_synced)
+    return 0, "ok"
+
+
+def _one_docx(path, a, dic, out_path, map_path, guard):
+    """docx в docx с сохранением формата (--keep-format)."""
+    try:
+        if path.name.startswith("~$"):
+            raise InputError("lock_file", "служебный файл блокировки Office (~$…), пропущен")
+        raw = path.read_bytes()
+    except InputError as e:
+        print(json.dumps({"ok": False, "reason": e.reason, "stage": e.stage}, ensure_ascii=False), file=sys.stderr)
+        return 2, e.reason
+    except OSError:
+        print(json.dumps({"ok": False, "reason": "read_error", "stage": "read"}, ensure_ascii=False), file=sys.stderr)
+        return 2, "read_error"
+    r, data = depersonalize_docx(raw, profile=a.profile, level=a.level, destination=a.destination, data_class=a.data_class, dictionary=dic,
+                                 ner=a.ner, timeout=a.timeout)
+    r.report["reason"] = r.reason or r.report.get("reason") or ("" if r.ok else "unknown_block")
+    print(json.dumps({"ok": r.ok, "reason": r.reason, "review": r.review, "report": r.report, "leaks": [str(x) for x in r.leaks]},
+                     ensure_ascii=False, indent=1), file=sys.stderr)
+    for w in r.report.get("warnings", []):
+        print("ВНИМАНИЕ: " + w, file=sys.stderr)
+    if not r.ok or data is None:
+        return (4 if r.reason.startswith("hard_block") else 3 if r.reason in ("leaks",) or r.reason.startswith(("secret", "quasi")) else 2), r.reason
+    if not out_path:
+        print("ошибка: для docx нужен --out (бинарный файл в stdout не пишем)", file=sys.stderr)
+        return 2, "out_required"
+    return _emit(data, path, out_path, map_path, r, a, guard)
+
+
 def _one(path: Path, a, dic, out_path, map_path, quiet=False, guard=None):
     """Обработка одного файла. Возвращает (код, краткое состояние); отчёт и сообщения идут в stderr."""
     ext = path.suffix.lower()
+    if ext == ".docx" and getattr(a, "keep_format", False):
+        return _one_docx(path, a, dic, out_path, map_path, guard)
     try:
         text, label, bom_prefix, codec = load_input(path, a.encoding)
     except InputError as e:
@@ -2114,21 +2577,7 @@ def _one(path: Path, a, dic, out_path, map_path, quiet=False, guard=None):
         print(json.dumps({"ok": False, "reason": "encoding_unrepresentable", "stage": "write"}, ensure_ascii=False), file=sys.stderr)
         print(f"ошибка: результат не помещается в кодировку {enc}; задайте другую через --encoding", file=sys.stderr)
         return 2, "encoding_unrepresentable"
-    if out_path:
-        bad = _target_ok(out_path, *(guard or (None, {path.resolve()})))                      # сначала проверка пути, потом создание каталогов
-        if not bad:
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-            bad = _target_ok(out_path, *(guard or (None, {path.resolve()})))
-        if bad:
-            print(json.dumps({"ok": False, "reason": bad, "stage": "write"}, ensure_ascii=False), file=sys.stderr)
-            print(f"ошибка: запись отклонена ({bad}): путь через symlink ведёт на входной файл или за пределы каталога результатов", file=sys.stderr)
-            return 2, bad
-        _write_private(out_path, data)
-    else:
-        sys.stdout.buffer.write(data)
-    if map_path:
-        write_map(map_path, r.mapping, a.allow_synced)
-    return 0, "ok"
+    return _emit(data, path, out_path, map_path, r, a, guard)
 
 
 def main(argv=None) -> int:
@@ -2149,6 +2598,7 @@ def main(argv=None) -> int:
     ap.add_argument("--destination", default="external", choices=["local", "external"])
     ap.add_argument("--ner", choices=["auto", "require", "off"])
     ap.add_argument("--timeout", type=_pos_float, default=60.0, help="секунд на файл (по умолчанию 60); по истечении код 2, причина timeout")
+    ap.add_argument("--keep-format", dest="keep_format", action="store_true", help=".docx на входе даёт .docx на выходе (форматирование, таблицы, колонтитулы; автор и свойства файла очищаются)")
     ap.add_argument("--chunk", nargs="?", const=1 << 20, type=_pos_int, metavar="БАЙТ", help="большой файл частями (по умолчанию 1 МБ) с общей картой")
     ap.add_argument("--out")
     ap.add_argument("--out-dir", help="для каталога на входе: куда класть обезличенные файлы")
@@ -2176,7 +2626,7 @@ def main(argv=None) -> int:
             targets, seen_t = {}, {}
             for f in files:                                  # все назначения проверяются до любых записей
                 rel = f.relative_to(src)
-                t = out_root / (Path(str(rel) + ".txt") if f.suffix.lower() == ".docx" else rel)
+                t = out_root / (Path(str(rel) + ".txt") if f.suffix.lower() == ".docx" and not a.keep_format else rel)
                 seen_t.setdefault(str(t).lower(), []).append(rel)
                 targets[f] = t
             if a.map_dir:                                    # карты не должны попасть в каталог результатов и пересекаться с ними
