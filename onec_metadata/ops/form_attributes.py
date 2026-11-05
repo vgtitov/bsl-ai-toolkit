@@ -185,6 +185,11 @@ def remove_attribute_column(form_path: Path, attribute: str, name: str) -> None:
         raise OpPreconditionError(f"Колонки '{name}' у реквизита '{attribute}' нет")
     if len([c for c in cols if isinstance(c.tag, str)]) == 1:
         raise OpPreconditionError("Последнюю колонку не удаляем: сначала добавьте новую")
+    # как remove_attribute: колонка, к которой привязаны элементы формы (DataPath Реквизит.Колонка[.…]), не удаляется
+    path = f"{attribute}.{name}"
+    used = root.xpath(".//lf:DataPath[text()=$p or starts-with(text(), concat($p, '.'))]", namespaces=cfg.NS, p=path)
+    if used:
+        raise OpPreconditionError(f"Колонка '{path}' привязана к элементам формы - сначала удалите их")
     cfg.remove_children(cols, hit)
     cfg.save(doc, form_path)
 

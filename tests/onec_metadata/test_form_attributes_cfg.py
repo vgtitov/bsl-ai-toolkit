@@ -91,6 +91,19 @@ def test_column_types_and_guards(form):
         fa.remove_attribute_column(form, "Таблица", "Доступен")     # последняя колонка
 
 
+def test_remove_column_refused_when_bound_to_form_item(form):
+    """Как remove-attribute и как в EDT: колонку, к которой привязан элемент формы, не удаляем, файл не меняется."""
+    from onec_metadata.ops.form_structure import add_column, add_table
+    fa.add_attribute_column(form, "Таблица", "Остаток", "Number:10", {"ru": "Остаток"})
+    add_table(form, "ТаблицаЭлемент", "Таблица")
+    add_column(form, "ТаблицаОстаток", "ТаблицаЭлемент", "Таблица.Остаток")
+    before = form.read_bytes()
+    with pytest.raises(OpPreconditionError):
+        fa.remove_attribute_column(form, "Таблица", "Остаток")      # поле ТаблицаОстаток ссылается
+    assert form.read_bytes() == before
+    fa.remove_attribute_column(form, "Таблица", "Цена")              # без ссылок - удаляется
+
+
 def test_form_attribute_from_scratch(form):
     """Как пишет Конфигуратор: компоновщик настроек и список значений - Title + Type, отступы соседей."""
     fa.add_form_attribute(form, "КомпоновщикНастроек", "dcsset:SettingsComposer", {"ru": "Компоновщик настроек"})
