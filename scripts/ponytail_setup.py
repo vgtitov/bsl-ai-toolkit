@@ -268,6 +268,60 @@ def check_hook() -> list[str]:
     return out
 
 
+_HOOK_LINE = re.compile(r"Hooks: (\S+) \[(.*?)\](?: \(plugin ([^)]*)\))? (finished with status (-?\d+) \((\d+)ms\)|timed out[^\n]*)")
+
+
+def parse_hook_log(text: str) -> list[dict]:
+    """Строки отладочного журнала Claude Code «Hooks: <событие> [<команда>] ... finished with status N (X ms)» -> записи."""
+    rows = []
+    for line in text.splitlines():
+        m = _HOOK_LINE.search(line)
+        if not m:
+            continue
+        timed_out = m.group(5) is None
+        rows.append({"event": m.group(1), "cmd": m.group(2), "plugin": m.group(3) or "",
+                     "ms": None if timed_out else int(m.group(6)), "status": None if timed_out else int(m.group(5)),
+                     "timed_out": timed_out})
+    return rows
+
+
+def probe_real_hooks() -> list[str]:
+    """Один настоящий запуск `claude -p` с журналом хуков: время хуков так, как их видит сам Claude Code (стоит один короткий запрос)."""
+    import tempfile
+    exe = shutil.which("claude")
+    if not exe:
+        return ["  [-] claude не найден, настоящий запуск хуков не замерить"]
+    with tempfile.TemporaryDirectory() as d:
+        log = Path(d) / "hooks.txt"
+        try:
+            # из пустой временной папки: проектные CLAUDE.md и хуки текущего каталога в замер не попадают и никуда не уходят
+            r = subprocess.run([exe, "--debug=hooks", "--debug-file", str(log), "-p", "ответь: ок"], stdin=subprocess.DEVNULL,
+                               capture_output=True, text=True, timeout=180, cwd=d)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            return [f"  [!] запуск claude не завершился: {e}"]
+        try:
+            rows = parse_hook_log(log.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            return ["  [!] журнал хуков не создан"]
+    if r.returncode != 0:
+        return [f"  [!] claude -p завершился с ошибкой (код {r.returncode}): {(r.stderr or r.stdout).strip()[:200]}; "
+                "войди в Claude Code (claude, затем /login) и повтори"]
+    pony = [h for h in rows if "ponytail" in (h["plugin"] + h["cmd"]).lower()]
+    out = [f"  [ok] хуков в журнале: {len(rows)}, из них Ponytail: {len(pony)}"]
+    for h in pony:
+        what = "ТАЙМАУТ" if h["timed_out"] else f"{h['ms']} мс, код {h['status']}"
+        out.append(f"       Ponytail {h['event']}: {what}")
+    slow = [h for h in rows if h["timed_out"] or (h["ms"] or 0) > SLOW_HOOK_SEC * 1000]
+    for h in slow:
+        out.append(f"  [!] медленный или прерванный хук {h['event']} ({h['plugin'] or h['cmd'][:60]}): "
+                   + ("таймаут" if h["timed_out"] else f"{h['ms']} мс"))
+    if not pony:
+        out.append("  [-] хуков Ponytail в запуске нет: плагин выключен или не установлен")
+    elif not slow:
+        out.append("  [ok] в настоящем запуске хуки укладываются в 3 с: если ошибка остаётся, она случается не на старте, а позже в сессии (пришли журнал `claude --debug=hooks --debug-file <файл>` за время ошибки)")
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--mode", choices=MODES, help="режим по умолчанию; без флага — по роли: analyst → off, иначе lite")
@@ -276,8 +330,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--project", type=Path, help="каталог проекта: дописать правило в его AGENTS.md")
     ap.add_argument("--no-plugin", action="store_true", help="плагин не ставить, только правило")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--probe-real", action="store_true",
+                    help="только замер: один настоящий запуск claude -p с журналом хуков (один короткий запрос), без установки")
     a = ap.parse_args(argv)
     a.mode = a.mode or mode_for_role(a.role)
+    if a.probe_real:
+        print("\n".join(probe_real_hooks()))
+        return 0
 
     if a.project:
         print("  [ok] " + write_rule(a.project, a.dry_run))
