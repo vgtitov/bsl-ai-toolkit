@@ -36,6 +36,8 @@ REPO = "DietrichGebert/ponytail"
 MODES = ("off", "lite", "full", "ultra")
 ROOT = Path(__file__).resolve().parents[1]
 RULE_SRC = ROOT / "core" / "AGENTS.md"
+VERIFIED_PLUGIN = "5.3.2"   # версия, на которой измерен запуск хука (Work PC, Windows)
+SLOW_HOOK_SEC = 3.0         # у Claude Code на хук 5-15 с; больше 3 с на холодном старте уже тревога
 BEGIN, END = "<!-- check-existing-first:begin -->", "<!-- check-existing-first:end -->"
 
 
@@ -184,6 +186,60 @@ AGENTS = {
 }
 
 
+def installed_plugin() -> tuple[str, Path] | None:
+    """Самая новая версия плагина в кэше Claude Code: (версия, каталог hooks)."""
+    base = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+    root = base / "plugins" / "cache" / "ponytail" / "ponytail"
+    def key(d: Path):
+        return tuple(int(x) if x.isdigit() else 0 for x in re.split(r"[.\-]", d.name))
+    try:
+        dirs = [d for d in root.iterdir() if (d / "hooks" / "ponytail-mode-tracker.js").is_file()]
+    except OSError:
+        return None
+    if not dirs:
+        return None
+    best = max(dirs, key=key)
+    return best.name, best / "hooks"
+
+
+def _timed(cmd: list[str], stdin: str = "") -> float | None:
+    import time
+    t = time.monotonic()
+    try:
+        r = subprocess.run(cmd, input=stdin, capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return time.monotonic() - t if r.returncode == 0 else None
+
+
+def check_hook() -> list[str]:
+    """Замер (до 2 x 10 с) холодного старта node и хука Ponytail; предупреждение, если дольше SLOW_HOOK_SEC."""
+    node = shutil.which("node")
+    found = installed_plugin()
+    if not node or not found:
+        return []
+    ver, hooks = found
+    out = [f"  [ok] версия плагина Ponytail: {ver}" + ("" if ver == VERIFIED_PLUGIN else
+           f" (проверена {VERIFIED_PLUGIN}: если хук тормозит, сообщи версию)")]
+    # хук первым: он и есть холодный запуск, голый node после него уже прогрет
+    hook = _timed([node, str(hooks / "ponytail-mode-tracker.js")], '{"prompt":"x","hook_event_name":"UserPromptSubmit"}')
+    base = _timed([node, "-e", "1"])
+    fmt = lambda v: "ошибка или больше 10 с" if v is None else f"{v:.2f} с"
+    out.append(f"  [ok] запуск: node {fmt(base)}, хук {fmt(hook)}")
+    if any(v is None or v > SLOW_HOOK_SEC for v in (base, hook)):
+        who = "сам node" if base is None or base > SLOW_HOOK_SEC else "хук"
+        if os.name == "nt":
+            todo = ("Что сделать: 1) исключить node.exe и папку .claude из проверки антивируса (Defender: Параметры защиты от вирусов, Исключения); "
+                    "2) замерить Measure-Command { node -e 1 } в PowerShell: дольше 3 с значит антивирус; если здесь быстро, а Claude Code всё равно ругается, подозрение на профиль PowerShell ($PROFILE), замер его не видит; "
+                    "3) не держать профиль и .claude на сетевом диске или в OneDrive; 4) прислать эти цифры и версию плагина")
+        else:
+            todo = ("Что сделать: замерить `time node -e 1`; проверить защиту, которая сканирует node; "
+                    "если здесь быстро, а Claude Code ругается, подозрение на профиль оболочки (замер его не видит); "
+                    "не держать ~/.claude на сетевом диске; прислать цифры и версию плагина")
+        out.append(f"  [!] медленно ({who}): Claude Code прервёт хук по таймауту и покажет «hook timed out». " + todo)
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--mode", choices=MODES, help="режим по умолчанию; без флага — по роли: analyst → off, иначе lite")
@@ -216,6 +272,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  [!] {name}: не поставился (сеть?), вручную: {name} " + " ; ".join(" ".join(s) for s in steps))
     if installed:
         print("  [ok] " + set_default_mode(a.mode, a.dry_run))
+    if installed and not a.dry_run:
+        for line in check_hook():
+            print(line)
     if not shutil.which("node"):
         print("  [!] node не найден: хуки Ponytail молчат, скиллы /ponytail работают")
     return 0  # установка Ponytail необязательна и не должна валить онбординг
