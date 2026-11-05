@@ -15,7 +15,10 @@ P4.1 — `add_attribute`: реквизит формы (клон образца +
 реквизита-образца — пока отдельная операция (см. spec forms-design).
 """
 import copy
+import re
 from pathlib import Path
+
+from lxml import etree
 
 from onec_metadata.formats import configurator as cfg
 from onec_metadata.ops import OpPreconditionError
@@ -40,17 +43,11 @@ def _reid(element, next_id: int) -> int:
     return next_id
 
 
-def add_attribute(form_path: Path, name: str, type_ref: str, parent: str | None = None) -> None:
-    """Реквизит формы; с `parent` — колонка реквизита-таблицы (ValueTable/ValueTree) с этим именем."""
+def add_attribute(form_path: Path, name: str, type_ref: str) -> None:
     validate_name(name)
     validate_type_ref(type_ref)
     if str(form_path).endswith(".form"):
-        if parent:
-            _add_column_edt(form_path, name, type_ref, parent)
-        else:
-            _add_attribute_edt(form_path, name, type_ref)
-    elif parent:
-        raise OpPreconditionError("Колонка реквизита-таблицы пока только для EDT (Form.form)")
+        _add_attribute_edt(form_path, name, type_ref)
     else:
         _add_attribute_configurator(form_path, name, type_ref)
 
@@ -218,11 +215,10 @@ def _add_attribute_edt(form_path: Path, name: str, type_ref: str) -> None:
     cfg.save(doc, form_path)
 
 
-def remove_attribute(form_path: Path, name: str, parent: str | None = None) -> None:
-    """Удалить реквизит формы или (с `parent`) колонку реквизита-таблицы. Только EDT Form.form.
-    Отказ, если на него ещё ссылается элемент формы (dataPath / footerDataPath)."""
-    if not str(form_path).endswith(".form"):
-        raise OpPreconditionError("remove-attribute пока только для EDT (Form.form)")
+def remove_attribute_edt(form_path: Path, name: str, parent: str | None = None) -> None:
+    """EDT Form.form: удалить реквизит формы или (с `parent`) колонку реквизита-таблицы. Вызывается из
+    form_attributes (remove-attribute / remove-attribute-column). Отказ, если на него ссылается элемент
+    формы (dataPath / footerDataPath), если это основной реквизит или последняя колонка."""
     doc = cfg.load(form_path)
     root = doc.getroot()
     owner_path = f"{parent}.{name}" if parent else name
@@ -234,6 +230,10 @@ def remove_attribute(form_path: Path, name: str, parent: str | None = None) -> N
     hits = [a for a in pool if a.findtext("name") == name]
     if not hits:
         raise OpPreconditionError(f"Реквизит формы '{owner_path}' не найден")
+    if parent and len(pool) == 1:
+        raise OpPreconditionError("Последнюю колонку не удаляем: сначала добавьте новую")
+    if not parent and hits[0].findtext("main") == "true":
+        raise OpPreconditionError("Основной реквизит формы не удаляем")
     used = [s for s in root.xpath(".//items//segments/text() | .//items/*/segments/text()")
             if s == owner_path or s.startswith(owner_path + ".")]
     if used:
@@ -250,22 +250,54 @@ def _next_attribute_id_edt(root) -> int:
     return max([i for i in ids if i > 0], default=0) + 1
 
 
-def _set_type_edt(node, type_ref: str) -> None:
-    """Тип клона: один <types>, квалификаторы образца сняты (с новым типом несовместимы)."""
+def _set_type_edt(node, type_ref: str, qualifiers=None) -> None:
+    """Тип клона: один <types>, квалификаторы образца сняты (с новым типом несовместимы);
+    qualifiers - (тег, [(дочерний тег, текст)]) для нового типа или None."""
     vt = node.find("valueType")
     types = vt.findall("types")
     types[0].text = type_ref
     cfg.remove_children(vt, types[1:])
     cfg.remove_children(vt, [q for tag in _EDT_QUALIFIERS for q in vt.findall(tag)])
+    if qualifiers:
+        tag, children = qualifiers
+        q = etree.Element(tag)
+        ws = vt.text or "\n"           # отступ детей valueType (хвост types может быть отступом </valueType>)
+        inner = ws + "  "
+        q.text = inner
+        for i, (child, text) in enumerate(children):
+            el = etree.SubElement(q, child)
+            el.text = text
+            el.tail = inner if i < len(children) - 1 else ws
+        cfg.place_after(types[0], q)
+
+
+def edt_type(type_ref: str):
+    """Тип колонки в общем синтаксисе form_attributes (String | Boolean | Date | Number:N[.M] |
+    cfg:XRef.Имя) - в нотацию EDT: (types, квалификаторы или None). Нотация EDT (Number, CatalogRef.Имя)
+    принимается как есть. Корпус ERP: у Number пишутся precision и scale (scale=0 опускается);
+    Date без квалификаторов - дата и время (как DateTime у Конфигуратора)."""
+    m = re.fullmatch(r"Number:(\d+)(?:\.(\d+))?", type_ref)
+    if m:
+        children = [("precision", m.group(1))]
+        if m.group(2) and int(m.group(2)) > 0:
+            children.append(("scale", m.group(2)))
+        return "Number", ("numberQualifiers", children)
+    if type_ref.startswith("cfg:"):
+        return type_ref[len("cfg:"):], None
+    return type_ref, None
 
 
 # дети клона-колонки с семантикой образца: заголовок колонки образца не наследуется
 _EDT_COLUMN_SEMANTIC = ("title", "extInfo")
 
 
-def _add_column_edt(form_path: Path, name: str, type_ref: str, parent: str) -> None:
-    """Колонка реквизита-таблицы формы: клон последней колонки этой таблицы, новый id,
-    тип, без заголовка образца; встаёт после последней колонки."""
+def add_column_edt(form_path: Path, parent: str, name: str, type_ref: str, titles: dict | None = None) -> None:
+    """EDT Form.form: колонка реквизита-таблицы формы - клон последней колонки этой таблицы, новый id,
+    тип, заголовки на языках (без заголовка образца); встаёт после последней колонки. Вызывается из
+    form_attributes.add_attribute_column."""
+    validate_name(name)
+    types_text, qualifiers = edt_type(type_ref)
+    validate_type_ref(types_text)
     doc = cfg.load(form_path)
     root = doc.getroot()
 
@@ -282,9 +314,21 @@ def _add_column_edt(form_path: Path, name: str, type_ref: str, parent: str) -> N
     new = copy.deepcopy(columns[-1])
     new.find("name").text = name
     new.find("id").text = str(_next_attribute_id_edt(root))
-    _set_type_edt(new, type_ref)
+    _set_type_edt(new, types_text, qualifiers)
     cfg.remove_children(
         new, [el for tag in _EDT_COLUMN_SEMANTIC for el in new.findall(tag)])
+    # заголовки - сразу после <name>, по блоку на язык (как пишет EDT)
+    anchor = new.find("name")
+    ws = anchor.tail
+    for lang, text in (titles or {}).items():
+        t = etree.Element("title")
+        t.text = ws + "  "
+        k = etree.SubElement(t, "key")
+        k.text, k.tail = lang, ws + "  "
+        v = etree.SubElement(t, "value")
+        v.text, v.tail = text, ws
+        cfg.place_after(anchor, t)
+        anchor = t
 
     cfg.place_after(columns[-1], new)
     cfg.save(doc, form_path)

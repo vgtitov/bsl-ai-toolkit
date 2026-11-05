@@ -1,11 +1,14 @@
-"""form.add_attribute с --parent: колонка реквизита-таблицы формы (EDT Form.form).
+"""Колонка реквизита-таблицы формы и удаление реквизита/колонки для EDT (Form.form) через общий API
+form_attributes (те же команды, что для Конфигуратора; формат - по расширению файла).
 
-Структура снята с реальной EDT-формы (askАРММенеджераПоПродажам/ФормаПодбора): колонки —
-безпрефиксные блоки <columns> внутри <attributes> реквизита ValueTable; их <id> делят
-ОДНО пространство с id реквизитов формы (у таблицы id=5, у её колонок 26..30 и 6).
+Структура снята с реальной EDT-формы (askАРММенеджераПоПродажам/ФормаПодбора): колонки - безпрефиксные
+блоки <columns> внутри <attributes> реквизита ValueTable; их <id> делят ОДНО пространство с id реквизитов
+формы (у таблицы id=5, у её колонок 26..30 и 6).
 """
 import difflib
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -13,8 +16,10 @@ import pytest
 from onec_metadata.formats import configurator as cfg
 from onec_metadata.ops import OpPreconditionError
 from onec_metadata.ops.form import add_attribute
+from onec_metadata.ops.form_attributes import add_attribute_column, remove_attribute, remove_attribute_column
 
 FIX = Path(__file__).parent / "fixtures"
+ROOT = Path(__file__).resolve().parents[2]
 NSF = {"form": "http://g5.1c.ru/v8/dt/form"}
 
 
@@ -28,9 +33,13 @@ def _columns(doc, table):
     return doc.xpath(f"/form:Form/attributes[name='{table}']/columns", namespaces=NSF)
 
 
+def _col(doc, table, name):
+    return [c for c in _columns(doc, table) if c.findtext("name") == name][0]
+
+
 def test_add_column_edt(tmp_path):
     work = _copy(tmp_path)
-    add_attribute(work, "Цена", "String", parent="Товары")
+    add_attribute_column(work, "Товары", "Цена", "String", {})
     doc = cfg.load(work)
     cols = _columns(doc, "Товары")
     assert [c.findtext("name") for c in cols] == ["Номенклатура", "Количество", "Цена"]
@@ -40,14 +49,36 @@ def test_add_column_edt(tmp_path):
     assert new.xpath("title") == []                        # заголовок образца не наследуется
     # id: общее пространство реквизитов и колонок: max(1,4,3,7,5) + 1
     assert new.xpath("id/text()") == ["8"]
-    # верхнего реквизита с таким именем не появилось
     assert doc.xpath("/form:Form/attributes[name='Цена']", namespaces=NSF) == []
+
+
+def test_add_column_edt_titles_and_types(tmp_path):
+    work = _copy(tmp_path)
+    add_attribute_column(work, "Товары", "Цена", "Number:15.2", {"ru": "Цена", "en": "Price"})
+    add_attribute_column(work, "Товары", "Штук", "Number:10", {})
+    add_attribute_column(work, "Товары", "Склад", "cfg:CatalogRef.Склады", {})
+    doc = cfg.load(work)
+    price = _col(doc, "Товары", "Цена")
+    assert [el.tag for el in price][:4] == ["name", "title", "title", "id"]   # заголовки - сразу после name
+    assert price.xpath("title/key/text()") == ["ru", "en"]
+    assert price.xpath("title/value/text()") == ["Цена", "Price"]
+    assert price.xpath("valueType/types/text()") == ["Number"]
+    assert price.xpath("valueType/numberQualifiers/precision/text()") == ["15"]
+    assert price.xpath("valueType/numberQualifiers/scale/text()") == ["2"]
+    pcs = _col(doc, "Товары", "Штук")
+    assert pcs.xpath("valueType/numberQualifiers/precision/text()") == ["10"]
+    assert pcs.xpath("valueType/numberQualifiers/scale") == []              # scale=0 EDT не пишет
+    assert _col(doc, "Товары", "Склад").xpath("valueType/types/text()") == ["CatalogRef.Склады"]
+    # отступы как у EDT: квалификатор на уровне types, его дети - на уровень глубже
+    text = work.read_text(encoding="utf-8")
+    assert "        <types>Number</types>\n        <numberQualifiers>\n          <precision>15</precision>\n" \
+           "          <scale>2</scale>\n        </numberQualifiers>\n      </valueType>" in text
 
 
 def test_add_column_edt_only_additions(tmp_path):
     work = _copy(tmp_path)
     before = (FIX / "form_valuetable_edt.form").read_text(encoding="utf-8").splitlines()
-    add_attribute(work, "Цена", "String", parent="Товары")
+    add_attribute_column(work, "Товары", "Цена", "Number:15.2", {"ru": "Цена"})
     after = work.read_text(encoding="utf-8").splitlines()
     diff = list(difflib.unified_diff(before, after, lineterm="", n=0))
     assert [l for l in diff if l.startswith("-") and not l.startswith("---")] == []
@@ -58,15 +89,15 @@ def test_add_column_edt_only_additions(tmp_path):
 def test_add_column_edt_duplicate_raises(tmp_path):
     work = _copy(tmp_path)
     with pytest.raises(OpPreconditionError):
-        add_attribute(work, "Количество", "Number", parent="Товары")
+        add_attribute_column(work, "Товары", "Количество", "Number:10", {})
 
 
 def test_add_column_edt_parent_missing_or_not_table(tmp_path):
     work = _copy(tmp_path)
     with pytest.raises(OpPreconditionError):
-        add_attribute(work, "Цена", "String", parent="НетТакого")
+        add_attribute_column(work, "НетТакого", "Цена", "String", {})
     with pytest.raises(OpPreconditionError):
-        add_attribute(work, "Цена", "String", parent="Поиск")   # не таблица: колонок нет
+        add_attribute_column(work, "Поиск", "Цена", "String", {})       # не таблица: колонок нет
 
 
 def test_add_attribute_edt_id_skips_column_ids(tmp_path):
@@ -78,27 +109,41 @@ def test_add_attribute_edt_id_skips_column_ids(tmp_path):
     assert a.xpath("id/text()") == ["8"]
 
 
-def test_remove_column_edt(tmp_path):
-    from onec_metadata.ops.form import remove_attribute
+def test_remove_column_edt_roundtrip(tmp_path):
     work = _copy(tmp_path)
     before = (FIX / "form_valuetable_edt.form").read_text(encoding="utf-8")
-    add_attribute(work, "Цена", "String", parent="Товары")
-    remove_attribute(work, "Цена", parent="Товары")
+    add_attribute_column(work, "Товары", "Цена", "String", {"ru": "Цена"})
+    remove_attribute_column(work, "Товары", "Цена")
     assert work.read_text(encoding="utf-8") == before          # добавить+удалить = исходный файл
     with pytest.raises(OpPreconditionError):
-        remove_attribute(work, "Цена", parent="Товары")         # нет такой колонки
+        remove_attribute_column(work, "Товары", "Цена")         # нет такой колонки
 
 
-def test_remove_attribute_edt_refuses_when_referenced(tmp_path):
-    """Реквизит/колонку, на которую ссылается элемент формы (dataPath), не удаляем молча."""
-    from onec_metadata.ops.form import remove_attribute
+def test_remove_edt_refuses_referenced_last_and_main(tmp_path):
     work = _copy(tmp_path)
     with pytest.raises(OpPreconditionError):
-        remove_attribute(work, "Количество", parent="Товары")   # поле ТоварыКоличество ссылается
-
-
-def test_add_column_configurator_not_supported_yet(tmp_path):
-    work = tmp_path / "Form.xml"
-    shutil.copy(FIX / "form.xml", work)
+        remove_attribute_column(work, "Товары", "Количество")  # поле ТоварыКоличество ссылается
     with pytest.raises(OpPreconditionError):
-        add_attribute(work, "Цена", "xs:string", parent="Товары")
+        remove_attribute(work, "Объект")                       # основной реквизит
+    with pytest.raises(OpPreconditionError):
+        remove_attribute(work, "Товары")                       # таблица привязана к элементу
+    remove_attribute(work, "Поиск")                            # без ссылок - удаляется
+    doc = cfg.load(work)
+    assert doc.xpath("/form:Form/attributes[name='Поиск']", namespaces=NSF) == []
+
+
+def test_remove_last_column_edt_refused(tmp_path):
+    work = _copy(tmp_path)
+    doc = cfg.load(work)
+    cols = _columns(doc, "Товары")
+    cfg.remove_children(cols[0].getparent(), cols[:1])        # оставить одну колонку (Количество)
+    cfg.save(doc, work)
+    with pytest.raises(OpPreconditionError):
+        remove_attribute_column(work, "Товары", "Количество")
+
+
+def test_cli_form_commands_unique():
+    """CLI собирается: у form нет двух подкоманд с одним именем (argparse упал бы)."""
+    r = subprocess.run([sys.executable, str(ROOT / "bin" / "1c-meta"), "form", "remove-attribute", "--help"],
+                       capture_output=True, text=True, encoding="utf-8")
+    assert r.returncode == 0, r.stderr
