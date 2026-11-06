@@ -70,7 +70,7 @@ class Doc:
         self.has_bom = has_bom                  # Конфигуратор: да; EDT: нет
         self.src_path = None
         self.src_hash = None                    # sha1 файла при чтении: save не затирает чужую правку
-        self.keep_quot = False                  # &quot; исходника защищены служебным символом (см. load)
+        self.quot_sentinel = None               # служебный символ на месте &quot; исходника (см. load)
 
     def __getattr__(self, name):
         return getattr(self.tree, name)
@@ -101,23 +101,30 @@ def load(path: Path) -> Doc:
     # lxml раскрывает &quot; в тексте и обратно не экранирует, а EDT пишет кавычку в тексте сущностью:
     # без защиты любая правка дает diff-шум в чужих заголовках. Каждая &quot; исходника заменяется
     # служебным символом и возвращается при save ровно на свое место (обычные кавычки не трогаются).
-    # маркер годен, только если в исходнике его нет ни символом, ни ссылкой (&#xE000; / &#57344;)
-    keep_quot = _QUOT_SENTINEL not in protected and not _SENTINEL_REF.search(protected)
-    if keep_quot:
-        protected = protected.replace("&quot;", _QUOT_SENTINEL)
+    # shortcut: пока документ загружен, операции видят в таком тексте служебный символ вместо кавычки;
+    # если операции понадобится сравнивать текст с кавычками - читать через doc.quot_sentinel.
+    sentinel = _free_sentinel(protected) if "&quot;" in protected else None
+    if sentinel:
+        protected = protected.replace("&quot;", sentinel)
     tree = etree.ElementTree(
         etree.fromstring(protected.encode("utf-8"), _PARSER))
     doc = Doc(tree, decl_newline, trailing_newline, has_bom=has_bom)
     doc.src_hash = hashlib.sha1(raw_all).hexdigest()
     doc.src_path = path.resolve()
-    doc.keep_quot = keep_quot
+    doc.quot_sentinel = sentinel
     return doc
 
 
-# символ области частного использования Unicode: в выгрузках 1С не встречается
-_QUOT_SENTINEL = ""
-# любая числовая ссылка на этот код (hex/dec, с ведущими нулями, любым регистром)
-_SENTINEL_REF = re.compile(r"&#(?:[xX]0*[eE]000|0*57344);")
+_CHAR_REF = re.compile(r"&#(?:[xX]([0-9A-Fa-f]+)|([0-9]+));")
+
+
+def _free_sentinel(text: str) -> str | None:
+    """Первый символ области частного использования Unicode, которого в исходнике нет ни символом,
+    ни числовой ссылкой (в любой записи). Нет свободного - None, защита кавычек не включается."""
+    used = {ord(c) for c in text if 0xE000 <= ord(c) <= 0xF8FF}
+    for hx, dec in _CHAR_REF.findall(text):
+        used.add(int(hx, 16) if hx else int(dec))
+    return next((chr(cp) for cp in range(0xE000, 0xF900) if cp not in used), None)
 
 
 def place_after(anchor, new) -> None:
@@ -168,8 +175,8 @@ def save(doc: Doc, path: Path) -> None:
     path = path.resolve()                        # через symlink пишем в целевой файл, ссылка остаётся
     body = etree.tostring(doc.tree, encoding="unicode")
     body = body.replace("&#13;\n", "\r\n").replace("&#13;", "\r")
-    if doc.keep_quot:
-        body = body.replace(_QUOT_SENTINEL, "&quot;")
+    if doc.quot_sentinel:
+        body = body.replace(doc.quot_sentinel, "&quot;")
     bom = BOM if doc.has_bom else ""
     text = bom + XML_DECL + doc.decl_newline + body + doc.trailing_newline
     data = text.encode("utf-8")

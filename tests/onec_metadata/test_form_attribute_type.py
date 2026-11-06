@@ -145,3 +145,21 @@ def test_edt_binary_qualifier_dropped_under_either_name(tmp_path):
     a = _attr(cfg.load(work), "КодЯзыка")
     assert a.xpath("valueType/binaryDataQualifiers") == []
     assert a.xpath("valueType/types/text()") == ["String"]
+
+
+def test_save_quot_kept_even_if_first_private_char_is_taken(tmp_path):
+    """Занятый служебный символ не отключает защиту: берется следующий свободный."""
+    src = (FIX / "form.form").read_text(encoding="utf-8")
+    block = '<title><key>ru</key><value>x&#xE000;y A &quot;B&quot;</value></title>'
+    src = src.replace("<name>КодЯзыка</name>", "<name>КодЯзыка</name>\n    " + block, 1)
+    work = _edt(tmp_path, src)
+    set_attribute_type(work, "Список", ["DynamicList"])
+    out = work.read_text(encoding="utf-8")
+    assert "A &quot;B&quot;" in out
+    assert "xy" in out    # данные с занятым символом не испорчены
+
+
+def test_duplicate_types_are_collapsed(tmp_path):
+    work = _edt(tmp_path)
+    set_attribute_type(work, "КодЯзыка", ["String", "String", "CatalogRef.Языки"])
+    assert _attr(cfg.load(work), "КодЯзыка").xpath("valueType/types/text()") == ["String", "CatalogRef.Языки"]

@@ -236,6 +236,7 @@ def set_attribute_type(form_path: Path, name: str, type_refs: list[str]) -> None
     """
     if not type_refs:
         raise OpPreconditionError("Нужен хотя бы один тип (--type)")
+    type_refs = list(dict.fromkeys(type_refs))   # повтор --type не дает дубля в составном типе
     for t in type_refs:
         validate_type_ref(t)
     if str(form_path).endswith(".form"):
