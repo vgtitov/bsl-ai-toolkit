@@ -120,6 +120,9 @@ def _parse(tag: str, value: str):
         if kind not in _PICTURE_KINDS or not name:
             raise OpPreconditionError(f"Картинка '{value}': ожидается common:Имя или std:Имя")
         return ("picture", f"{_PICTURE_KINDS[kind]}.{name}")
+    if low.endswith("DataPath"):
+        # EDT: <footerDataPath xsi:type="form:DataPath"><segments>…; простой текст EDT молча выбрасывает
+        return ("datapath", value)
     return ("text", value)
 
 
@@ -192,6 +195,9 @@ class _Edt:
         elif kind == "picture":
             el.set(_XT, "core:PictureRef")
             _sub(el, "picture", spec[1], inner)
+        elif kind == "datapath":
+            el.set(_XT, "form:DataPath")
+            _sub(el, "segments", spec[1], inner)
         if len(el):
             el.text = inner
             el[-1].tail = ws
@@ -231,7 +237,7 @@ class _Cfg:
         kind = spec[0]
         if kind == "text" and spec[1] == "xsi:nil":     # напр. <RowFilter xsi:nil="true"/>
             el.set(_XNIL, "true")
-        elif kind == "text":
+        elif kind in ("text", "datapath"):               # в Form.xml путь к данным - текст
             el.text = spec[1]
         elif kind == "color":
             el.text = f"{spec[1]}:{spec[2]}"

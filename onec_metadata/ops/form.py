@@ -15,7 +15,10 @@ P4.1 — `add_attribute`: реквизит формы (клон образца +
 реквизита-образца — пока отдельная операция (см. spec forms-design).
 """
 import copy
+import re
 from pathlib import Path
+
+from lxml import etree
 
 from onec_metadata.formats import configurator as cfg
 from onec_metadata.ops import OpPreconditionError
@@ -91,7 +94,8 @@ def _add_attribute_configurator(form_path: Path, name: str, type_ref: str) -> No
 _FIELD_SEMANTIC = ("Events", "ChoiceList", "TypeRestriction")
 
 
-def add_field(form_path: Path, name: str, data_path: str, title: str | None = None) -> None:
+def add_field(form_path: Path, name: str, data_path: str, title: str | None = None,
+              parent: str | None = None, position: str | None = None) -> None:
     """Добавить InputField в ChildItems с привязкой DataPath (P4.2).
 
     id поля и вложенных ContextMenu/ExtendedTooltip — свежие ПОСЛЕДОВАТЕЛЬНЫЕ из
@@ -102,8 +106,13 @@ def add_field(form_path: Path, name: str, data_path: str, title: str | None = No
     EDT-формат (.form): визуальное поле = items xsi:type=form:FormField — см. _add_field_edt."""
     validate_name(name)
     if str(form_path).endswith(".form"):
-        _add_field_edt(form_path, name, data_path, title)
+        if parent:
+            _add_field_into_edt(form_path, name, data_path, parent, position)
+        else:
+            _add_field_edt(form_path, name, data_path, title)
         return
+    if parent:
+        raise OpPreconditionError("add-field --parent пока только для EDT (Form.form)")
     doc = cfg.load(form_path)
     root = doc.getroot()
 
@@ -196,21 +205,132 @@ def _add_attribute_edt(form_path: Path, name: str, type_ref: str) -> None:
 
     new = copy.deepcopy(sample)
     new.find("name").text = name
-
-    # id: max по ПРОСТРАНСТВУ реквизитов формы (прямые <id> блоков attributes) + 1
-    ids = [int(a.findtext("id")) for a in existing if (a.findtext("id") or "").lstrip("-").isdigit()]
-    new.find("id").text = str(max([i for i in ids if i > 0], default=0) + 1)
-
-    vt = new.find("valueType")
-    types = vt.findall("types")
-    types[0].text = type_ref
-    cfg.remove_children(vt, types[1:])
-    cfg.remove_children(vt, [q for tag in _EDT_QUALIFIERS for q in vt.findall(tag)])
+    new.find("id").text = str(_next_attribute_id_edt(root))
+    _set_type_edt(new, type_ref)
 
     cfg.remove_children(
         new, [el for tag in _EDT_ATTR_SEMANTIC for el in new.findall(tag)])
 
     cfg.place_after(existing[-1], new)
+    cfg.save(doc, form_path)
+
+
+def remove_attribute_edt(form_path: Path, name: str, parent: str | None = None) -> None:
+    """EDT Form.form: удалить реквизит формы или (с `parent`) колонку реквизита-таблицы. Вызывается из
+    form_attributes (remove-attribute / remove-attribute-column). Отказ, если на него ссылается элемент
+    формы (dataPath / footerDataPath), если это основной реквизит или последняя колонка."""
+    doc = cfg.load(form_path)
+    root = doc.getroot()
+    owner_path = f"{parent}.{name}" if parent else name
+    if parent:
+        owners = [a for a in root.xpath("attributes") if a.findtext("name") == parent]
+        pool = owners[0].findall("columns") if owners else []
+    else:
+        pool = root.xpath("attributes")
+    hits = [a for a in pool if a.findtext("name") == name]
+    if not hits:
+        raise OpPreconditionError(f"Реквизит формы '{owner_path}' не найден")
+    if parent and len(pool) == 1:
+        raise OpPreconditionError("Последнюю колонку не удаляем: сначала добавьте новую")
+    if not parent and hits[0].findtext("main") == "true":
+        raise OpPreconditionError("Основной реквизит формы не удаляем")
+    used = [s for s in root.xpath(".//items//segments/text() | .//items/*/segments/text()")
+            if s == owner_path or s.startswith(owner_path + ".")]
+    if used:
+        raise OpPreconditionError(f"На '{owner_path}' ссылаются элементы формы - сначала удалите их")
+    cfg.remove_children(hits[0].getparent(), hits)
+    cfg.save(doc, form_path)
+
+
+def _next_attribute_id_edt(root) -> int:
+    """id реквизитов формы и колонок их таблиц — ОДНО пространство (реальная форма: таблица
+    id=5, её колонки 26..30 и 6), поэтому max берётся по всем <id> реквизитов и колонок."""
+    ids = [int(t) for t in root.xpath("attributes/id/text() | attributes/columns/id/text()")
+           if t.lstrip("-").isdigit()]
+    return max([i for i in ids if i > 0], default=0) + 1
+
+
+def _set_type_edt(node, type_ref: str, qualifiers=None) -> None:
+    """Тип клона: один <types>, квалификаторы образца сняты (с новым типом несовместимы);
+    qualifiers - (тег, [(дочерний тег, текст)]) для нового типа или None."""
+    vt = node.find("valueType")
+    types = vt.findall("types")
+    types[0].text = type_ref
+    cfg.remove_children(vt, types[1:])
+    cfg.remove_children(vt, [q for tag in _EDT_QUALIFIERS for q in vt.findall(tag)])
+    if qualifiers:
+        tag, children = qualifiers
+        q = etree.Element(tag)
+        ws = vt.text or "\n"           # отступ детей valueType (хвост types может быть отступом </valueType>)
+        inner = ws + "  "
+        q.text = inner
+        for i, (child, text) in enumerate(children):
+            el = etree.SubElement(q, child)
+            el.text = text
+            el.tail = inner if i < len(children) - 1 else ws
+        cfg.place_after(types[0], q)
+
+
+def edt_type(type_ref: str):
+    """Тип колонки в общем синтаксисе form_attributes (String | Boolean | Date | Number:N[.M] |
+    cfg:XRef.Имя) - в нотацию EDT: (types, квалификаторы или None). Нотация EDT (Number, CatalogRef.Имя)
+    принимается как есть. Корпус ERP: у Number пишутся precision и scale (scale=0 опускается);
+    Date без квалификаторов - дата и время (как DateTime у Конфигуратора)."""
+    m = re.fullmatch(r"Number:(\d+)(?:\.(\d+))?", type_ref)
+    if m:
+        children = [("precision", m.group(1))]
+        if m.group(2) and int(m.group(2)) > 0:
+            children.append(("scale", m.group(2)))
+        return "Number", ("numberQualifiers", children)
+    if type_ref.startswith("cfg:"):
+        return type_ref[len("cfg:"):], None
+    return type_ref, None
+
+
+# дети клона-колонки с семантикой образца: заголовок колонки образца не наследуется
+_EDT_COLUMN_SEMANTIC = ("title", "extInfo")
+
+
+def add_column_edt(form_path: Path, parent: str, name: str, type_ref: str, titles: dict | None = None) -> None:
+    """EDT Form.form: колонка реквизита-таблицы формы - клон последней колонки этой таблицы, новый id,
+    тип, заголовки на языках (без заголовка образца); встаёт после последней колонки. Вызывается из
+    form_attributes.add_attribute_column."""
+    validate_name(name)
+    types_text, qualifiers = edt_type(type_ref)
+    validate_type_ref(types_text)
+    doc = cfg.load(form_path)
+    root = doc.getroot()
+
+    owners = [a for a in root.xpath("attributes") if a.findtext("name") == parent]
+    if not owners:
+        raise OpPreconditionError(f"Реквизит формы '{parent}' не найден")
+    columns = owners[0].findall("columns")
+    if not columns:
+        raise OpPreconditionError(
+            f"У реквизита '{parent}' нет колонок-образцов (не таблица или пустая таблица)")
+    if name in [c.findtext("name") for c in columns]:
+        raise OpPreconditionError(f"Колонка '{name}' у реквизита '{parent}' уже существует")
+
+    new = copy.deepcopy(columns[-1])
+    new.find("name").text = name
+    new.find("id").text = str(_next_attribute_id_edt(root))
+    _set_type_edt(new, types_text, qualifiers)
+    cfg.remove_children(
+        new, [el for tag in _EDT_COLUMN_SEMANTIC for el in new.findall(tag)])
+    # заголовки - сразу после <name>, по блоку на язык (как пишет EDT)
+    anchor = new.find("name")
+    ws = anchor.tail
+    for lang, text in (titles or {}).items():
+        t = etree.Element("title")
+        t.text = ws + "  "
+        k = etree.SubElement(t, "key")
+        k.text, k.tail = lang, ws + "  "
+        v = etree.SubElement(t, "value")
+        v.text, v.tail = text, ws
+        cfg.place_after(anchor, t)
+        anchor = t
+
+    cfg.place_after(columns[-1], new)
     cfg.save(doc, form_path)
 
 
@@ -267,3 +387,75 @@ def _add_field_edt(form_path: Path, name: str, data_path: str, title: str | None
 
     cfg.place_after(sample, new)
     cfg.save(doc, form_path)
+
+
+# дети клона-поля с семантикой образца: заголовок, подсказка и обработчики не наследуются
+_EDT_FIELD_SEMANTIC = ("title", "toolTip", "handlers")
+
+
+def _add_field_into_edt(form_path: Path, name: str, data_path: str, parent: str,
+                        position: str | None) -> None:
+    """Поле внутри контейнера (таблица - колонка, группа): клон последнего поля контейнера,
+    свежие id в пространстве элементов, место - среди <items> контейнера (до его свойств).
+    position: first | last (умолч.) | before:Имя | after:Имя - среди прямых <items> контейнера."""
+    doc = cfg.load(form_path)
+    root = doc.getroot()
+    xt = cfg.q("xsi", "type")
+
+    every = root.xpath(".//items")
+    if name in [i.findtext("name") for i in every]:
+        raise OpPreconditionError(f"Элемент формы '{name}' уже существует")
+    owners = [i for i in every if i.findtext("name") == parent]
+    if not owners:
+        raise OpPreconditionError(f"Контейнер '{parent}' не найден среди элементов формы")
+    container = owners[0]
+    children = container.findall("items")
+
+    samples = [i for i in container.iter("items") if (i.get(xt) or "").endswith("FormField")]
+    # образец - поле ввода (картинка/флажок в том же контейнере дали бы поле не того вида)
+    samples = [s for s in samples if s.findtext("type") == "InputField"] or samples
+    if not samples:
+        raise OpPreconditionError(
+            f"В контейнере '{parent}' нет поля-образца (создание с нуля - отдельная операция)")
+
+    anchor, after = _edt_insert_anchor(children, position or "last", parent)
+
+    el_ids = [int(t) for t in root.xpath(".//id[not(ancestor::attributes)]/text()")
+              if t.lstrip("-").isdigit()]
+    new = copy.deepcopy(samples[-1])
+    _reid_edt(new, max([i for i in el_ids if i > 0], default=0) + 1)
+    new.find("name").text = name
+    seg = new.xpath("dataPath/segments")
+    if not seg:
+        raise OpPreconditionError("У образца поля нет dataPath/segments")
+    seg[0].text = data_path
+    cfg.remove_children(new, [el for tag in _EDT_FIELD_SEMANTIC for el in new.findall(tag)])
+    for tip in new.xpath("extendedTooltip/name"):
+        tip.text = f"{name}РасширеннаяПодсказка"
+    for menu in new.xpath("contextMenu/name"):
+        menu.text = f"{name}КонтекстноеМеню"
+
+    if after:
+        cfg.place_after(anchor, new)
+    else:
+        # отступ перед якорем - хвост предыдущего соседа или текст контейнера
+        prev = anchor.getprevious()
+        indent = prev.tail if prev is not None else anchor.getparent().text
+        anchor.addprevious(new)
+        new.tail = indent
+    cfg.save(doc, form_path)
+
+
+def _edt_insert_anchor(children, position: str, parent: str):
+    """(якорь, вставить_после) среди прямых <items> контейнера."""
+    if position == "last":
+        return children[-1], True
+    if position == "first":
+        return children[0], False
+    kind, _, ref = position.partition(":")
+    if kind not in ("after", "before") or not ref:
+        raise OpPreconditionError("position: first | last | before:Имя | after:Имя")
+    hits = [c for c in children if c.findtext("name") == ref]
+    if not hits:
+        raise OpPreconditionError(f"В контейнере '{parent}' нет элемента '{ref}' для position")
+    return hits[0], kind == "after"
