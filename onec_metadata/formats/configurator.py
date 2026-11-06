@@ -20,6 +20,7 @@ XML-парсер по спецификации нормализует CRLF→LF,
 """
 import hashlib
 import os
+import re
 import shutil
 import tempfile
 from pathlib import Path
@@ -69,6 +70,7 @@ class Doc:
         self.has_bom = has_bom                  # Конфигуратор: да; EDT: нет
         self.src_path = None
         self.src_hash = None                    # sha1 файла при чтении: save не затирает чужую правку
+        self.escape_text_quotes = False         # исходник пишет кавычку в тексте как &quot; (EDT)
 
     def __getattr__(self, name):
         return getattr(self.tree, name)
@@ -101,7 +103,22 @@ def load(path: Path) -> Doc:
     doc = Doc(tree, decl_newline, trailing_newline, has_bom=has_bom)
     doc.src_hash = hashlib.sha1(raw_all).hexdigest()
     doc.src_path = path.resolve()
+    # lxml раскрывает &quot; в тексте и обратно не экранирует; EDT пишет кавычку в тексте как &quot;.
+    # Запоминаем стиль исходника, чтобы save вернул его (иначе diff-шум в чужих заголовках).
+    doc.escape_text_quotes = _TEXT_QUOTE_ENTITY.search(body_text) is not None
     return doc
+
+
+# &quot; в ТЕКСТЕ (между тегами), не в значении атрибута
+_TEXT_QUOTE_ENTITY = re.compile(r">[^<]*&quot;")
+_TAG_OR_TEXT = re.compile(r"(<[^>]*>)")
+
+
+def _escape_text_quotes(body: str) -> str:
+    """Кавычки в текстовых узлах -> &quot;. Теги не трогаем: в значениях атрибутов lxml сам пишет &quot;,
+    а символ > внутри значения атрибута он экранирует, поэтому граница тега по '>' надежна."""
+    parts = _TAG_OR_TEXT.split(body)
+    return "".join(p if p.startswith("<") else p.replace('"', "&quot;") for p in parts)
 
 
 def place_after(anchor, new) -> None:
@@ -152,6 +169,8 @@ def save(doc: Doc, path: Path) -> None:
     path = path.resolve()                        # через symlink пишем в целевой файл, ссылка остаётся
     body = etree.tostring(doc.tree, encoding="unicode")
     body = body.replace("&#13;\n", "\r\n").replace("&#13;", "\r")
+    if doc.escape_text_quotes:
+        body = _escape_text_quotes(body)
     bom = BOM if doc.has_bom else ""
     text = bom + XML_DECL + doc.decl_newline + body + doc.trailing_newline
     data = text.encode("utf-8")
