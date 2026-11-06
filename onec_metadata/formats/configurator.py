@@ -20,6 +20,7 @@ XML-парсер по спецификации нормализует CRLF→LF,
 """
 import hashlib
 import os
+import re
 import shutil
 import tempfile
 from pathlib import Path
@@ -69,6 +70,7 @@ class Doc:
         self.has_bom = has_bom                  # Конфигуратор: да; EDT: нет
         self.src_path = None
         self.src_hash = None                    # sha1 файла при чтении: save не затирает чужую правку
+        self.quot_texts = {}                    # тексты, которые lxml пишет иначе исходника (см. load)
 
     def __getattr__(self, name):
         return getattr(self.tree, name)
@@ -101,7 +103,47 @@ def load(path: Path) -> Doc:
     doc = Doc(tree, decl_newline, trailing_newline, has_bom=has_bom)
     doc.src_hash = hashlib.sha1(raw_all).hexdigest()
     doc.src_path = path.resolve()
+    # lxml пишет текст по-своему: раскрывает &quot; и числовые ссылки, экранирует сырой '>' - без
+    # восстановления любая правка дает diff-шум в чужих текстах. Дерево не трогаем (операции видят обычные
+    # символы): запоминаем такие фрагменты исходника, save вернет их нетронутым.
+    doc.quot_texts = _quote_texts(protected)
     return doc
+
+
+_TAG = re.compile(r"<[^>]*>")
+
+
+def _lxml_text(seg: str) -> str:
+    """Текстовый фрагмент исходника ровно так, как его запишет lxml после разбора."""
+    return etree.tostring(etree.fromstring("<x>" + seg + "</x>", _PARSER), encoding="unicode")[3:-4]
+
+
+def _quote_texts(protected: str) -> dict:
+    """Текстовые фрагменты, которые lxml запишет иначе, чем в исходнике (&quot;, сырой '>', числовые
+    ссылки): ключ - запись lxml, значение - очередь исходных записей в порядке документа. Очередь, а не
+    одно значение: одинаковые тексты бывают записаны по-разному (A &quot;B&quot; и A "B")."""
+    texts: dict = {}
+    for seg in _TAG.split(protected):
+        if "&" in seg or ">" in seg or '"' in seg:
+            texts.setdefault(_lxml_text(seg), []).append(seg)
+    # фрагменты, которые lxml и так пишет как в исходнике, восстанавливать незачем
+    return {k: v for k, v in texts.items() if any(s != k for s in v)}
+
+
+def _restore_quot(body: str, quot_texts: dict) -> str:
+    """Текстовым фрагментам, совпавшим с исходными, вернуть исходную запись по очереди документа.
+    Измененный и новый текст остается как записал lxml. Граница тега по '>' надежна: lxml экранирует
+    '>' в атрибутах."""
+    # shortcut: привязка по значению и порядку, не по узлу - если в одном файле один и тот же текст записан
+    # по-разному И операция переставит такие узлы, записи поменяются местами. Один сериализатор пишет
+    # файл единообразно, в выгрузках такого нет; понадобится - хранить путь узла (text/tail).
+    queues = {k: list(v) for k, v in quot_texts.items()}
+    parts = re.split(r"(<[^>]*>)", body)
+    for i in range(0, len(parts), 2):
+        q = queues.get(parts[i]) if parts[i] else None
+        if q:
+            parts[i] = q.pop(0)
+    return "".join(parts)
 
 
 def place_after(anchor, new) -> None:
@@ -151,6 +193,8 @@ def remove_children(container, to_remove) -> None:
 def save(doc: Doc, path: Path) -> None:
     path = path.resolve()                        # через symlink пишем в целевой файл, ссылка остаётся
     body = etree.tostring(doc.tree, encoding="unicode")
+    if doc.quot_texts:                           # до замены &#13;: ключи сняты с защищенного текста
+        body = _restore_quot(body, doc.quot_texts)
     body = body.replace("&#13;\n", "\r\n").replace("&#13;", "\r")
     bom = BOM if doc.has_bom else ""
     text = bom + XML_DECL + doc.decl_newline + body + doc.trailing_newline

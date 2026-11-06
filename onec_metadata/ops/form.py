@@ -172,7 +172,7 @@ _EDT_ATTR_SEMANTIC = (
 # квалификаторы типа образца — с новым типом не совместимы
 _EDT_QUALIFIERS = (
     "stringQualifiers", "numberQualifiers", "dateQualifiers",
-    "binaryQualifiers",
+    "binaryQualifiers", "binaryDataQualifiers",
 )
 
 
@@ -213,6 +213,107 @@ def _add_attribute_edt(form_path: Path, name: str, type_ref: str) -> None:
 
     cfg.place_after(existing[-1], new)
     cfg.save(doc, form_path)
+
+
+# ---------- тип СУЩЕСТВУЮЩЕГО реквизита формы (оба формата) ----------
+
+# квалификатор примитива -> тип, без которого он не нужен (EDT / Конфигуратор)
+# имя квалификатора двоичных данных в EDT по корпусу не подтверждено (реквизитов BinaryData в выгрузке ERP
+# нет) - снимаем оба варианта
+_EDT_QUALIFIER_OF = {"stringQualifiers": "String", "numberQualifiers": "Number", "dateQualifiers": "Date",
+                     "binaryQualifiers": "BinaryData", "binaryDataQualifiers": "BinaryData"}
+_CFG_QUALIFIER_OF = {"StringQualifiers": "xs:string", "NumberQualifiers": "xs:decimal",
+                     "DateQualifiers": "xs:dateTime", "BinaryDataQualifiers": "xs:base64Binary"}
+
+
+def set_attribute_type(form_path: Path, name: str, type_refs: list[str]) -> None:
+    """Задать тип СУЩЕСТВУЮЩЕМУ реквизиту формы (составной - несколько типов).
+
+    Блок типа создается, если его нет (EDT MCP создает основной реквизит без valueType - форма
+    не открывается). Квалификаторы примитивов, которых в новом типе нет, снимаются; оставшимся
+    примитивам квалификаторы сохраняются. Признак основного реквизита и прочее не трогаются.
+    """
+    if not type_refs:
+        raise OpPreconditionError("Нужен хотя бы один тип (--type)")
+    type_refs = list(dict.fromkeys(type_refs))   # повтор --type не дает дубля в составном типе
+    for t in type_refs:
+        validate_type_ref(t)
+    edt = str(form_path).endswith(".form")
+    for t in type_refs:
+        # нотация формата: EDT - без префикса (String, CatalogRef.X), Конфигуратор - xs:/cfg:/v8:
+        if edt and ":" in t:
+            raise OpPreconditionError(f"Тип '{t}': для EDT-формы нотация без префикса (String, CatalogRef.Имя)")
+        if not edt and ":" not in t:
+            raise OpPreconditionError(f"Тип '{t}': для формы Конфигуратора нужен префикс (xs:string, cfg:CatalogRef.Имя)")
+    if edt:
+        _set_attribute_type_edt(form_path, name, type_refs)
+    else:
+        _set_attribute_type_configurator(form_path, name, type_refs)
+
+
+def _set_attribute_type_edt(form_path: Path, name: str, type_refs: list[str]) -> None:
+    doc = cfg.load(form_path)
+    attr = next((a for a in doc.getroot().xpath("attributes") if a.findtext("name") == name), None)
+    if attr is None:
+        raise OpPreconditionError(f"Реквизит формы '{name}' не найден")
+
+    child_indent = attr.text or "\n"
+    vt = attr.find("valueType")
+    if vt is None:
+        anchor = attr.find("id")
+        if anchor is None:
+            raise OpPreconditionError(f"У реквизита формы '{name}' нет <id> - некуда поставить valueType")
+        vt = etree.Element("valueType")
+        vt.text = child_indent + "  "
+        cfg.place_after(anchor, vt)          # сразу после <id>, как в выгрузке EDT
+    _replace_types(vt, "types", type_refs, child_indent)
+    stale = [q for tag, prim in _EDT_QUALIFIER_OF.items() if prim not in type_refs for q in vt.findall(tag)]
+    cfg.remove_children(vt, stale)
+    cfg.save(doc, form_path)
+
+
+def _set_attribute_type_configurator(form_path: Path, name: str, type_refs: list[str]) -> None:
+    doc = cfg.load(form_path)
+    hits = doc.getroot().xpath("lf:Attributes/lf:Attribute[@name=$n]", namespaces=NS, n=name)
+    if not hits:
+        raise OpPreconditionError(f"Реквизит формы '{name}' не найден")
+    attr = hits[0]
+    if len(attr) == 0:
+        raise OpPreconditionError(f"У реквизита формы '{name}' нет дочерних элементов - формат не распознан")
+
+    child_indent = attr.text or "\n"
+    type_el = attr.find(cfg.q("lf", "Type"))
+    if type_el is None:
+        type_el = etree.Element(cfg.q("lf", "Type"))
+        type_el.text = child_indent + "\t"
+        title = attr.find(cfg.q("lf", "Title"))
+        if title is not None:
+            cfg.place_after(title, type_el)  # порядок выгрузки: Title, Type, ...
+        else:
+            type_el.tail = child_indent
+            attr.insert(0, type_el)
+    _replace_types(type_el, cfg.q("v8", "Type"), type_refs, child_indent)
+    stale = [q for tag, prim in _CFG_QUALIFIER_OF.items() if prim not in type_refs
+             for q in type_el.findall(cfg.q("v8", tag))]
+    cfg.remove_children(type_el, stale)
+    cfg.save(doc, form_path)
+
+
+def _replace_types(container, tag: str, type_refs: list[str], closing_indent: str) -> None:
+    """Заменить элементы типа в блоке типа: новые встают на место старых (перед квалификаторами).
+    Отступы: у детей - отступ блока (container.text), у последнего - закрывающий (closing_indent)."""
+    old = container.findall(tag)
+    pos = list(container).index(old[0]) if old else 0
+    for el in old:
+        container.remove(el)
+    for i, t in enumerate(type_refs):
+        el = etree.Element(tag)
+        el.text = t
+        container.insert(pos + i, el)
+    kids = list(container)
+    for el in kids[:-1]:
+        el.tail = container.text
+    kids[-1].tail = closing_indent
 
 
 def remove_attribute_edt(form_path: Path, name: str, parent: str | None = None) -> None:
