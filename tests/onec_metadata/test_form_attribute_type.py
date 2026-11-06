@@ -111,3 +111,14 @@ def test_save_keeps_escaped_quotes_in_text(tmp_path):
     out = work.read_text(encoding="utf-8")
     assert marker in out
     assert out == src
+
+
+def test_save_mixed_quotes_round_trip(tmp_path):
+    """Смешанный исходник: в одном тексте &quot;, в другом обычная кавычка - каждая остается как была."""
+    src = (FIX / "form.form").read_text(encoding="utf-8")
+    block = ('<title><key>ru</key><value>A &quot;B&quot;</value></title>'
+             '<title><key>en</key><value>C "D"</value></title>')
+    src = src.replace("<name>КодЯзыка</name>", "<name>КодЯзыка</name>\n    " + block, 1)
+    work = _edt(tmp_path, src)
+    set_attribute_type(work, "Список", ["DynamicList"])
+    assert work.read_text(encoding="utf-8") == src
