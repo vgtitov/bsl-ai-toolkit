@@ -70,7 +70,7 @@ class Doc:
         self.has_bom = has_bom                  # Конфигуратор: да; EDT: нет
         self.src_path = None
         self.src_hash = None                    # sha1 файла при чтении: save не затирает чужую правку
-        self.quot_texts = {}                    # текст исходника с &quot; (см. load)
+        self.quot_texts = {}                    # тексты, которые lxml пишет иначе исходника (см. load)
 
     def __getattr__(self, name):
         return getattr(self.tree, name)
@@ -103,32 +103,44 @@ def load(path: Path) -> Doc:
     doc = Doc(tree, decl_newline, trailing_newline, has_bom=has_bom)
     doc.src_hash = hashlib.sha1(raw_all).hexdigest()
     doc.src_path = path.resolve()
-    # lxml раскрывает &quot; в тексте и обратно не экранирует, а EDT пишет кавычку в тексте сущностью:
-    # без восстановления любая правка дает diff-шум в чужих заголовках. Дерево не трогаем (операции видят
-    # обычную кавычку): запоминаем текстовые фрагменты исходника с &quot;, save вернет их нетронутым.
-    doc.quot_texts = {_as_lxml_writes(seg): seg
-                      for seg in _TAG.split(protected) if "&quot;" in seg}
+    # lxml пишет текст по-своему: раскрывает &quot; и числовые ссылки, экранирует сырой '>' - без
+    # восстановления любая правка дает diff-шум в чужих текстах. Дерево не трогаем (операции видят обычные
+    # символы): запоминаем такие фрагменты исходника, save вернет их нетронутым.
+    doc.quot_texts = _quote_texts(protected)
     return doc
 
 
 _TAG = re.compile(r"<[^>]*>")
-_CHAR_REF = re.compile(r"&#(?:[xX]([0-9A-Fa-f]+)|([0-9]+));")
 
 
-def _as_lxml_writes(seg: str) -> str:
-    """Текст исходника в том виде, как его запишет lxml: &quot; -> кавычка, числовые ссылки -> символ
-    (кроме &#13; - его защищает load/save)."""
-    def char(m):
-        cp = int(m.group(1), 16) if m.group(1) else int(m.group(2))
-        return m.group(0) if cp == 13 else chr(cp)
-    return _CHAR_REF.sub(char, seg.replace("&quot;", '"'))
+def _lxml_text(seg: str) -> str:
+    """Текстовый фрагмент исходника ровно так, как его запишет lxml после разбора."""
+    return etree.tostring(etree.fromstring("<x>" + seg + "</x>", _PARSER), encoding="unicode")[3:-4]
+
+
+def _quote_texts(protected: str) -> dict:
+    """Текстовые фрагменты, которые lxml запишет иначе, чем в исходнике (&quot;, сырой '>', числовые
+    ссылки): ключ - запись lxml, значение - очередь исходных записей в порядке документа. Очередь, а не
+    одно значение: одинаковые тексты бывают записаны по-разному (A &quot;B&quot; и A "B")."""
+    texts: dict = {}
+    for seg in _TAG.split(protected):
+        if "&" in seg or ">" in seg or '"' in seg:
+            texts.setdefault(_lxml_text(seg), []).append(seg)
+    # фрагменты, которые lxml и так пишет как в исходнике, восстанавливать незачем
+    return {k: v for k, v in texts.items() if any(s != k for s in v)}
 
 
 def _restore_quot(body: str, quot_texts: dict) -> str:
-    """Текстовым фрагментам, совпавшим с исходными, вернуть исходную запись с &quot;. Измененный
-    и новый текст остается как записал lxml. Граница тега по '>' надежна: lxml экранирует '>' в атрибутах."""
+    """Текстовым фрагментам, совпавшим с исходными, вернуть исходную запись по очереди документа.
+    Измененный и новый текст остается как записал lxml. Граница тега по '>' надежна: lxml экранирует
+    '>' в атрибутах."""
+    queues = {k: list(v) for k, v in quot_texts.items()}
     parts = re.split(r"(<[^>]*>)", body)
-    return "".join(quot_texts.get(p, p) if i % 2 == 0 and '"' in p else p for i, p in enumerate(parts))
+    for i in range(0, len(parts), 2):
+        q = queues.get(parts[i]) if parts[i] else None
+        if q:
+            parts[i] = q.pop(0)
+    return "".join(parts)
 
 
 def place_after(anchor, new) -> None:

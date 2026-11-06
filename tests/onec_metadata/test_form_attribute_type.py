@@ -180,3 +180,28 @@ def test_loaded_tree_has_plain_quotes(tmp_path):
                       "<name>КодЯзыка</name>\n    <title><key>ru</key><value>A &quot;B&quot;</value></title>", 1)
     work = _edt(tmp_path, src)
     assert cfg.load(work).getroot().xpath("//attributes[name='КодЯзыка']/title/value/text()") == ['A "B"']
+
+
+@pytest.mark.parametrize("block", [
+    '<value>A &quot;B&quot;</value></title><title><key>en</key><value>A "B"</value>',
+    '<value>A "B"</value></title><title><key>en</key><value>A &quot;B&quot;</value>',
+    '<value>A &quot;B&quot; &#60; &gt; &amp; &#38; \'q\'</value>',
+])
+def test_save_quot_round_trip_cases(tmp_path, block):
+    """Одинаковые тексты в разной записи и соседство &quot; с другими ссылками - файл не меняется."""
+    src = (FIX / "form.form").read_text(encoding="utf-8")
+    src = src.replace("<name>КодЯзыка</name>",
+                      "<name>КодЯзыка</name>\n    <title><key>ru</key>" + block + "</title>", 1)
+    work = _edt(tmp_path, src)
+    set_attribute_type(work, "Список", ["DynamicList"])
+    assert work.read_text(encoding="utf-8") == src
+
+
+def test_save_keeps_raw_gt_in_text(tmp_path):
+    """Типовая ERP пишет '>' в тексте сырым, lxml экранирует его в &gt; - файл не должен меняться."""
+    src = (FIX / "form.form").read_text(encoding="utf-8")
+    src = src.replace("<name>КодЯзыка</name>",
+                      "<name>КодЯзыка</name>\n    <title><key>ru</key><value>&lt;font Verve>&lt;/></value></title>", 1)
+    work = _edt(tmp_path, src)
+    set_attribute_type(work, "Список", ["DynamicList"])
+    assert work.read_text(encoding="utf-8") == src
