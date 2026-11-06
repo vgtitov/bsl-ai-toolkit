@@ -122,3 +122,26 @@ def test_save_mixed_quotes_round_trip(tmp_path):
     work = _edt(tmp_path, src)
     set_attribute_type(work, "Список", ["DynamicList"])
     assert work.read_text(encoding="utf-8") == src
+
+
+def test_save_char_ref_of_sentinel_is_not_turned_into_quote(tmp_path):
+    """Если служебный символ уже есть в исходнике ссылкой, защита кавычек отключается - данные не портятся."""
+    src = (FIX / "form.form").read_text(encoding="utf-8")
+    src = src.replace("<name>КодЯзыка</name>",
+                      "<name>КодЯзыка</name>\n    <title><key>ru</key><value>x&#xE000;y</value></title>", 1)
+    work = _edt(tmp_path, src)
+    set_attribute_type(work, "Список", ["DynamicList"])
+    out = cfg.load(work)
+    assert out.getroot().xpath("//attributes[name='КодЯзыка']/title/value/text()") == ["xy"]
+
+
+def test_edt_binary_qualifier_dropped_under_either_name(tmp_path):
+    src = (FIX / "form.form").read_text(encoding="utf-8")
+    src = src.replace("<types>String</types>\n      <stringQualifiers>\n        <length>10</length>\n      </stringQualifiers>",
+                      "<types>BinaryData</types>\n      <binaryDataQualifiers>\n        <length>10</length>\n"
+                      "      </binaryDataQualifiers>", 1)
+    work = _edt(tmp_path, src)
+    set_attribute_type(work, "КодЯзыка", ["String"])
+    a = _attr(cfg.load(work), "КодЯзыка")
+    assert a.xpath("valueType/binaryDataQualifiers") == []
+    assert a.xpath("valueType/types/text()") == ["String"]

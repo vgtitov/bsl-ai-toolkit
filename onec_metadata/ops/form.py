@@ -165,7 +165,7 @@ _EDT_ATTR_SEMANTIC = (
 # квалификаторы типа образца — с новым типом не совместимы
 _EDT_QUALIFIERS = (
     "stringQualifiers", "numberQualifiers", "dateQualifiers",
-    "binaryQualifiers",
+    "binaryQualifiers", "binaryDataQualifiers",
 )
 
 
@@ -219,8 +219,10 @@ def _add_attribute_edt(form_path: Path, name: str, type_ref: str) -> None:
 # ---------- тип СУЩЕСТВУЮЩЕГО реквизита формы (оба формата) ----------
 
 # квалификатор примитива -> тип, без которого он не нужен (EDT / Конфигуратор)
-_EDT_QUALIFIER_OF = {"stringQualifiers": "String", "numberQualifiers": "Number",
-                     "dateQualifiers": "Date", "binaryQualifiers": "BinaryData"}
+# имя квалификатора двоичных данных в EDT по корпусу не подтверждено (реквизитов BinaryData в выгрузке ERP
+# нет) - снимаем оба варианта
+_EDT_QUALIFIER_OF = {"stringQualifiers": "String", "numberQualifiers": "Number", "dateQualifiers": "Date",
+                     "binaryQualifiers": "BinaryData", "binaryDataQualifiers": "BinaryData"}
 _CFG_QUALIFIER_OF = {"StringQualifiers": "xs:string", "NumberQualifiers": "xs:decimal",
                      "DateQualifiers": "xs:dateTime", "BinaryDataQualifiers": "xs:base64Binary"}
 

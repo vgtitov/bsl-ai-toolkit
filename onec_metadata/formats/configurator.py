@@ -100,7 +100,9 @@ def load(path: Path) -> Doc:
     # lxml раскрывает &quot; в тексте и обратно не экранирует, а EDT пишет кавычку в тексте сущностью:
     # без защиты любая правка дает diff-шум в чужих заголовках. Каждая &quot; исходника заменяется
     # служебным символом и возвращается при save ровно на свое место (обычные кавычки не трогаются).
-    keep_quot = _QUOT_SENTINEL not in protected
+    # маркер годен, только если в исходнике его нет ни символом, ни ссылкой (&#xE000; / &#57344;)
+    low = protected.lower()
+    keep_quot = _QUOT_SENTINEL not in protected and "&#xe000;" not in low and "&#57344;" not in low
     if keep_quot:
         protected = protected.replace("&quot;", _QUOT_SENTINEL)
     tree = etree.ElementTree(
