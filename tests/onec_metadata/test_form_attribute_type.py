@@ -1,7 +1,7 @@
 # DISCIPLINE_ALLOW_TEST_EDIT: новый red-тест TDD — смена типа СУЩЕСТВУЮЩЕГО реквизита формы
 """form.set_attribute_type: тип существующего реквизита формы, EDT (`Form.form`) и Конфигуратор (`Form.xml`).
 
-Случай из практики (DCM-5994, 06.11.2026): EDT MCP создал форму обработки, а основной реквизит `Объект`
+Случай из практики: EDT MCP создал форму обработки, а основной реквизит `Объект`
 остался БЕЗ valueType — форма не открывается, а ни MCP, ни add-attribute (только новый реквизит) тип
 существующему не задают. Операция ставит тип, создавая valueType/Type при отсутствии, и снимает
 квалификаторы примитивов, которых в новом типе нет.
@@ -56,10 +56,10 @@ def test_edt_creates_missing_value_type_after_id(tmp_path):
     work = _edt(tmp_path, src[:start] + src[end:])
     assert _attr(cfg.load(work), "Список").xpath("valueType") == []
 
-    set_attribute_type(work, "Список", ["DataProcessorObject.АРМ"])
+    set_attribute_type(work, "Список", ["DataProcessorObject.РабочееМесто"])
 
     text = work.read_text(encoding="utf-8")
-    assert ("<id>1</id>\n    <valueType>\n      <types>DataProcessorObject.АРМ</types>\n"
+    assert ("<id>1</id>\n    <valueType>\n      <types>DataProcessorObject.РабочееМесто</types>\n"
             "    </valueType>\n    <view>") in text
     a = _attr(cfg.load(work), "Список")
     assert [c.tag for c in a][:4] == ["name", "id", "valueType", "view"]
@@ -80,13 +80,13 @@ def test_edt_rejects_garbage_type(tmp_path):
 def test_cfg_replace_main_attribute_type(tmp_path):
     work = tmp_path / "Form.xml"
     shutil.copy(FIX / "form.xml", work)
-    set_attribute_type(work, "Объект", ["cfg:DataProcessorObject.АРМ"])
+    set_attribute_type(work, "Объект", ["cfg:DataProcessorObject.РабочееМесто"])
     doc = cfg.load(work)
     types = doc.getroot().xpath("lf:Attributes/lf:Attribute[@name='Объект']/lf:Type/v8:Type/text()",
                                 namespaces=cfg.NS)
-    assert types == ["cfg:DataProcessorObject.АРМ"]
+    assert types == ["cfg:DataProcessorObject.РабочееМесто"]
     text = work.read_text(encoding="utf-8-sig")
-    assert "\t\t\t<Type>\n\t\t\t\t<v8:Type>cfg:DataProcessorObject.АРМ</v8:Type>\n\t\t\t</Type>" in text
+    assert "\t\t\t<Type>\n\t\t\t\t<v8:Type>cfg:DataProcessorObject.РабочееМесто</v8:Type>\n\t\t\t</Type>" in text
 
 
 def test_cfg_creates_missing_type(tmp_path):
@@ -101,7 +101,7 @@ def test_cfg_creates_missing_type(tmp_path):
 
 def test_save_keeps_escaped_quotes_in_text(tmp_path):
     """EDT пишет кавычку в тексте как &quot;. lxml при разборе ее раскрывает - сохранение обязано вернуть
-    как было, иначе любая правка движка дает diff-шум в чужих заголовках (найдено на DCM-5994)."""
+    как было, иначе любая правка движка дает diff-шум в чужих заголовках."""
     src = (FIX / "form.form").read_text(encoding="utf-8")
     src = src.replace("<name>КодЯзыка</name>", "<name>КодЯзыка</name>\n    <!--x-->", 1)
     marker = '<value>Код &quot;языка&quot; и &lt;тег&gt;</value>'
