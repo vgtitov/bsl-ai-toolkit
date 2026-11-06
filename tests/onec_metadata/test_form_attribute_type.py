@@ -147,16 +147,15 @@ def test_edt_binary_qualifier_dropped_under_either_name(tmp_path):
     assert a.xpath("valueType/types/text()") == ["String"]
 
 
-def test_save_quot_kept_even_if_first_private_char_is_taken(tmp_path):
-    """Занятый служебный символ не отключает защиту: берется следующий свободный."""
+def test_save_quot_with_char_ref_in_same_text(tmp_path):
+    """Текст с &quot; и числовой ссылкой возвращается как в исходнике (lxml раскрыл бы обе)."""
     src = (FIX / "form.form").read_text(encoding="utf-8")
     block = '<title><key>ru</key><value>x&#xE000;y A &quot;B&quot;</value></title>'
     src = src.replace("<name>КодЯзыка</name>", "<name>КодЯзыка</name>\n    " + block, 1)
     work = _edt(tmp_path, src)
     set_attribute_type(work, "Список", ["DynamicList"])
     out = work.read_text(encoding="utf-8")
-    assert "A &quot;B&quot;" in out
-    assert "xy" in out    # данные с занятым символом не испорчены
+    assert out == src
 
 
 def test_duplicate_types_are_collapsed(tmp_path):
@@ -172,3 +171,12 @@ def test_type_notation_must_match_format(tmp_path):
     shutil.copy(FIX / "form.xml", work)
     with pytest.raises(OpPreconditionError):
         set_attribute_type(work, "Объект", ["CatalogObject.Товары"])
+
+
+def test_loaded_tree_has_plain_quotes(tmp_path):
+    """Операции движка видят в дереве обычную кавычку, без служебных подстановок."""
+    src = (FIX / "form.form").read_text(encoding="utf-8")
+    src = src.replace("<name>КодЯзыка</name>",
+                      "<name>КодЯзыка</name>\n    <title><key>ru</key><value>A &quot;B&quot;</value></title>", 1)
+    work = _edt(tmp_path, src)
+    assert cfg.load(work).getroot().xpath("//attributes[name='КодЯзыка']/title/value/text()") == ['A "B"']

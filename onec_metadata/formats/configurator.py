@@ -70,7 +70,7 @@ class Doc:
         self.has_bom = has_bom                  # Конфигуратор: да; EDT: нет
         self.src_path = None
         self.src_hash = None                    # sha1 файла при чтении: save не затирает чужую правку
-        self.quot_sentinel = None               # служебный символ на месте &quot; исходника (см. load)
+        self.quot_texts = {}                    # текст исходника с &quot; (см. load)
 
     def __getattr__(self, name):
         return getattr(self.tree, name)
@@ -98,37 +98,37 @@ def load(path: Path) -> Doc:
             break
 
     protected = body_text.rstrip("\r\n").replace("\r\n", "&#13;\n")
-    # lxml раскрывает &quot; в тексте и обратно не экранирует, а EDT пишет кавычку в тексте сущностью:
-    # без защиты любая правка дает diff-шум в чужих заголовках. Каждая &quot; исходника заменяется
-    # служебным символом и возвращается при save ровно на свое место (обычные кавычки не трогаются).
-    # shortcut: пока документ загружен, операции видят в таком тексте служебный символ вместо кавычки;
-    # если операции понадобится сравнивать текст с кавычками - читать через doc.quot_sentinel.
-    sentinel = _free_sentinel(protected) if "&quot;" in protected else None
-    if "&quot;" in protected and sentinel is None:
-        from onec_metadata.ops import OpPreconditionError
-        raise OpPreconditionError(f"{path.name}: заняты все служебные символы - &quot; не сохранить "
-                                  "без diff-шума, файл не правим")
-    if sentinel:
-        protected = protected.replace("&quot;", sentinel)
     tree = etree.ElementTree(
         etree.fromstring(protected.encode("utf-8"), _PARSER))
     doc = Doc(tree, decl_newline, trailing_newline, has_bom=has_bom)
     doc.src_hash = hashlib.sha1(raw_all).hexdigest()
     doc.src_path = path.resolve()
-    doc.quot_sentinel = sentinel
+    # lxml раскрывает &quot; в тексте и обратно не экранирует, а EDT пишет кавычку в тексте сущностью:
+    # без восстановления любая правка дает diff-шум в чужих заголовках. Дерево не трогаем (операции видят
+    # обычную кавычку): запоминаем текстовые фрагменты исходника с &quot;, save вернет их нетронутым.
+    doc.quot_texts = {_as_lxml_writes(seg): seg
+                      for seg in _TAG.split(protected) if "&quot;" in seg}
     return doc
 
 
+_TAG = re.compile(r"<[^>]*>")
 _CHAR_REF = re.compile(r"&#(?:[xX]([0-9A-Fa-f]+)|([0-9]+));")
 
 
-def _free_sentinel(text: str) -> str | None:
-    """Первый символ области частного использования Unicode, которого в исходнике нет ни символом,
-    ни числовой ссылкой (в любой записи). Нет свободного - None, защита кавычек не включается."""
-    used = {ord(c) for c in text if 0xE000 <= ord(c) <= 0xF8FF}
-    for hx, dec in _CHAR_REF.findall(text):
-        used.add(int(hx, 16) if hx else int(dec))
-    return next((chr(cp) for cp in range(0xE000, 0xF900) if cp not in used), None)
+def _as_lxml_writes(seg: str) -> str:
+    """Текст исходника в том виде, как его запишет lxml: &quot; -> кавычка, числовые ссылки -> символ
+    (кроме &#13; - его защищает load/save)."""
+    def char(m):
+        cp = int(m.group(1), 16) if m.group(1) else int(m.group(2))
+        return m.group(0) if cp == 13 else chr(cp)
+    return _CHAR_REF.sub(char, seg.replace("&quot;", '"'))
+
+
+def _restore_quot(body: str, quot_texts: dict) -> str:
+    """Текстовым фрагментам, совпавшим с исходными, вернуть исходную запись с &quot;. Измененный
+    и новый текст остается как записал lxml. Граница тега по '>' надежна: lxml экранирует '>' в атрибутах."""
+    parts = re.split(r"(<[^>]*>)", body)
+    return "".join(quot_texts.get(p, p) if i % 2 == 0 and '"' in p else p for i, p in enumerate(parts))
 
 
 def place_after(anchor, new) -> None:
@@ -178,9 +178,9 @@ def remove_children(container, to_remove) -> None:
 def save(doc: Doc, path: Path) -> None:
     path = path.resolve()                        # через symlink пишем в целевой файл, ссылка остаётся
     body = etree.tostring(doc.tree, encoding="unicode")
+    if doc.quot_texts:                           # до замены &#13;: ключи сняты с защищенного текста
+        body = _restore_quot(body, doc.quot_texts)
     body = body.replace("&#13;\n", "\r\n").replace("&#13;", "\r")
-    if doc.quot_sentinel:
-        body = body.replace(doc.quot_sentinel, "&quot;")
     bom = BOM if doc.has_bom else ""
     text = bom + XML_DECL + doc.decl_newline + body + doc.trailing_newline
     data = text.encode("utf-8")
