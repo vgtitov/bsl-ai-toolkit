@@ -104,6 +104,10 @@ def load(path: Path) -> Doc:
     # shortcut: пока документ загружен, операции видят в таком тексте служебный символ вместо кавычки;
     # если операции понадобится сравнивать текст с кавычками - читать через doc.quot_sentinel.
     sentinel = _free_sentinel(protected) if "&quot;" in protected else None
+    if "&quot;" in protected and sentinel is None:
+        from onec_metadata.ops import OpPreconditionError
+        raise OpPreconditionError(f"{path.name}: заняты все служебные символы - &quot; не сохранить "
+                                  "без diff-шума, файл не правим")
     if sentinel:
         protected = protected.replace("&quot;", sentinel)
     tree = etree.ElementTree(

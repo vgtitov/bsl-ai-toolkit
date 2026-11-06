@@ -163,3 +163,12 @@ def test_duplicate_types_are_collapsed(tmp_path):
     work = _edt(tmp_path)
     set_attribute_type(work, "КодЯзыка", ["String", "String", "CatalogRef.Языки"])
     assert _attr(cfg.load(work), "КодЯзыка").xpath("valueType/types/text()") == ["String", "CatalogRef.Языки"]
+
+
+def test_type_notation_must_match_format(tmp_path):
+    with pytest.raises(OpPreconditionError):
+        set_attribute_type(_edt(tmp_path), "КодЯзыка", ["xs:string"])
+    work = tmp_path / "Form.xml"
+    shutil.copy(FIX / "form.xml", work)
+    with pytest.raises(OpPreconditionError):
+        set_attribute_type(work, "Объект", ["CatalogObject.Товары"])

@@ -239,7 +239,14 @@ def set_attribute_type(form_path: Path, name: str, type_refs: list[str]) -> None
     type_refs = list(dict.fromkeys(type_refs))   # повтор --type не дает дубля в составном типе
     for t in type_refs:
         validate_type_ref(t)
-    if str(form_path).endswith(".form"):
+    edt = str(form_path).endswith(".form")
+    for t in type_refs:
+        # нотация формата: EDT - без префикса (String, CatalogRef.X), Конфигуратор - xs:/cfg:/v8:
+        if edt and ":" in t:
+            raise OpPreconditionError(f"Тип '{t}': для EDT-формы нотация без префикса (String, CatalogRef.Имя)")
+        if not edt and ":" not in t:
+            raise OpPreconditionError(f"Тип '{t}': для формы Конфигуратора нужен префикс (xs:string, cfg:CatalogRef.Имя)")
+    if edt:
         _set_attribute_type_edt(form_path, name, type_refs)
     else:
         _set_attribute_type_configurator(form_path, name, type_refs)
