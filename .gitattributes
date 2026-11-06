@@ -1,3 +1,12 @@
+# Концы строк: в репозитории всегда LF, кто бы и чем бы ни сохранил файл. На Windows Python (write_text)
+# и часть редакторов пишут CRLF; при core.autocrlf=false он уходил в коммит, и дифф показывал файл
+# переписанным целиком. text=auto: git сам отличает текст от двоичных файлов и при `git add` приводит
+# текст к LF. Исключения ниже (фикстуры -text) побеждают, потому что стоят позже.
+* text=auto eol=lf
+# cmd.exe: в рабочей копии CRLF (метки и goto с LF ненадёжны), в репозитории — LF, как и всё остальное.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
 # Фикстуры метаданных — byte-perfect эталоны (тесты проверяют BOM/LF/CRLF как есть).
 # Без -text git с core.autocrlf=true на Windows конвертирует LF→CRLF при checkout
 # и тесты стиля падают (реальный случай: schema.dcs, test_scd_edt на Work PC).
