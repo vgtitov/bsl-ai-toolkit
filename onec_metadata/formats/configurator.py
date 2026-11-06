@@ -20,6 +20,7 @@ XML-парсер по спецификации нормализует CRLF→LF,
 """
 import hashlib
 import os
+import re
 import shutil
 import tempfile
 from pathlib import Path
@@ -101,8 +102,7 @@ def load(path: Path) -> Doc:
     # без защиты любая правка дает diff-шум в чужих заголовках. Каждая &quot; исходника заменяется
     # служебным символом и возвращается при save ровно на свое место (обычные кавычки не трогаются).
     # маркер годен, только если в исходнике его нет ни символом, ни ссылкой (&#xE000; / &#57344;)
-    low = protected.lower()
-    keep_quot = _QUOT_SENTINEL not in protected and "&#xe000;" not in low and "&#57344;" not in low
+    keep_quot = _QUOT_SENTINEL not in protected and not _SENTINEL_REF.search(protected)
     if keep_quot:
         protected = protected.replace("&quot;", _QUOT_SENTINEL)
     tree = etree.ElementTree(
@@ -116,6 +116,8 @@ def load(path: Path) -> Doc:
 
 # символ области частного использования Unicode: в выгрузках 1С не встречается
 _QUOT_SENTINEL = ""
+# любая числовая ссылка на этот код (hex/dec, с ведущими нулями, любым регистром)
+_SENTINEL_REF = re.compile(r"&#(?:[xX]0*[eE]000|0*57344);")
 
 
 def place_after(anchor, new) -> None:

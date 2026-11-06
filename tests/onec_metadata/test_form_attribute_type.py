@@ -128,7 +128,7 @@ def test_save_char_ref_of_sentinel_is_not_turned_into_quote(tmp_path):
     """Если служебный символ уже есть в исходнике ссылкой, защита кавычек отключается - данные не портятся."""
     src = (FIX / "form.form").read_text(encoding="utf-8")
     src = src.replace("<name>КодЯзыка</name>",
-                      "<name>КодЯзыка</name>\n    <title><key>ru</key><value>x&#xE000;y</value></title>", 1)
+                      "<name>КодЯзыка</name>\n    <title><key>ru</key><value>x&#x0e000;y</value></title>", 1)
     work = _edt(tmp_path, src)
     set_attribute_type(work, "Список", ["DynamicList"])
     out = cfg.load(work)
