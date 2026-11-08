@@ -50,10 +50,32 @@ def _read_log(r: Runner, log: str) -> str:
 _OK = "__DSGN_OK__"
 _FAIL = "__DSGN_FAIL__"
 
+# Частые ответы платформы, по которым причина не очевидна: фрагмент лога → что делать.
+_LOG_HINTS = (
+    ("помещена в хранилище",
+     "конфигурация подключена к хранилищу: полная загрузка запрещена платформой — грузить "
+     "точечно (-files / designer_sync load --files) только захваченные объекты"),
+    ("связывания с хранилищем",
+     "учётка хранилища бывает привязана к одной ИБ: из другой базы пакетный режим даёт эту "
+     "ошибку без слова про учётку — работать из базы, к которой привязана учётка"),
+    ("не идентифицирован",
+     "проверь учётку ИБ (--contour = ключ ONEC_IB_USER_/PASS_<КЛЮЧ>) и порядок ключей: "
+     "действие последним перед /Out"),
+)
+
+
+def _log_hints(text: str) -> str:
+    low = text.lower()
+    return "".join(f"\nподсказка: {h}" for frag, h in _LOG_HINTS if frag in low)
+
 
 def _run_designer(r: Runner, ib: str, user: str, pwd: str, action: str,
                   args: list, log: str, timeout: int = 900) -> None:
     cmd = designer_cmd(ib, user, pwd, action, args, log)
+    # лог прошлого запуска с тем же путём иначе читается как результат этого (ложная
+    # ошибка или ложный успех, если платформа не стартовала и свой лог не записала)
+    if hasattr(r, "remove"):
+        r.remove(log)
     if getattr(r, "shell", True):
         # SSH: на том конце cmd.exe. `if errorlevel 1` вычисляется В МОМЕНТ
         # исполнения (это команда, а не переменная), поэтому корректно ловит код
@@ -74,7 +96,8 @@ def _run_designer(r: Runner, ib: str, user: str, pwd: str, action: str,
     if not ok:
         raise ApplyError(
             f"designer {action} failed\ncmd: {mask_password(cmd)}\n"
-            f"out: {out.strip()[:500]}\nlog: {logtxt.strip()[:2000]}")
+            f"out: {out.strip()[:500]}\nlog: {logtxt.strip()[:2000]}"
+            + _log_hints(out + "\n" + logtxt))
 
 
 def _put_text(r: Runner, remote_path: str, text: str) -> None:
@@ -227,3 +250,56 @@ def roundtrip_verify(before: Path, after: Path, expect_changed: set,
         raise ApplyError(
             f"round-trip diff неожиданный. Лишние изменения: {unexpected}; "
             f"обещанные, но не изменившиеся: {missing}")
+
+
+def partial_load_gaps(src_dir: Path, files: list[str]) -> list[str]:
+    """Файлы, без которых точечная загрузка СОТРЁТ части объекта в базе.
+
+    `<Объект>.xml` в `-files` без его `<Объект>/Ext/*` платформа понимает как «у объекта
+    модулей нет»: стирает модуль объекта/менеджера, а у корня (`Configuration.xml`) — модули
+    сеанса и приложения, командный интерфейс, рабочую область, поддержку. load при этом
+    exit=0, и обратная выгрузка пустой Ext просто не отдаёт. Эвристика по каталогу-источнику:
+    что лежит в `<Объект>/Ext/` рядом с xml, то обязано быть и в списке.
+    """
+    src_dir = Path(src_dir)
+    listed = {unicodedata.normalize("NFC", f.replace("\\", "/").lstrip("./")) for f in files}
+    gaps = []
+    for rel in sorted(listed):
+        if not rel.lower().endswith(".xml"):
+            continue
+        ext_dir = src_dir / rel[:-4] / "Ext"
+        if rel == "Configuration.xml":
+            ext_dir = src_dir / "Ext"
+        if not ext_dir.is_dir():
+            continue
+        for p in sorted(ext_dir.rglob("*")):
+            if p.is_file():
+                need = unicodedata.normalize("NFC", p.relative_to(src_dir).as_posix())
+                if need not in listed:
+                    gaps.append(f"{rel} → нет {need}")
+    return gaps
+
+
+def form_snapshot(dump_dir: Path) -> dict:
+    """{путь Form.xml: есть ли в нём <Events>} — до точечной выгрузки, чтобы заметить потерю."""
+    dump_dir = Path(dump_dir)
+    return {p.relative_to(dump_dir).as_posix(): "<Events>" in p.read_text("utf-8-sig", errors="replace")
+            for p in dump_dir.rglob("Form.xml") if p.parent.name == "Ext"}
+
+
+def partial_dump_form_problems(dump_dir: Path, before: dict) -> list[str]:
+    """Формы, которые точечная выгрузка (-listFile) отдала неполными.
+
+    Боевой случай: форма пришла без `<Events>` в Form.xml и без `Form/Module.bsl`, хотя в базе
+    они были (полная выгрузка их показала). Ошибка — если события были в прошлой выгрузке
+    этого каталога и пропали, или события есть, а модуля нет.
+    """
+    dump_dir = Path(dump_dir)
+    problems = []
+    for rel, had_events in sorted(form_snapshot(dump_dir).items()):
+        module = dump_dir / Path(rel).parent / "Form" / "Module.bsl"
+        if had_events and not module.is_file():
+            problems.append(f"{rel}: события есть, модуля Form/Module.bsl нет")
+        elif before.get(rel) and not had_events:
+            problems.append(f"{rel}: в прошлой выгрузке были <Events>, теперь нет")
+    return problems

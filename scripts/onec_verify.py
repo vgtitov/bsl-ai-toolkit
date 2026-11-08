@@ -84,6 +84,9 @@ def build_parser():
                    help="файл серверного BSL; итог — в строковой переменной Отчет")
     s.add_argument("--deploy", action="store_true", help="пересобрать раннер .epf перед прогоном")
     s.add_argument("--timeout", type=int, default=900, help="таймаут сеанса, сек (умолч. 900)")
+    s.add_argument("--stall", type=int, default=600,
+                   help="остановить сеанс, если /Out и кэш не менялись столько секунд "
+                        "(признак некомпилируемого модуля или модального окна); 0 — не следить")
 
     v = sub.add_parser("serve", help="автономный сервер: HTTP к ФАЙЛОВОЙ базе без веб-сервера")
     v.add_argument("--base", required=True, help="каталог файловой ИБ")
@@ -248,7 +251,7 @@ def main(argv=None):
     report = smoke_mod.run_smoke(
         r, a.base, user, pwd,
         scenario_text=Path(a.scenario).read_text(encoding="utf-8-sig"),
-        epf=epf, workdir=workdir, timeout=a.timeout)
+        epf=epf, workdir=workdir, timeout=a.timeout, stall=a.stall)
     print("[ok] __SMOKE_OK__, отчёт сценария:")
     print(report)
 

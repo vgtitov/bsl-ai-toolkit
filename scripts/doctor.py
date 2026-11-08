@@ -225,6 +225,47 @@ def check_com_connector():
     return [(OK, name, f"CLSID и TypeLib зарегистрированы ({dll or clsid})")]
 
 
+STUCK_SHELL_HOURS = 2
+
+
+def stuck_git_shells(procs, hours=STUCK_SHELL_HOURS):
+    """[(pid, часов)] — bash.exe/sh.exe из каталога Git, живущие дольше `hours`.
+    procs: [{"Id", "Path", "Age"}] — Age в часах (считает PowerShell)."""
+    out = []
+    for p in procs or []:
+        path = (p.get("Path") or "").replace("/", "\\").lower()
+        if "\\git\\" in path and (p.get("Age") or 0) >= hours:
+            out.append((p.get("Id"), round(p["Age"], 1)))
+    return out
+
+
+def check_stuck_git_shells():
+    """Зависшие bash.exe Git держат общую память MSYS: любой sh/bash Git падает
+    «add_item (...) failed, errno 1», git-хуки не запускаются. Только Windows; командные строки
+    не читаем и не печатаем (в них бывают пароли), процессы не завершаем — только PID и команда."""
+    if os.name != "nt":
+        return []
+    ps = ("Get-Process bash,sh -ErrorAction SilentlyContinue | Where-Object { $_.Path } | "
+          "ForEach-Object { [pscustomobject]@{ Id = $_.Id; Path = $_.Path; "
+          "Age = ((Get-Date) - $_.StartTime).TotalHours } } | ConvertTo-Json -Compress")
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
+                             capture_output=True, text=True, timeout=20).stdout.strip()
+        procs = json.loads(out) if out else []
+    except Exception as e:
+        return [(WARN, "Git: зависшие bash.exe", f"не смог проверить ({type(e).__name__})")]
+    stuck = stuck_git_shells([procs] if isinstance(procs, dict) else procs)
+    name = "Git: зависшие bash.exe"
+    if not stuck:
+        return [(OK, name, f"нет процессов bash/sh Git старше {STUCK_SHELL_HOURS} ч")]
+    pids = ", ".join(f"{pid} ({age} ч)" for pid, age in stuck)
+    ids = ",".join(str(pid) for pid, _ in stuck)
+    return [(WARN, name, f"живут дольше {STUCK_SHELL_HOURS} ч: {pids}. Такие процессы ломают все "
+                         "MSYS-команды и git-хуки («add_item ... errno 1»). Если это не открытое окно "
+                         f"Git Bash — завершить: Stop-Process -Id {ids}; проверка: "
+                         "& 'C:\\Program Files\\Git\\usr\\bin\\sh.exe' -c 'echo ok'")]
+
+
 def check_prereqs(needs_java=True):
     """java — BAD только если её требует сервер из .mcp.json (у профиля analyst bsl-platform нет);
     claude CLI — всегда WARN: десктоп-приложению он не нужен, только работе из терминала."""
@@ -315,6 +356,7 @@ def main():
     results += check_prereqs(needs_java)
     results += check_unsafe_action_protection(ns.base)
     results += check_com_connector()
+    results += check_stuck_git_shells()
 
     if not cfg.exists():
         results.append((BAD, ".mcp.json", f"не найден в {cfg} — запусти onboard или перейди в рабочий каталог"))

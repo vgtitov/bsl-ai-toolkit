@@ -19,15 +19,19 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import tempfile
+import threading
+import time
+import uuid
 from pathlib import Path
 
 from onec_metadata.apply.dumpload import ApplyError
 from onec_metadata.apply.external import build_external
 from onec_metadata.apply.protection import preflight_note
-from onec_metadata.apply.runner import RunnerLike, enterprise_cmd, mask_password
+from onec_metadata.apply.runner import RunnerLike, enterprise_cmd, mask_password, ps_encoded
 
 TEMPLATE_DIR = Path(__file__).resolve().parents[1] / "templates" / "smoke_runner"
 
@@ -40,6 +44,10 @@ _FAIL = "__SMOKE_FAIL__"
 # поэтому подсказку даём прямо в тексте ошибки, а не оставляем гадать.
 _HANG_HINT = (
     "Что проверить по порядку.\n"
+    "0) Если перед прогоном в базу грузили правки: некомпилируемый модуль. Сеанс падает на "
+    "ошибке компиляции при старте, в батче это модальное окно — снаружи ровный CPU и пустой "
+    "/Out. Прогоните `onec_verify.py check` (CheckConfig) на этой базе и поищите в логе "
+    "имя правленого объекта.\n"
     "1) Первый сеанс к УДАЛЁННОЙ клиент-серверной базе строит клиентский кэш "
     "конфигурации и по медленному каналу идёт ЧАСАМИ: платформа тянет его вызовами "
     "open/read примерно по 110 мс каждый, а их десятки тысяч (разбор по ТЖ 23.07). "
@@ -101,16 +109,79 @@ def deploy_smoke_runner(r: RunnerLike, ib: str, user: str, pwd: str, *,
     return out_epf
 
 
+_RETURN_RE = re.compile(r"(?im)^\s*(Возврат|Return)\b")
+
+# Сколько секунд сеанс может жить при неизменном /Out (и неизменном локальном кэше), прежде
+# чем сторож его остановит. 0 — сторож выключен.
+DEFAULT_STALL = 600
+
+
+def _kill_by_log(r: RunnerLike, log: str) -> None:
+    """Остановить ТОЛЬКО свой сеанс: 1cv8 с этим уникальным путём /Out в командной строке.
+    Командная строка не печатается — в ней пароль."""
+    needle = log.replace("'", "''")
+    try:
+        r.run(ps_encoded(
+            "Get-CimInstance Win32_Process -Filter \"Name='1cv8.exe' OR Name='1cv8c.exe'\" | "
+            f"Where-Object {{ $_.CommandLine -and $_.CommandLine.Contains('{needle}') }} | "
+            "ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"), timeout=60)
+    except Exception:
+        pass                    # не смогли остановить — об этом скажет текст ошибки
+
+
+def _run_watched(r: RunnerLike, cmd: str, *, timeout: int, log: str, stall: int,
+                 poll: float = 30) -> None:
+    """r.run(cmd) со сторожем: сеанс жив, а /Out и клиентский кэш не меняются `stall` секунд —
+    это не работа, а модальное окно (ошибка компиляции, защита от опасных действий)."""
+    box = {}
+
+    def work():
+        try:
+            box["res"] = r.run(cmd, timeout=timeout)
+        except BaseException as e:                     # noqa: BLE001 — отдаём в основной поток
+            box["err"] = e
+
+    t = threading.Thread(target=work, daemon=True)
+    t.start()
+    last, since = None, time.monotonic()
+    while True:
+        t.join(poll)
+        if not t.is_alive():
+            break
+        if not stall:
+            continue
+        sig = (r.read_text(log, timeout=60), client_cache_bytes())
+        now = time.monotonic()
+        if sig != last:
+            last, since = sig, now
+        elif now - since >= stall:
+            _kill_by_log(r, log)
+            t.join(30)
+            raise ApplyError(
+                f"smoke: сеанс жив, но /Out и кэш конфигурации не менялись {stall} с — остановлен "
+                "сторожем. Вероятно, модуль не компилируется: запусти `onec_verify.py check` "
+                "(CheckConfig) для этой базы. Если сеанс должен идти дольше молча — `--stall 0`.\n"
+                f"{_HANG_HINT}\ncmd: {mask_password(cmd)}")
+    if "err" in box:
+        raise box["err"]
+
+
 def run_smoke(r: RunnerLike, ib: str, user: str, pwd: str, *,
               scenario_text: str, epf: str, workdir: str,
-              timeout: int = 900) -> str:
+              timeout: int = 900, stall: int = DEFAULT_STALL) -> str:
     """Выполнить серверный BSL-сценарий, вернуть текст отчёта.
 
     ApplyError, если файл-результат отсутствует или содержит __SMOKE_FAIL__.
     """
-    scenario = f"{workdir}\\smoke_scenario.bsl"
-    result = f"{workdir}\\smoke_result.txt"
-    log = f"{workdir}\\smoke_out.log"
+    if _RETURN_RE.search(scenario_text):
+        raise ApplyError("smoke: в сценарии оператор Возврат. Сценарий исполняется через "
+                         "Выполнить() вне процедуры, Возврат там не компилируется и роняет весь "
+                         "сценарий — ранний выход делай флагом и Если … КонецЕсли")
+    # свои имена на прогон: параллельный запуск в том же workdir иначе подменял сценарий
+    run_id = uuid.uuid4().hex[:8]
+    scenario = f"{workdir}\\smoke_scenario_{run_id}.bsl"
+    result = f"{workdir}\\smoke_result_{run_id}.txt"
+    log = f"{workdir}\\smoke_out_{run_id}.log"
 
     with tempfile.NamedTemporaryFile("w", encoding="utf-8-sig",
                                      suffix=".bsl", delete=False) as f:
@@ -127,11 +198,10 @@ def run_smoke(r: RunnerLike, ib: str, user: str, pwd: str, *,
     if note:
         print(note, file=sys.stderr)
 
-    r.remove(result)
     cmd = enterprise_cmd(ib, user, pwd, epf, f"{scenario};{result}", log)
     cache_before = client_cache_bytes()
     try:
-        r.run(cmd, timeout=timeout)
+        _run_watched(r, cmd, timeout=timeout, log=log, stall=stall)
     except subprocess.TimeoutExpired:
         grew = client_cache_bytes() - cache_before
         progress = ""
@@ -143,6 +213,8 @@ def run_smoke(r: RunnerLike, ib: str, user: str, pwd: str, *,
         raise ApplyError(f"smoke: сеанс не завершился за {timeout} с.{progress}\n"
                          f"{_HANG_HINT}\ncmd: {mask_password(cmd)}") from None
     content = r.read_text(result, timeout=60)
+    for done in (scenario, result):
+        r.remove(done)
 
     if _OK in content:
         return content.split(_OK, 1)[1].strip()

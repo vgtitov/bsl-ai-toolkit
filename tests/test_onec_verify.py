@@ -91,8 +91,9 @@ def test_smoke_passes_scenario_text_and_credentials(monkeypatch, tmp_path):
 
     import onec_metadata.apply.smoke as smoke_mod
 
-    def fake_run(r, ib, user, pwd, *, scenario_text, epf, workdir, timeout=900):
-        seen.update(user=user, pwd=pwd, text=scenario_text, epf=epf, timeout=timeout)
+    # DISCIPLINE_ALLOW_TEST_EDIT: run_smoke получил параметр stall (сторож зависшего сеанса)
+    def fake_run(r, ib, user, pwd, *, scenario_text, epf, workdir, timeout=900, stall=600):
+        seen.update(user=user, pwd=pwd, text=scenario_text, epf=epf, timeout=timeout, stall=stall)
         return "строк: 3"
 
     monkeypatch.setattr(smoke_mod, "run_smoke", fake_run)
@@ -109,6 +110,7 @@ def test_smoke_passes_scenario_text_and_credentials(monkeypatch, tmp_path):
     assert seen["user"] == "ivanov" and seen["pwd"] == "common"
     assert seen["text"] == 'Отчет = "привет";'      # BOM снят при чтении сценария
     assert seen["timeout"] == 60
+    assert seen["stall"] == 600                       # сторож включён по умолчанию
     assert seen["epf"].endswith("СмоукРаннер.epf")
 
 

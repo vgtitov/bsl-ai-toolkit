@@ -40,6 +40,7 @@
 """
 import argparse
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -74,6 +75,61 @@ def resolve_cred(kind: str, keys, env=None):
         if user or password is not None:
             return user or common[0], common[1] if password is None else password
     return common
+
+
+def base_key(base: str):
+    """Имя базы из «сервер\\база» — ключ учётки по умолчанию; для файловой базы None."""
+    s = (base or "").strip().strip('"')
+    if re.match(r"^[A-Za-z]:[\\/]|^\\\\|^/|^(?i:file=)", s) or Path(s).is_dir():
+        return None
+    return s.rsplit("\\", 1)[-1] if "\\" in s else None
+
+
+def ib_creds(base: str, contour, env=None):
+    """(логин, пароль) ИБ. Без --contour ключ — имя базы (`сервер\\база` → БАЗА): раньше без
+    него перебор ключей не шёл вовсе, уходил на общий ONEC_IB_PASS, и платформа отвечала
+    «Пользователь ИБ не идентифицирован». Серверной базе без учётки — отказ до запуска."""
+    key = contour or base_key(base)
+    user, password = resolve_cred("IB", key, env)
+    if key and (not user or password is None):
+        k = key.upper()
+        raise SystemExit(f"нет учётки ИБ для {base}: ONEC_IB_USER[_{k}] и ONEC_IB_PASS[_{k}] в .env "
+                         "(ключ — --contour, по умолчанию имя базы)")
+    return user, password
+
+
+def require_remote_bin(env=None):
+    """--host: путь к 1cv8 НА СЕРВЕРЕ берётся только из ONEC_1CV8_BIN. Без него раннер брал
+    устаревший дефолт, платформа не находилась, а в /Out оставался лог прошлого запуска."""
+    env = os.environ if env is None else env
+    if not env.get("ONEC_1CV8_BIN"):
+        raise SystemExit("--host: задай ONEC_1CV8_BIN — путь к 1cv8.exe НА СЕРВЕРЕ "
+                         r"(например C:\Program Files\1cv8\<версия>\bin\1cv8.exe); "
+                         "ONEC_V8_BIN — для платформы этой машины")
+
+
+SAFE_MODE_NOTE = (
+    "[!] безопасный режим расширения: при СОЗДАНИИ расширения пакетной загрузкой платформа "
+    "ставит ему «Безопасный режим» = Истина, и перехваты &Вместо/&После/&Перед молча не "
+    "исполняются (экспортные методы при этом работают, CheckConfig чист). Повторный деплой флаг "
+    "не меняет. Проверь у расширения в базе и сними, если нужны перехваты: Конфигуратор → "
+    "Конфигурация → Расширения конфигурации → флажок «Безопасный режим»; либо сценарий ступени 2 "
+    "(право «Администрирование»): Расширение.БезопасныйРежим = Ложь; Расширение.Записать(); "
+    "либо ibcmd extension update --name <Имя> --safe-mode=no (ключ есть в справке ibcmd 8.3.27, "
+    "ibcmd ходит в СУБД напрямую — нужны её параметры) [проверить].")
+
+
+def post_load_notes(paths) -> list:
+    """Подсказки после загрузки по составу файлов (без подключения к базе)."""
+    notes = []
+    norm = [p.replace("\\", "/") for p in paths]
+    jobs = sorted({p.split("/")[1].removesuffix(".xml") for p in norm if p.startswith("ScheduledJobs/")})
+    if jobs:
+        notes.append("[!] регламентные задания в загрузке: " + ", ".join(jobs) + ". НОВОЕ задание "
+                     "после выката бывает «Включено», но планировщик его не запускает: проверь "
+                     "фактические запуски, при нуле — открой задание, сними и снова поставь "
+                     "«Включено», запиши.")
+    return notes
 
 
 def base_args(base: str):
@@ -145,7 +201,29 @@ def _find_v8():
     return str(root / "bin" / ("1cv8.exe" if os.name == "nt" else "1cv8"))
 
 
+def check_partial_load(src_dir: Path, files) -> None:
+    """Отказ ДО запуска, если xml объекта грузится без его Ext — платформа сотрёт модули."""
+    from onec_metadata.apply import dumpload
+    gaps = dumpload.partial_load_gaps(src_dir, files)
+    if gaps:
+        raise SystemExit("точечная загрузка сотрёт модули: xml объекта в списке без его Ext/*. "
+                         "Добавь в --files (из свежей выгрузки этой же базы):\n  " + "\n  ".join(gaps))
+
+
+def check_partial_dump_forms(dump_dir: Path, before: dict) -> None:
+    """После точечной выгрузки: формы без событий/модуля — ошибка; любые формы — предупреждение."""
+    from onec_metadata.apply import dumpload
+    problems = dumpload.partial_dump_form_problems(dump_dir, before)
+    if problems:
+        raise SystemExit("выгрузка формы неполная (точечная выгрузка теряет события и модуль формы) — "
+                         "делай полную выгрузку конфигурации/расширения:\n  " + "\n  ".join(problems))
+    if dumpload.form_snapshot(dump_dir):
+        print("[!] формы из точечной выгрузки бывают без <Events> и Form/Module.bsl — выводы о формах "
+              "делай только по полной выгрузке")
+
+
 def _run(cmd, log):
+    Path(log).unlink(missing_ok=True)          # лог прошлого запуска не должен сойти за этот
     r = subprocess.run(cmd)
     text = ""
     if Path(log).is_file():
@@ -163,20 +241,42 @@ def _point_sync_workdir() -> str:
 
 
 def _upload_dir_plain(r, local_dir: Path, remote_dir: str) -> None:
-    """Перенос каталога выгрузки НА СЕРВЕР — простой tar+scp, без гейтов версии/BSL
-    (`onec_metadata.apply.dumpload.upload_tree`): это ad hoc точечный цикл на паре
-    файлов, не публикация целого дерева расширения в git."""
-    tmp_tar_remote = remote_dir + "_upload.tar"
-    local_tar = Path(tempfile.gettempdir()) / f"ds_upload_{os.getpid()}.tar"
-    subprocess.run(["tar", "-cf", str(local_tar), "-C", str(local_dir), "."], check=True)
-    subprocess.run(["scp", "-o", "BatchMode=yes", str(local_tar),
-                    f"{r.host}:{tmp_tar_remote}"], check=True)
-    local_tar.unlink()
-    code, out = r.run(
-        f"chcp 65001 >nul & (if exist {remote_dir} rmdir /s /q {remote_dir}) & "
-        f"mkdir {remote_dir} & tar -xf {tmp_tar_remote} -C {remote_dir} & echo EXIT=%errorlevel%")
-    if "EXIT=0" not in out:
-        raise SystemExit(f"выгрузка каталога на сервер не удалась: {out.strip()[:500]}")
+    """Перенос каталога выгрузки НА СЕРВЕР без гейтов версии/BSL
+    (`onec_metadata.apply.dumpload.upload_tree`): это ad hoc точечный цикл, не публикация
+    целого дерева расширения в git.
+
+    zip, а не tar: на хосте с системной локалью en-US `tar -xf` распаковывал только файлы
+    с латинскими именами (34 из 1082), а LoadConfigFromFiles потом падал «Файл объекта не
+    существует». Python пишет кириллические имена в UTF-8 с флагом 0x800, .NET
+    `ZipFile.ExtractToDirectory` его учитывает. После распаковки сверяется число файлов."""
+    import zipfile
+    from onec_metadata.apply.runner import ps_encoded
+
+    if "'" in remote_dir:
+        raise SystemExit(f"путь на сервере с апострофом не поддержан: {remote_dir}")
+    local_dir = Path(local_dir)
+    files = [p for p in local_dir.rglob("*")
+             if p.is_file() and ".git" not in p.relative_to(local_dir).parts]   # git init каталога выгрузки — не груз
+    remote_zip = remote_dir + "_upload.zip"
+    local_zip = Path(tempfile.gettempdir()) / f"ds_upload_{os.getpid()}.zip"
+    try:
+        with zipfile.ZipFile(local_zip, "w", zipfile.ZIP_DEFLATED) as z:
+            for p in files:
+                z.write(p, p.relative_to(local_dir).as_posix())
+        subprocess.run(["scp", "-o", "BatchMode=yes", str(local_zip),
+                        f"{r.host}:{remote_zip.replace(chr(92), '/')}"], check=True)
+    finally:
+        local_zip.unlink(missing_ok=True)
+    code, out = r.run(ps_encoded(
+        f"$d='{remote_dir}'; $z='{remote_zip}'; "
+        "if (Test-Path $d) { Remove-Item -Recurse -Force $d }; "
+        "Add-Type -AssemblyName System.IO.Compression.FileSystem; "
+        "[IO.Compression.ZipFile]::ExtractToDirectory($z, $d); Remove-Item -Force $z; "
+        "'COUNT=' + (Get-ChildItem -Recurse -File $d | Measure-Object).Count"), timeout=600)
+    m = re.search(r"COUNT=(\d+)", out)
+    if not m or int(m.group(1)) != len(files):
+        raise SystemExit(f"выгрузка каталога на сервер не удалась: отправлено файлов {len(files)}, "
+                         f"на сервере {m.group(1) if m else '?'}: {out.strip()[:500]}")
 
 
 def remote_dump(r, base, user, password, ext, objects, out_dir, workdir=None):
@@ -188,6 +288,10 @@ def remote_dump(r, base, user, password, ext, objects, out_dir, workdir=None):
     r.makedirs(workdir)
     remote_dst = workdir + r"\dump"
     log = workdir + r"\dump.log"
+    # остатки прошлой выгрузки в том же каталоге иначе приедут вместе с новой и спрячут то,
+    # чего точечная выгрузка не отдала (модуль формы)
+    if getattr(r, "shell", True):
+        r.run(f"if exist {remote_dst} rmdir /s /q {remote_dst}")
     dumpload.dump_extension(r, base, user, password, ext, remote_dst, log=log, objects=objects)
     dumpload.fetch_tree(r, remote_dst, Path(out_dir).resolve())
 
@@ -336,9 +440,12 @@ def main(argv=None):
     p = sub.add_parser("updatedb", parents=[common], help="UpdateDBCfg (основная или --ext)")
     a = ap.parse_args(argv)
 
+    if a.host:
+        require_remote_bin()
+
     if a.cmd in ("repo", "updatedb"):
         from onec_metadata.apply.runner import make_runner
-        user, password = resolve_cred("IB", a.contour)
+        user, password = ib_creds(a.base, a.contour)
         if not user or password is None:
             # иначе в команду уйдут /N"None" /PNone и платформа ответит невнятным «не идентифицирован»
             raise SystemExit(f"нет учётки ИБ: ONEC_IB_USER[_{(a.contour or '<КЛЮЧ>').upper()}] и "
@@ -372,34 +479,41 @@ def main(argv=None):
 
     if a.cmd == "deploy-extension":
         from onec_metadata.apply.runner import make_runner
-        user, password = resolve_cred("IB", a.contour)
+        user, password = ib_creds(a.base, a.contour)
         r = make_runner(a.host)
         remote_deploy_extension(r, a.base, user, password, a.ext, a.src)
         print(f"[ok] расширение {a.ext} задеплоено на {a.base} через {a.host}")
+        src = Path(a.src)
+        for note in [SAFE_MODE_NOTE] + post_load_notes(
+                p.relative_to(src).as_posix() for p in src.rglob("*.xml")):
+            print(note)
         return
 
     v8 = None if a.host else _find_v8()   # --host: платформа НА СЕРВЕРЕ, локальная не нужна
-    user, password = resolve_cred("IB", a.contour)
+    user, password = ib_creds(a.base, a.contour)
     log = str(Path(a.out).resolve().with_suffix(".log")) if a.out else "designer_sync.log"
     Path(a.out).mkdir(parents=True, exist_ok=True)
 
     if a.cmd == "dump":
+        from onec_metadata.apply import dumpload
         objects = [o.strip() for o in (a.objects or "").split(",") if o.strip()] or None
+        forms_before = dumpload.form_snapshot(Path(a.out))
         if a.host:
             from onec_metadata.apply.runner import make_runner
             r = make_runner(a.host)
             remote_dump(r, a.base, user, password, a.ext, objects, a.out)
-            print(f"[ok] выгружено в {a.out} через {a.host}"
-                  + (f" (объекты: {len(objects)})" if objects else " (полная)"))
-            return
-        cmd, listfile = build_dump_cmd(v8, a.base, str(Path(a.out).resolve()), objects,
-                                       user, password, a.ext, log)
-        try:
-            _run(cmd, log)
-        finally:
-            if listfile:
-                os.unlink(listfile)
-        print(f"[ok] выгружено в {a.out}" + (f" (объекты: {len(objects)})" if objects else " (полная)"))
+        else:
+            cmd, listfile = build_dump_cmd(v8, a.base, str(Path(a.out).resolve()), objects,
+                                           user, password, a.ext, log)
+            try:
+                _run(cmd, log)
+            finally:
+                if listfile:
+                    os.unlink(listfile)
+        if objects:
+            check_partial_dump_forms(Path(a.out), forms_before)
+        print(f"[ok] выгружено в {a.out}" + (f" через {a.host}" if a.host else "")
+              + (f" (объекты: {len(objects)})" if objects else " (полная)"))
     elif a.cmd == "load":
         files = [f.strip() for f in (a.files or "").split(",") if f.strip()]
         if a.changed:
@@ -409,16 +523,20 @@ def main(argv=None):
             files = got
         if not files:
             raise SystemExit("Нечего грузить: укажи --files или --changed (полная загрузка в базу с хранилищем запрещена платформой)")
+        check_partial_load(Path(a.out), files)
         if a.host:
             from onec_metadata.apply.runner import make_runner
             r = make_runner(a.host)
             remote_load(r, a.base, user, password, a.ext, files, a.out)
-            print(f"[ok] загружено файлов через {a.host}: {len(files)} — дальше в Конфигураторе: "
-                  "синтакс-контроль, тест, помещение в хранилище")
-            return
-        cmd = build_load_cmd(v8, a.base, str(Path(a.out).resolve()), files, user, password, a.ext, log)
-        _run(cmd, log)
-        print(f"[ok] загружено файлов: {len(files)} — дальше в Конфигураторе: синтакс-контроль, тест, помещение в хранилище")
+        else:
+            cmd = build_load_cmd(v8, a.base, str(Path(a.out).resolve()), files, user, password, a.ext, log)
+            _run(cmd, log)
+        # код возврата точечной загрузки — не вердикт: бывало «загружено», а в базе старая версия
+        print(f"[загружено, не проверено] файлов: {len(files)}" + (f" через {a.host}" if a.host else "")
+              + ". Вердикт — повторная выгрузка этих объектов и сверка с каталогом, затем "
+              "синтакс-контроль (onec_verify.py check), тест, помещение в хранилище")
+        for note in post_load_notes(files):
+            print(note)
 
 
 if __name__ == "__main__":

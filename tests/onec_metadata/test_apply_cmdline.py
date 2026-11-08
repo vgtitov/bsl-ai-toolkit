@@ -157,7 +157,8 @@ def test_dump_extension_objects_uses_listfile_and_cleans_up(monkeypatch, tmp_pat
     assert content == "ОбщийМодуль.Тест\nСправочник.Товары"
     assert any("-listFile" in c and remote_listfile in c for c in r.run_calls)
     assert any("-Extension Расширение" in c for c in r.run_calls)
-    assert r.removed == [remote_listfile]
+    # DISCIPLINE_ALLOW_TEST_EDIT: _run_designer теперь сначала убирает лог прошлого запуска
+    assert r.removed[-1] == remote_listfile
 
 
 def test_dump_extension_without_objects_no_listfile(monkeypatch):
