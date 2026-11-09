@@ -310,29 +310,23 @@ def _dump_info_units(lines: list[str]):
     return lines[:start], units, lines[end:]
 
 
-def merge_dump_info(old_text: str, new_text: str, objects: set) -> str:
-    """ConfigDumpInfo.xml полной выгрузки + точечной: записи объектов `objects` («Тип.Имя») — из
-    новой, остальные — как были. Порядок, формат и переводы строк старого файла сохраняются.
-    Иначе точечная выгрузка затирала полный реестр, и проверка загрузки теряла чужие модули."""
+def merge_dump_info(old_text: str, new_text: str) -> str:
+    """ConfigDumpInfo.xml рабочего каталога + точечной выгрузки: запись (с вложенными) с тем же
+    именем заменяется новой на своём месте, новые — в конец реестра, остальные и записи корня
+    (Configuration.*) — как были; ничего не удаляется. Порядок, формат и переводы строк старого
+    файла сохраняются. Иначе точечная выгрузка затирала полный реестр."""
     eol = "\r\n" if "\r\n" in old_text else "\n"
-    owner = lambda name: next((o for o in objects if name == o or name.startswith(o + ".")), None)
     head, old_units, tail = _dump_info_units(old_text.splitlines(keepends=True))
     _, new_units, _ = _dump_info_units(new_text.splitlines(keepends=True))
-    fresh = {}
-    for name, block in new_units:
-        o = name and owner(name)
-        if o:
-            fresh.setdefault(o, []).extend(ln.rstrip("\r\n") + eol for ln in block)
-    out, placed = list(head), set()
+    fresh = {name: [ln.rstrip("\r\n") + eol for ln in block] for name, block in new_units
+             if name and not name.startswith("Configuration.")}
+    out, seen = list(head), set()
     for name, block in old_units:
-        o = name and owner(name)
-        if not o or o not in fresh:                  # в новой выгрузке объекта нет — старое не теряем
+        out += fresh[name] if name in fresh else block
+        seen.add(name)
+    for name, block in fresh.items():
+        if name not in seen:
             out += block
-        elif o not in placed:
-            out += fresh.get(o, [])
-            placed.add(o)
-    for o in sorted(set(fresh) - placed):                # новые объекты — в конец реестра
-        out += fresh[o]
     return "".join(out + tail)
 
 
@@ -400,20 +394,24 @@ def form_snapshot(dump_dir: Path) -> dict:
             for p in dump_dir.rglob("Form.xml") if p.parent.name == "Ext"}
 
 
-def partial_dump_form_problems(dump_dir: Path, before: dict) -> list[str]:
+def partial_dump_form_problems(dump_dir: Path, before: dict, requested=None) -> list[str]:
     """Формы, которые точечная выгрузка (-listFile) отдала неполными.
 
     Боевой случай: форма пришла без `<Events>` в Form.xml и без `Form/Module.bsl`, хотя в базе
     они были (полная выгрузка их показала). Ошибка — если события были в прошлой выгрузке
-    этого каталога и пропали, или события есть, а модуля нет.
+    этого каталога и пропали, или события есть, а модуля нет. «Форма пропала» проверяется только
+    у объектов, запрошенных ЦЕЛИКОМ (`Тип.Имя`): выгрузка вложенного (`Тип.Имя.Command.X`) формы
+    владельца и не должна отдавать. requested=None — все выгруженные считаются целыми.
     """
     dump_dir = Path(dump_dir)
     now = form_snapshot(dump_dir)
     dumped = {p.relative_to(dump_dir).parts[:2] for p in dump_dir.rglob("*") if p.is_file()}
     dumped |= {(a, b[:-4]) for a, b in dumped if b.endswith(".xml")}
     # форма выгруженного объекта была и пропала: перенос заменит объект целиком и удалит её
+    whole = None if requested is None else {o.split(".", 1)[1] for o in requested if o.count(".") == 1}
     problems = [f"{rel}: форма была в прошлой выгрузке, в новой её нет"
-                for rel in sorted(before) if rel not in now and tuple(rel.split("/")[:2]) in dumped]
+                for rel in sorted(before) if rel not in now and tuple(rel.split("/")[:2]) in dumped
+                and (whole is None or rel.split("/")[1] in whole)]
     for rel, had_events in sorted(now.items()):
         module = dump_dir / Path(rel).parent / "Form" / "Module.bsl"
         if had_events and not module.is_file():

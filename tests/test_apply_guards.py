@@ -206,18 +206,49 @@ def test_partial_dump_goes_to_empty_dir_and_leaves_out_untouched_on_loss(monkeyp
     assert not (out / "Catalogs/Товары.xml").exists()                   # out не тронут
 
 
-def test_partial_dump_success_replaces_only_dumped_objects(monkeypatch, tmp_path):
+# DISCIPLINE_ALLOW_TEST_EDIT: ревью №3 — перенос ничего не удаляет из --out (rmtree объекта стирал формы
+# и модули владельца при выгрузке вложенного объекта); устаревший файл остаётся, об этом — строка в выводе
+def test_partial_dump_success_copies_over_and_deletes_nothing(monkeypatch, tmp_path, capsys):
     out = tmp_path / "out"
-    _touch(out, "Catalogs/Товары/Ext/Устаревший.bsl")                  # исчез из объекта — уйдёт
+    _touch(out, "Catalogs/Товары/Ext/Устаревший.bsl")                  # исчез в базе — в --out остаётся
     _touch(out, "Catalogs/Прочее.xml", "не трогать")
     form = "<Form><Events><Event name='OnOpen'/></Events></Form>"
     m, base, seen = _dump_main(monkeypatch, tmp_path, {
         "Catalogs/Товары.xml": "<new/>", FORM: form, MODULE: "новый модуль"})
     m.main(["dump", "--base", str(base), "--out", str(out), "--objects", "Справочник.Товары"])
     assert (out / MODULE).read_text(encoding="utf-8") == "новый модуль"
-    assert not (out / "Catalogs/Товары/Ext/Устаревший.bsl").exists()
+    assert (out / "Catalogs/Товары/Ext/Устаревший.bsl").exists()
     assert (out / "Catalogs/Прочее.xml").read_text(encoding="utf-8") == "не трогать"
     assert not seen["target"].exists()                                  # временный убран
+    assert "в --out не удаляются" in capsys.readouterr().out
+
+
+def test_partial_dump_of_command_keeps_owner_files(monkeypatch, tmp_path):
+    """Точечная выгрузка команды не трогает формы, модули и другие команды справочника в --out."""
+    out = tmp_path / "out"
+    form = "<Form><Events><Event name='OnOpen'/></Events></Form>"
+    keep = {FORM: form, MODULE: "модуль формы", "Catalogs/Товары.xml": "<obj/>",
+            "Catalogs/Товары/Ext/ObjectModule.bsl": "модуль объекта",
+            "Catalogs/Товары/Commands/Другая/Ext/CommandModule.bsl": "другая команда"}
+    for rel, text in keep.items():
+        _touch(out, rel, text)
+    m, base, seen = _dump_main(monkeypatch, tmp_path, {
+        "Catalogs/Товары/Commands/Открыть/Ext/CommandModule.bsl": "новая команда"})
+    m.main(["dump", "--base", str(base), "--out", str(out),
+            "--objects", "Справочник.Товары.Команда.Открыть"])
+    for rel, text in keep.items():
+        assert (out / rel).read_text(encoding="utf-8") == text, rel
+    assert (out / "Catalogs/Товары/Commands/Открыть/Ext/CommandModule.bsl").read_text(
+        encoding="utf-8") == "новая команда"
+
+
+def test_nested_request_does_not_check_owner_forms(tmp_path):
+    old_dir, new_dir = tmp_path / "old", tmp_path / "new"
+    _touch(old_dir, FORM, "<Form/>")
+    _touch(new_dir, "Catalogs/Товары/Commands/Открыть/Ext/CommandModule.bsl")
+    before = dumpload.form_snapshot(old_dir)
+    assert dumpload.partial_dump_form_problems(new_dir, before, ["Справочник.Товары.Команда.Открыть"]) == []
+    assert dumpload.partial_dump_form_problems(new_dir, before, ["Справочник.Товары"])  # целиком — проверяем
 
 
 # ── лог прошлого запуска и подсказки по ответам платформы ─────────────────────
@@ -430,10 +461,22 @@ def test_merge_partial_dump_keeps_full_dump_info(tmp_path):
         '\t\t<Metadata name="Catalog.Прочее" id="7" configVersion="p1"/>\n'
         '\t\t<Metadata name="Catalog.Прочее.ObjectModule" id="7.0" configVersion="p2"/>\n'
         '\t\t<Metadata name="Catalog.Товары" id="2" configVersion="new"/>\n'
-        '\t\t<Metadata name="Catalog.Товары.ManagerModule" id="2.3" configVersion="new"/>\n'
         '\t\t<Metadata name="Catalog.Товары.ObjectModule" id="2.0" configVersion="new"/>\n'
-        '\t\t<Metadata name="Catalog.ТоварыАрхив" id="9" configVersion="z1"/>\n') + _CDI_TAIL
+        '\t\t<Metadata name="Catalog.ТоварыАрхив" id="9" configVersion="z1"/>\n'
+        '\t\t<Metadata name="Catalog.Товары.ManagerModule" id="2.3" configVersion="new"/>\n') + _CDI_TAIL
+    # DISCIPLINE_ALLOW_TEST_EDIT: ревью №3 — слияние по имени записи: совпавшие заменяются на месте,
+    # новые (ManagerModule) — в конец, ничего не удаляется
     assert text == expected.replace("\n", "\r\n")             # «ТоварыАрхив» — не запись «Товары»
+
+
+def test_merge_dump_info_nested_dump_keeps_owner_entries():
+    """В новом реестре только команда — записи формы и модулей справочника остаются."""
+    new = _CDI_HEAD + ('\t\t<Metadata name="Catalog.Товары.Command.Открыть.CommandModule" id="4.0" '
+                       'configVersion="n"/>\n') + _CDI_TAIL
+    merged = dumpload.merge_dump_info(OLD_CDI, new)
+    for name in ("Catalog.Товары.ObjectModule", "Catalog.Товары.Attribute.Код", "Catalog.Прочее"):
+        assert f'name="{name}"' in merged
+    assert merged.rstrip().endswith('configVersion="n"/>\n' + _CDI_TAIL)
 
 
 def test_merge_partial_dump_without_old_dump_info_copies_new(tmp_path):
