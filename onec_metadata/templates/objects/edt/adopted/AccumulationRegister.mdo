@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:AccumulationRegister xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" xmlns:mdclassExtension="http://g5.1c.ru/v8/dt/metadata/mdclass/extension" uuid="{{uuid:1}}" extendedConfigurationObject="{{base_uuid}}">
+  <producedTypes>
+    <selectionType typeId="{{uuid:2}}" valueTypeId="{{uuid:3}}"/>
+    <listType typeId="{{uuid:4}}" valueTypeId="{{uuid:5}}"/>
+    <managerType typeId="{{uuid:6}}" valueTypeId="{{uuid:7}}"/>
+    <recordSetType typeId="{{uuid:8}}" valueTypeId="{{uuid:9}}"/>
+    <recordKeyType typeId="{{uuid:10}}" valueTypeId="{{uuid:11}}"/>
+    <recordType typeId="{{uuid:12}}" valueTypeId="{{uuid:13}}"/>
+  </producedTypes>
+  <name>{{name}}</name>
+  <objectBelonging>Adopted</objectBelonging>
+  <extension xsi:type="mdclassExtension:AccumulationRegisterExtension">
+    <extendedConfigurationObject>Checked</extendedConfigurationObject>
+    <registerType>Checked</registerType>
+  </extension>
+</mdclass:AccumulationRegister>

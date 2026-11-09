@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:Constant xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" xmlns:mdclassExtension="http://g5.1c.ru/v8/dt/metadata/mdclass/extension" uuid="{{uuid:1}}" extendedConfigurationObject="{{base_uuid}}">
+  <producedTypes>
+    <managerType typeId="{{uuid:2}}" valueTypeId="{{uuid:3}}"/>
+    <valueManagerType typeId="{{uuid:4}}" valueTypeId="{{uuid:5}}"/>
+    <valueKeyType typeId="{{uuid:6}}" valueTypeId="{{uuid:7}}"/>
+  </producedTypes>
+  <name>{{name}}</name>
+  <objectBelonging>Adopted</objectBelonging>
+  <extension xsi:type="mdclassExtension:ConstantExtension">
+    <extendedConfigurationObject>Checked</extendedConfigurationObject>
+    <typeExtension>
+      <types>
+        <state>Checked</state>
+        <type>String</type>
+      </types>
+      <stringQualifiers>
+        <length>10</length>
+      </stringQualifiers>
+    </typeExtension>
+  </extension>
+</mdclass:Constant>

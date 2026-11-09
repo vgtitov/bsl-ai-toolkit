@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:Enum xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" uuid="ba7dd1aa-179b-4fc8-a579-612849a16734">
+  <producedTypes>
+    <refType typeId="45d5ecfe-2816-46f6-b2a0-2b97afad19b4" valueTypeId="1800f018-e5e8-4ce4-a310-72c511a2070d"/>
+    <listType typeId="89b3d622-9f9d-44f7-9bbd-001512a50990" valueTypeId="0264e65e-32cc-4ce1-a39d-1962df213d37"/>
+    <managerType typeId="6258dc2d-80c6-434b-8153-e659aacbc94e" valueTypeId="85d44aa0-c377-46ee-8c9b-21d2f1c5d1d7"/>
+  </producedTypes>
+  <name>МаркерЭталона</name>
+  <synonym>
+    <key>ru</key>
+    <value>Маркер синоним</value>
+  </synonym>
+  <quickChoice>true</quickChoice>
+  <choiceMode>BothWays</choiceMode>
+</mdclass:Enum>

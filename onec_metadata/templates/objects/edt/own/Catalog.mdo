@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:Catalog xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" uuid="{{uuid:1}}">
+  <producedTypes>
+    <objectType typeId="{{uuid:2}}" valueTypeId="{{uuid:3}}"/>
+    <refType typeId="{{uuid:4}}" valueTypeId="{{uuid:5}}"/>
+    <selectionType typeId="{{uuid:6}}" valueTypeId="{{uuid:7}}"/>
+    <listType typeId="{{uuid:8}}" valueTypeId="{{uuid:9}}"/>
+    <managerType typeId="{{uuid:10}}" valueTypeId="{{uuid:11}}"/>
+  </producedTypes>
+  <name>{{name}}</name>
+  <synonym>
+    <key>ru</key>
+    <value>{{synonym}}</value>
+  </synonym>
+  <useStandardCommands>true</useStandardCommands>
+  <inputByString>Catalog.{{name}}.StandardAttribute.Code</inputByString>
+  <inputByString>Catalog.{{name}}.StandardAttribute.Description</inputByString>
+  <fullTextSearchOnInputByString>DontUse</fullTextSearchOnInputByString>
+  <createOnInput>Use</createOnInput>
+  <fullTextSearch>Use</fullTextSearch>
+  <levelCount>2</levelCount>
+  <foldersOnTop>true</foldersOnTop>
+  <codeLength>9</codeLength>
+  <descriptionLength>25</descriptionLength>
+  <codeType>String</codeType>
+  <codeAllowedLength>Variable</codeAllowedLength>
+  <checkUnique>true</checkUnique>
+  <autonumbering>true</autonumbering>
+  <defaultPresentation>AsDescription</defaultPresentation>
+  <editType>InDialog</editType>
+  <choiceMode>BothWays</choiceMode>
+</mdclass:Catalog>

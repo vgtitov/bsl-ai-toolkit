@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:Report xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" uuid="{{uuid:1}}">
+  <producedTypes>
+    <objectType typeId="{{uuid:2}}" valueTypeId="{{uuid:3}}"/>
+    <managerType typeId="{{uuid:4}}" valueTypeId="{{uuid:5}}"/>
+  </producedTypes>
+  <name>{{name}}</name>
+  <synonym>
+    <key>ru</key>
+    <value>{{synonym}}</value>
+  </synonym>
+  <useStandardCommands>true</useStandardCommands>
+</mdclass:Report>

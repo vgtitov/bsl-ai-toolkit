@@ -63,7 +63,7 @@ TDD (сначала падающий тест), byte-perfect минимальн�
 - [ ] **HTTP-метод как вид `add_child`** (дитя URLTemplate; в EDT — вложенный
   `<methods>`, подтверждено выгрузкой ERP; в Конфигураторе — `Method`).
 
-- [ ] **Новый объект целиком / копия типового объекта в расширении** —
+- [~] **Новый объект целиком / копия типового объекта в расширении** — PR 1 сделан: `object add|adopt|delete`, 9 видов (см. `COVERAGE_MAP.md`, `docs/object-add-design.md` §6); дальше служебные виды и копия. Было:
   операция `object copy`/`object add`/`object delete` (сейчас ручная правка XML:
   `ObjectBelonging=Native`, свежие uuid + InternalInfo, регистрация в манифесте,
   вложенные подсистемы, `totalField` в СКД). Спека, уроки и версионные различия —

@@ -58,6 +58,25 @@ EDT-нюансы: `.mdo` опускает свойства со значение
 отсутствующем свойстве отказывает предусловием; тип реквизита формы в EDT-нотации
 (`String`, `CatalogRef.Имя`), а не `xs:`/`cfg:`. Бинарный `Template.bin` вне scope.
 
+## Объект целиком: создать, заимствовать, удалить (`1c-meta object`)
+Новый объект — НЕ клоном соседа и НЕ ручным XML: `object add` пишет эталон, снятый у самого EDT, и строку в
+манифесте, оба формата. Виды: CommonModule, InformationRegister, AccumulationRegister, Catalog, Document, Enum,
+Constant, DataProcessor, Report (остальные — пока человек в IDE, `onec_metadata/COVERAGE_MAP.md`).
+```
+1c-meta object add   --src <src EDT | выгрузка> --kind Справочник --name анТовары --synonym ru=Товары
+1c-meta object add   --src … --kind CommonModule --name анРабота --context server|server-call|client|client-server|global [--privileged]
+1c-meta object add   --src … --kind InformationRegister --name анЦены --periodicity Month --write-mode Independent
+1c-meta object add   --src … --kind AccumulationRegister --name анОстатки --register-type Balance|Turnovers
+1c-meta object adopt --src <расширение> --base <основная конфигурация, тот же формат> --ref Catalog.Валюты
+1c-meta object delete --src … --ref Catalog.анТовары
+```
+- В расширении имя своего объекта — с `namePrefix` (`ан`), иначе отказ.
+- `adopt` пишет ссылку на объект типовой и значения контролируемых свойств из неё. EDT MCP
+  `adopt_metadata_object` (плагин 2.6.1) ссылку НЕ пишет — для заимствования предпочитай движок.
+- `delete` отказывает, пока на объект есть ссылки (список «файл:строка»); заимствованный — только без своего.
+- Реквизиты, измерения, ресурсы — дальше `child add`; свойства — `set-property`.
+- После: EDT — `resync_to_disk` и `get_project_errors`; Конфигуратор — загрузка в тест-базу и round-trip.
+
 ## Порядок операции
 ```
 1c-meta detect <root>                  # формат дерева: CONFIGURATOR | EDT

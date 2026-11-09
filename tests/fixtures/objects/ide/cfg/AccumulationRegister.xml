@@ -1,0 +1,53 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<MetaDataObject xmlns="http://v8.1c.ru/8.3/MDClasses" xmlns:app="http://v8.1c.ru/8.2/managed-application/core" xmlns:cfg="http://v8.1c.ru/8.1/data/enterprise/current-config" xmlns:cmi="http://v8.1c.ru/8.2/managed-application/cmi" xmlns:ent="http://v8.1c.ru/8.1/data/enterprise" xmlns:lf="http://v8.1c.ru/8.2/managed-application/logform" xmlns:style="http://v8.1c.ru/8.1/data/ui/style" xmlns:sys="http://v8.1c.ru/8.1/data/ui/fonts/system" xmlns:v8="http://v8.1c.ru/8.1/data/core" xmlns:v8ui="http://v8.1c.ru/8.1/data/ui" xmlns:web="http://v8.1c.ru/8.1/data/ui/colors/web" xmlns:win="http://v8.1c.ru/8.1/data/ui/colors/windows" xmlns:xen="http://v8.1c.ru/8.3/xcf/enums" xmlns:xpr="http://v8.1c.ru/8.3/xcf/predef" xmlns:xr="http://v8.1c.ru/8.3/xcf/readable" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="2.20">
+	<AccumulationRegister uuid="9e7403f6-aef9-4675-a1c9-c80c47a5d247">
+		<InternalInfo>
+			<xr:GeneratedType name="AccumulationRegisterRecord.МаркерЭталона" category="Record">
+				<xr:TypeId>461df619-ec80-4e93-a0ba-17343fbd3d28</xr:TypeId>
+				<xr:ValueId>bbc87e96-a9e2-4209-b2b4-6dffbc05d95b</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="AccumulationRegisterManager.МаркерЭталона" category="Manager">
+				<xr:TypeId>a7fbb479-0021-4886-a16d-c264cbb8add3</xr:TypeId>
+				<xr:ValueId>251aeac7-1428-4218-a14e-e06501d3830f</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="AccumulationRegisterSelection.МаркерЭталона" category="Selection">
+				<xr:TypeId>c74c3afe-b198-4671-ba6c-cd63076d4106</xr:TypeId>
+				<xr:ValueId>18d06844-89c9-4fdc-8040-8e2d9e39edc0</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="AccumulationRegisterList.МаркерЭталона" category="List">
+				<xr:TypeId>aafae484-eee3-4fc6-bcfd-bca8196dec8e</xr:TypeId>
+				<xr:ValueId>c96797ab-bfb1-45f0-ad42-cb8a01ee7480</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="AccumulationRegisterRecordSet.МаркерЭталона" category="RecordSet">
+				<xr:TypeId>ecda7fec-6f57-4984-a3c8-f9549538809b</xr:TypeId>
+				<xr:ValueId>40c90329-1c7a-4889-b936-3a2db5076962</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="AccumulationRegisterRecordKey.МаркерЭталона" category="RecordKey">
+				<xr:TypeId>87b79710-81f6-474f-9501-850eecff62b2</xr:TypeId>
+				<xr:ValueId>83b139fa-b080-4531-aa77-630fe9c3896c</xr:ValueId>
+			</xr:GeneratedType>
+		</InternalInfo>
+		<Properties>
+			<Name>МаркерЭталона</Name>
+			<Synonym>
+				<v8:item>
+					<v8:lang>ru</v8:lang>
+					<v8:content>Маркер синоним</v8:content>
+				</v8:item>
+			</Synonym>
+			<Comment/>
+			<UseStandardCommands>true</UseStandardCommands>
+			<DefaultListForm/>
+			<AuxiliaryListForm/>
+			<RegisterType>Balance</RegisterType>
+			<IncludeHelpInContents>false</IncludeHelpInContents>
+			<DataLockControlMode>Managed</DataLockControlMode>
+			<FullTextSearch>DontUse</FullTextSearch>
+			<EnableTotalsSplitting>true</EnableTotalsSplitting>
+			<ListPresentation/>
+			<ExtendedListPresentation/>
+			<Explanation/>
+		</Properties>
+		<ChildObjects/>
+	</AccumulationRegister>
+</MetaDataObject>

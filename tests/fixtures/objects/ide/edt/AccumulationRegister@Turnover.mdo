@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:AccumulationRegister xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" uuid="58fed693-6493-4670-8e66-3430f045b603">
+  <producedTypes>
+    <selectionType typeId="0adb4200-15ca-453d-af0e-7b059aec60fd" valueTypeId="bd695789-3180-46b2-a906-c73d34a6a2f7"/>
+    <listType typeId="7e42819b-3c0f-4473-96c1-bd59c40bd402" valueTypeId="d775f47b-414e-4ac3-867c-2bb6120d36f5"/>
+    <managerType typeId="c8c0d2c2-89aa-4c9d-9a99-a5a0cec1634b" valueTypeId="1a51b802-713e-4f80-ba01-6213f9fc45cc"/>
+    <recordSetType typeId="29e73ba4-f46a-4594-98ae-85acbc6aa655" valueTypeId="de3ac8fe-5a13-4424-8189-9782efe7bbfd"/>
+    <recordKeyType typeId="72d26261-33ef-4254-9945-e13ff6537256" valueTypeId="7e955149-3096-4056-9a10-22bced756f98"/>
+    <recordType typeId="5cce75c1-0248-4a5f-9a4d-6bd29bbd6c81" valueTypeId="8b0d5a97-ba9d-4778-b1d3-f164874b99b5"/>
+  </producedTypes>
+  <name>МаркерЭталонаTurnover</name>
+  <synonym>
+    <key>ru</key>
+    <value>Маркер синоним</value>
+  </synonym>
+  <useStandardCommands>true</useStandardCommands>
+  <registerType>Turnovers</registerType>
+  <dataLockControlMode>Managed</dataLockControlMode>
+  <enableTotalsSplitting>true</enableTotalsSplitting>
+</mdclass:AccumulationRegister>

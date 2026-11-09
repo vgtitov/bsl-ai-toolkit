@@ -92,6 +92,26 @@ def build_parser() -> argparse.ArgumentParser:
     sbr.add_argument("file")
     sbr.add_argument("--ref", required=True, help="ссылка объекта вида Тип.Имя")
 
+    ob = sub.add_parser("object", help="создать, заимствовать, удалить объект верхнего уровня (EDT и Конфигуратор)")
+    obsub = ob.add_subparsers(dest="obcmd", required=True)
+    oa = obsub.add_parser("add", help="собственный объект по эталону IDE + строка в манифесте")
+    oa.add_argument("--src", required=True, help="каталог исходников: EDT-проект (src) или выгрузка Конфигуратора")
+    oa.add_argument("--kind", required=True, help="вид: Catalog|Справочник, Document, CommonModule, …")
+    oa.add_argument("--name", required=True)
+    oa.add_argument("--synonym", action="append", default=[], help="ЯЗЫК=ТЕКСТ, можно несколько")
+    oa.add_argument("--context", help="общий модуль: server|server-call|client|client-server|global")
+    oa.add_argument("--privileged", action="store_true", help="общий модуль: привилегированный (с server)")
+    oa.add_argument("--periodicity", help="регистр сведений: Nonperiodical|Second|Day|Month|Quarter|Year|RecorderPosition")
+    oa.add_argument("--write-mode", help="регистр сведений: Independent|RecorderSubordinate")
+    oa.add_argument("--register-type", help="регистр накопления: Balance|Turnovers")
+    oad = obsub.add_parser("adopt", help="заимствовать объект основной конфигурации в расширение")
+    oad.add_argument("--src", required=True, help="каталог исходников расширения")
+    oad.add_argument("--base", required=True, help="каталог исходников основной конфигурации (тот же формат)")
+    oad.add_argument("--ref", required=True, help="Вид.Имя, например Catalog.Валюты")
+    od = obsub.add_parser("delete", help="удалить объект (отказ, если на него есть ссылки)")
+    od.add_argument("--src", required=True)
+    od.add_argument("--ref", required=True, help="Вид.Имя")
+
     sp = sub.add_parser("set-property",
                         help="изменить существующее скалярное свойство объекта/реквизита")
     sp.add_argument("file")
@@ -284,6 +304,25 @@ def main() -> None:
         elif ns.cmd == "set-synonym":
             from onec_metadata.ops.synonym import set_synonym
             set_synonym(Path(ns.file), ns.member, ns.text, ns.lang)
+        elif ns.cmd == "object":
+            from onec_metadata.ops import object as obj
+            if ns.obcmd == "add":
+                syn = {}
+                for kv in ns.synonym:
+                    lang, sep, text = kv.partition("=")
+                    if not sep or not lang or lang in syn:
+                        raise OpPreconditionError(f"--synonym '{kv}': ожидается ЯЗЫК=ТЕКСТ, язык один раз")
+                    syn[lang] = text
+                path = obj.add(Path(ns.src), ns.kind, ns.name, syn, context=ns.context, privileged=ns.privileged,
+                               periodicity=ns.periodicity, write_mode=ns.write_mode,
+                               register_type=ns.register_type)
+                print(f"создан: {path}")
+            elif ns.obcmd == "adopt":
+                print(f"заимствован: {obj.adopt(Path(ns.src), Path(ns.base), ns.ref)}")
+            else:
+                for x in obj.delete(Path(ns.src), ns.ref):
+                    print(f"удалён: {x}")
+            print("проверь в IDE: EDT — get_project_errors; Конфигуратор — загрузка в тестовую базу")
         elif ns.cmd == "set-property":
             from onec_metadata.ops.set_property import set_property
             set_property(Path(ns.file), ns.name, ns.value, ns.attribute)

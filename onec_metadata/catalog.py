@@ -5,7 +5,8 @@
 docs/architecture-review-2026-07.md и CLAUDE.md):
   1) round-trip verify платформой в ТЕСТ-базе — платформа отвергает невалидное;
   2) scope-граница — только безопасные аддитивные и скалярные правки; деструктив
-     с каскадом ссылок (rename/delete/move) вне scope.
+     с каскадом ссылок (rename/move) вне scope; `object delete` — только объект, на который
+     в проекте нет ссылок (иначе отказ со списком находок).
 `is_supported` — потребляемый API для запроса покрытия (напр. advisory-warning в
 CLI на неохваченный тестами вид). Механизм add_child класс-агностичен и может
 работать и на не перечисленных здесь видах — реестр отражает ПРОВЕРЕННОЕ, а не
@@ -51,6 +52,12 @@ SUPPORTED: dict[str, frozenset] = {
     # управляемая форма (P4): реквизит формы (id-пространство, ns logform)
     "Form": frozenset({"form_add_attribute"}),
 }
+
+# Объект целиком: создание по эталону IDE, заимствование, удаление без ссылок — оба формата
+OBJECT_OPS: frozenset = frozenset({"object_add", "object_adopt", "object_delete"})
+for _kind in ("CommonModule", "InformationRegister", "AccumulationRegister", "Catalog", "Document", "Enum",
+              "Constant", "DataProcessor", "Report"):
+    SUPPORTED[_kind] = SUPPORTED.get(_kind, frozenset()) | OBJECT_OPS
 
 
 def is_supported(object_class: str, operation: str) -> bool:

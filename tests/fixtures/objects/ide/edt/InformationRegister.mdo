@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:InformationRegister xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" uuid="88cb2626-514c-4a31-8399-9dfa881a7047">
+  <producedTypes>
+    <selectionType typeId="fcfc1315-7567-44f4-8c84-4471a372be3a" valueTypeId="1b252773-5ade-4037-8724-5127aaf3ca83"/>
+    <listType typeId="79e871eb-507b-4bb1-b555-411174b4d3eb" valueTypeId="38276ac1-18f6-4abc-855d-75dd675a5e06"/>
+    <managerType typeId="868aa40c-d854-4197-acfd-f6042823c8af" valueTypeId="b7ee66fc-5216-4ee5-a93a-70b878bfdfe3"/>
+    <recordSetType typeId="25cdfc00-fbff-4572-8b81-511c375eeb64" valueTypeId="f109ec34-bfc8-49b3-bc0b-13fd3d9482fc"/>
+    <recordKeyType typeId="9e3bdb15-0da6-4665-87ce-5de1d0c324e4" valueTypeId="1d8186a2-41b3-4f56-be09-5eeb250bd77a"/>
+    <recordType typeId="5a05d388-e84d-4440-9f2f-afd901aa6895" valueTypeId="fc98b231-27a9-405d-b2c3-eb7b2c3341dc"/>
+    <recordManagerType typeId="fd7113f3-8146-4897-9c9f-583a13526409" valueTypeId="a0b109b9-d0e7-4034-8110-9343ca40c2a4"/>
+  </producedTypes>
+  <name>МаркерЭталона</name>
+  <synonym>
+    <key>ru</key>
+    <value>Маркер синоним</value>
+  </synonym>
+  <useStandardCommands>true</useStandardCommands>
+  <editType>InDialog</editType>
+  <dataLockControlMode>Managed</dataLockControlMode>
+</mdclass:InformationRegister>

@@ -1,0 +1,68 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<MetaDataObject xmlns="http://v8.1c.ru/8.3/MDClasses" xmlns:app="http://v8.1c.ru/8.2/managed-application/core" xmlns:cfg="http://v8.1c.ru/8.1/data/enterprise/current-config" xmlns:cmi="http://v8.1c.ru/8.2/managed-application/cmi" xmlns:ent="http://v8.1c.ru/8.1/data/enterprise" xmlns:lf="http://v8.1c.ru/8.2/managed-application/logform" xmlns:style="http://v8.1c.ru/8.1/data/ui/style" xmlns:sys="http://v8.1c.ru/8.1/data/ui/fonts/system" xmlns:v8="http://v8.1c.ru/8.1/data/core" xmlns:v8ui="http://v8.1c.ru/8.1/data/ui" xmlns:web="http://v8.1c.ru/8.1/data/ui/colors/web" xmlns:win="http://v8.1c.ru/8.1/data/ui/colors/windows" xmlns:xen="http://v8.1c.ru/8.3/xcf/enums" xmlns:xpr="http://v8.1c.ru/8.3/xcf/predef" xmlns:xr="http://v8.1c.ru/8.3/xcf/readable" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="2.20">
+	<InformationRegister uuid="20f4904d-8c17-4646-8649-4e772049d4a3">
+		<InternalInfo>
+			<xr:GeneratedType name="InformationRegisterRecord.МаркерЭталонаPeriodic" category="Record">
+				<xr:TypeId>053ee1c3-6722-4dd7-b96e-6bdcada3b14d</xr:TypeId>
+				<xr:ValueId>0546ca02-1e2a-40c4-9b7c-77dcb1d02d3f</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="InformationRegisterManager.МаркерЭталонаPeriodic" category="Manager">
+				<xr:TypeId>3715f066-fd14-4ddb-8299-b1cf27187936</xr:TypeId>
+				<xr:ValueId>1a06a3ea-f781-4dd4-abb8-acf56b0a38e0</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="InformationRegisterSelection.МаркерЭталонаPeriodic" category="Selection">
+				<xr:TypeId>2fab1d21-791a-4ef1-af67-6c11eeb1cd4e</xr:TypeId>
+				<xr:ValueId>f957ebb7-06b6-42e3-a41a-ff24a034ec2f</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="InformationRegisterList.МаркерЭталонаPeriodic" category="List">
+				<xr:TypeId>0dd0feec-bb0c-47fe-9227-b35fb9f3d9bf</xr:TypeId>
+				<xr:ValueId>8bc52953-d948-4b6e-b67f-c3f92c2d3963</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="InformationRegisterRecordSet.МаркерЭталонаPeriodic" category="RecordSet">
+				<xr:TypeId>fe31c431-9f32-464c-bbf4-d704eee112cc</xr:TypeId>
+				<xr:ValueId>d3dede5e-558a-48c5-903e-7221d800c515</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="InformationRegisterRecordKey.МаркерЭталонаPeriodic" category="RecordKey">
+				<xr:TypeId>7663f0fe-3468-4bd2-b8e6-de352a7120eb</xr:TypeId>
+				<xr:ValueId>33bd585d-a906-42b3-a73d-e2aaafb96d20</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="InformationRegisterRecordManager.МаркерЭталонаPeriodic" category="RecordManager">
+				<xr:TypeId>1ab9cb7c-0130-46ec-b197-c78f9b6bf982</xr:TypeId>
+				<xr:ValueId>0db57c6c-7307-4afe-91b1-6799b88988b0</xr:ValueId>
+			</xr:GeneratedType>
+		</InternalInfo>
+		<Properties>
+			<Name>МаркерЭталонаPeriodic</Name>
+			<Synonym>
+				<v8:item>
+					<v8:lang>ru</v8:lang>
+					<v8:content>Маркер синоним</v8:content>
+				</v8:item>
+			</Synonym>
+			<Comment/>
+			<UseStandardCommands>true</UseStandardCommands>
+			<EditType>InDialog</EditType>
+			<DefaultRecordForm/>
+			<DefaultListForm/>
+			<AuxiliaryRecordForm/>
+			<AuxiliaryListForm/>
+			<InformationRegisterPeriodicity>Month</InformationRegisterPeriodicity>
+			<WriteMode>RecorderSubordinate</WriteMode>
+			<MainFilterOnPeriod>false</MainFilterOnPeriod>
+			<IncludeHelpInContents>false</IncludeHelpInContents>
+			<DataLockControlMode>Managed</DataLockControlMode>
+			<FullTextSearch>DontUse</FullTextSearch>
+			<EnableTotalsSliceFirst>false</EnableTotalsSliceFirst>
+			<EnableTotalsSliceLast>false</EnableTotalsSliceLast>
+			<RecordPresentation/>
+			<ExtendedRecordPresentation/>
+			<ListPresentation/>
+			<ExtendedListPresentation/>
+			<Explanation/>
+			<DataHistory>DontUse</DataHistory>
+			<UpdateDataHistoryImmediatelyAfterWrite>false</UpdateDataHistoryImmediatelyAfterWrite>
+			<ExecuteAfterWriteDataHistoryVersionProcessing>false</ExecuteAfterWriteDataHistoryVersionProcessing>
+		</Properties>
+		<ChildObjects/>
+	</InformationRegister>
+</MetaDataObject>
