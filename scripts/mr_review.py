@@ -63,6 +63,25 @@ def _run(script: str, *args: str) -> tuple[int, str]:
         return 0, ""
 
 
+def bsl_guard_findings(f: Path, rel: str) -> list[tuple[str, str, str]]:
+    """Находки bsl_guard по файлу. Упавший guard — блокирующая находка, не молчание:
+    иначе сломанная проверка выглядит как «чисто»."""
+    stderr = ""
+    try:
+        r = subprocess.run([sys.executable, str(HERE / "bsl_guard.py"), "--json", str(f)], capture_output=True,
+                           text=True, encoding="utf-8", errors="replace", timeout=180)
+        stderr = (r.stderr or "").strip()
+        items = json.loads(r.stdout or "")
+        if not isinstance(items, list):
+            raise ValueError("вывод не массив находок")
+    except Exception as e:                       # таймаут, traceback, не-JSON
+        # у traceback суть — в последней строке («ИмяОшибки: текст»), первая — заголовок
+        err = stderr.splitlines()[-1] if stderr else (str(e) or type(e).__name__)
+        return [("P1", rel, "bsl_guard не выполнен: " + err[:200])]
+    return [("P1" if it.get("severity", "error") == "error" else "P2",
+             f'{rel}:{it.get("line")}', f'[{it.get("code")}] {it.get("message", "")[:160]}') for it in items]
+
+
 def findings(repo: Path, base: str, description: str | None, max_objects: int, max_bsl: int) -> tuple[list, dict]:
     out: list[tuple[str, str, str]] = []                # (P1|P2, место, суть)
     res = mr_size.measure(repo, base)
@@ -75,13 +94,7 @@ def findings(repo: Path, base: str, description: str | None, max_objects: int, m
             out.append(("P2", "описание MR", "не хватает частей: " + ", ".join(gaps)))
     for f in changed_bsl(repo, base):
         rel = os.path.relpath(f, repo)
-        rc, o = _run("bsl_guard.py", "--json", str(f))
-        try:
-            for it in json.loads(o) if o else []:
-                out.append(("P1" if it.get("severity", "error") == "error" else "P2",
-                            f'{rel}:{it.get("line")}', f'[{it.get("code")}] {it.get("message", "")[:160]}'))
-        except ValueError:
-            pass
+        out.extend(bsl_guard_findings(f, rel))
         rc, o = _run("rights_guard.py", "--json", str(f))
         try:
             for it in json.loads(o) if o else []:

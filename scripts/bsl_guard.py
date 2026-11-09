@@ -41,6 +41,7 @@ import os
 import re
 import sys
 import tempfile
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -450,16 +451,52 @@ def _local_names(clean: str) -> set:
     return {n.lower() for n in names if n}
 
 
+def _local(tag) -> str:
+    return tag.rsplit("}", 1)[-1] if isinstance(tag, str) else ""
+
+
+_DATA_CHILDREN = {"attributes", "tabularsections", "dimensions", "resources",          # EDT
+                  "attribute", "tabularsection", "dimension", "resource"}              # Конфигуратор
+
+
+def _context_names_in(f: Path) -> set:
+    """Имена, доступные в модуле напрямую: реквизиты, табличные части, измерения и ресурсы
+    объекта; у формы — реквизиты формы. Элементы, команды, формы и обработчики — нет."""
+    try:
+        top = ET.parse(f).getroot()
+    except (ET.ParseError, OSError):
+        return set()
+    names = set()
+    if _local(top.tag) == "Form":
+        for el in top:
+            if _local(el.tag) == "attributes":                                   # EDT Form.form
+                names.add(next((c.text for c in el if _local(c.tag) == "name"), None))
+            elif _local(el.tag) == "Attributes":                                 # Конфигуратор Form.xml
+                names |= {a.get("name") for a in el if _local(a.tag) == "Attribute"}
+        return {n.lower() for n in names if n}
+    if _local(top.tag) == "MetaDataObject":                                      # Конфигуратор: объект
+        obj = next(iter(top), None)
+        kids = next((c for c in obj if _local(c.tag) == "ChildObjects"), []) if obj is not None else []
+        for el in kids:
+            if _local(el.tag).lower() in _DATA_CHILDREN:
+                props = next((c for c in el if _local(c.tag) == "Properties"), [])
+                names.add(next((c.text for c in props if _local(c.tag) == "Name"), None))
+    else:                                                                         # EDT .mdo
+        for el in top:
+            if _local(el.tag).lower() in _DATA_CHILDREN:
+                names.add(next((c.text for c in el if _local(c.tag) == "name"), None))
+    return {n.lower() for n in names if n}
+
+
 def _metadata_has_name(path: Path, root: Path, name: str) -> bool:
     """Имя — реквизит/табличная часть объекта или реквизит формы, чей это модуль
     (`Пользователи.Количество()` в модуле объекта — табличная часть, не общий модуль)."""
-    needles = (f">{name.lower()}<", f'"{name.lower()}"')
     for d in path.parents:
         if d == root:
             break
         for f in (d / f"{d.name}.mdo", d.parent / f"{d.name}.xml", d / "Form.form",
                   d / "Form.xml", d / "Ext" / "Form.xml"):
-            if f.is_file() and any(n in _read(f).lower() for n in needles):
+            if f.is_file() and name.lower() in _context_names_in(f):
                 return True
     return False
 

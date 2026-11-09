@@ -144,6 +144,32 @@ def test_mr_findings_flag_missing_ci_and_description_gaps():
     assert any("описание" in where for _, where, _ in out)
 
 
+# DISCIPLINE_ALLOW_TEST_EDIT: ревью №2 - упавший bsl_guard не должен выглядеть как «чисто»
+def test_bsl_guard_crash_is_blocking_and_json_with_rc1_is_parsed(monkeypatch, tmp_path):
+    class R:
+        def __init__(self, rc, out, err=""):
+            self.returncode, self.stdout, self.stderr = rc, out, err
+
+    monkeypatch.setattr(mr_review.subprocess, "run", lambda *a, **kw: R(
+        1, "", "Traceback (most recent call last):\n  File x\nValueError: сломалось"))
+    out = mr_review.bsl_guard_findings(tmp_path / "m.bsl", "m.bsl")
+    assert out == [("P1", "m.bsl", "bsl_guard не выполнен: ValueError: сломалось")]
+
+    monkeypatch.setattr(mr_review.subprocess, "run", lambda *a, **kw: R(0, "не json"))
+    assert mr_review.bsl_guard_findings(tmp_path / "m.bsl", "m.bsl")[0][0] == "P1"
+
+    def boom(*a, **kw):
+        raise subprocess.TimeoutExpired("bsl_guard", 180)
+    monkeypatch.setattr(mr_review.subprocess, "run", boom)
+    assert "не выполнен" in mr_review.bsl_guard_findings(tmp_path / "m.bsl", "m.bsl")[0][2]
+
+    items = ('[{"line": 3, "code": "unknown-module-method", "message": "М.Нет", "severity": "error"},'
+             ' {"line": 5, "code": "dash-in-comment", "message": "тире", "severity": "warning"}]')
+    monkeypatch.setattr(mr_review.subprocess, "run", lambda *a, **kw: R(1, items))
+    out = mr_review.bsl_guard_findings(tmp_path / "m.bsl", "m.bsl")
+    assert [(p, where) for p, where, _ in out] == [("P1", "m.bsl:3"), ("P2", "m.bsl:5")]
+
+
 def test_prompt_is_generic_without_bsl():
     assert "1С" not in mr_review.second_opinion_prompt(None, False, generic=True)
     assert "1С" in mr_review.second_opinion_prompt(None, False)

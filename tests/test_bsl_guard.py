@@ -437,7 +437,7 @@ def test_variable_or_tabular_section_named_like_module_not_flagged(tmp_path):
     obj = root / "Catalogs" / "Группы"
     obj.mkdir(parents=True)
     (obj / "Группы.mdo").write_text(
-        "<mdclass:Catalog>\n  <tabularSections>\n    <name>Пользователи</name>\n"
+        f"<mdclass:Catalog {_MD_NS}>\n  <tabularSections>\n    <name>Пользователи</name>\n"
         "  </tabularSections>\n</mdclass:Catalog>\n", encoding="utf-8")
     (obj / "ObjectModule.bsl").write_text(
         "Процедура ПередЗаписью(Отказ)\n    Н = Пользователи.Количество();\n"
@@ -445,8 +445,76 @@ def test_variable_or_tabular_section_named_like_module_not_flagged(tmp_path):
     assert _unknown(_mod().scan_file(obj / "ObjectModule.bsl")) == []
     (obj / "ManagerModule.bsl").write_text(               # без затенения правило работает
         "Процедура П()\n    Н = 1;\n    Пользователи.НетТакого();\nКонецПроцедуры\n", encoding="utf-8")
-    (obj / "Группы.mdo").write_text("<mdclass:Catalog/>", encoding="utf-8")
+    (obj / "Группы.mdo").write_text(f"<mdclass:Catalog {_MD_NS}/>", encoding="utf-8")
     assert [line for line, _ in _unknown(_mod().scan_file(obj / "ManagerModule.bsl"))] == [3]
+
+
+_MD_NS = 'xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass"'
+_CALL_BAD = "Процедура П()\n    Пользователи.НетМетода();\nКонецПроцедуры\n"
+
+
+# DISCIPLINE_ALLOW_TEST_EDIT: ревью №2 - имя берётся только из реквизитов, не из команд/элементов
+def test_command_or_item_named_like_module_does_not_shadow_edt(tmp_path):
+    root = _edt_root(tmp_path)
+    _edt_module(root, "Пользователи", "Функция Текущий() Экспорт\nКонецФункции\n")
+    obj = root / "Catalogs" / "Группы"
+    form = obj / "Forms" / "ФормаЭлемента"
+    form.mkdir(parents=True)
+    (obj / "Группы.mdo").write_text(
+        f"<mdclass:Catalog {_MD_NS}>\n  <commands>\n    <name>Пользователи</name>\n  </commands>\n"
+        "  <tabularSections>\n    <attributes>\n      <name>Пользователи</name>\n"   # реквизит ТЧ - не в модуле
+        "    </attributes>\n    <name>Состав</name>\n  </tabularSections>\n</mdclass:Catalog>\n",
+        encoding="utf-8")
+    (form / "Form.form").write_text(
+        '<form:Form xmlns:form="http://g5.1c.ru/v8/dt/form">\n'
+        "  <items>\n    <name>Пользователи</name>\n  </items>\n"
+        "  <formCommands>\n    <name>Пользователи</name>\n  </formCommands>\n"
+        "  <attributes>\n    <name>Объект</name>\n  </attributes>\n</form:Form>\n", encoding="utf-8")
+    (form / "Module.bsl").write_text(_CALL_BAD, encoding="utf-8")
+    (obj / "ObjectModule.bsl").write_text(_CALL_BAD, encoding="utf-8")
+    assert [ln for ln, _ in _unknown(_mod().scan_file(form / "Module.bsl"))] == [2]
+    assert [ln for ln, _ in _unknown(_mod().scan_file(obj / "ObjectModule.bsl"))] == [2]
+    (form / "Form.form").write_text(                       # реквизит формы - затеняет
+        '<form:Form xmlns:form="http://g5.1c.ru/v8/dt/form">\n'
+        "  <attributes>\n    <name>Пользователи</name>\n  </attributes>\n</form:Form>\n", encoding="utf-8")
+    assert _unknown(_mod().scan_file(form / "Module.bsl")) == []
+
+
+def test_command_or_item_named_like_module_does_not_shadow_designer(tmp_path):
+    root = tmp_path / "cf"
+    (root / "CommonModules" / "Пользователи" / "Ext").mkdir(parents=True)
+    (root / "Configuration.xml").write_text("<x/>", encoding="utf-8")
+    (root / "CommonModules" / "Пользователи.xml").write_text("<CommonModule/>", encoding="utf-8")
+    (root / "CommonModules" / "Пользователи" / "Ext" / "Module.bsl").write_text(
+        "Функция Текущий() Экспорт\nКонецФункции\n", encoding="utf-8")
+    ns = 'xmlns="http://v8.1c.ru/8.3/MDClasses"'
+    cat = root / "Catalogs"
+    (cat / "Группы" / "Ext").mkdir(parents=True)
+    (cat / "Группы" / "Forms" / "Ф" / "Ext" / "Form").mkdir(parents=True)
+
+    def obj_xml(child):
+        return (f"<MetaDataObject {ns}><Catalog><ChildObjects>{child}</ChildObjects></Catalog>"
+                "</MetaDataObject>")
+    (cat / "Группы.xml").write_text(obj_xml(
+        "<Command><Properties><Name>Пользователи</Name></Properties></Command><Form>Пользователи</Form>"),
+        encoding="utf-8")
+    (cat / "Группы" / "Forms" / "Ф" / "Ext" / "Form.xml").write_text(
+        '<Form xmlns="http://v8.1c.ru/8.3/xcf/logform"><Commands><Command name="Пользователи"/></Commands>'
+        '<Attributes><Attribute name="Объект"/></Attributes></Form>', encoding="utf-8")
+    om = cat / "Группы" / "Ext" / "ObjectModule.bsl"
+    fm = cat / "Группы" / "Forms" / "Ф" / "Ext" / "Form" / "Module.bsl"
+    om.write_text(_CALL_BAD, encoding="utf-8")
+    fm.write_text(_CALL_BAD, encoding="utf-8")
+    assert [ln for ln, _ in _unknown(_mod().scan_file(om))] == [2]
+    assert [ln for ln, _ in _unknown(_mod().scan_file(fm))] == [2]
+    (cat / "Группы.xml").write_text(obj_xml(
+        "<TabularSection><Properties><Name>Пользователи</Name></Properties></TabularSection>"),
+        encoding="utf-8")
+    (cat / "Группы" / "Forms" / "Ф" / "Ext" / "Form.xml").write_text(
+        '<Form xmlns="http://v8.1c.ru/8.3/xcf/logform"><Attributes><Attribute name="Пользователи"/>'
+        "</Attributes></Form>", encoding="utf-8")
+    assert _unknown(_mod().scan_file(om)) == []
+    assert _unknown(_mod().scan_file(fm)) == []
 
 
 # DISCIPLINE_ALLOW_TEST_EDIT: ревью - затенение по области видимости процедуры
