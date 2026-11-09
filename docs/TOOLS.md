@@ -81,7 +81,8 @@
   `scripts/zabbix_perf.py` собирает отчёт по производительности.
 - **ServiceDesk Plus** — `scripts/servicedesk.py`: заявки по исполнителю, группе, статусу и периоду, создание по шаблону с подтверждением; `docs/SERVICEDESK.md`, переменные `SD_BASE_URL`, `SD_API_KEY`, конфиг `config/servicedesk.example.toml`.
 - **Автоссылки и порядок страниц Confluence** — `scripts/confluence_linkify.py` (названия страниц в кавычках становятся ссылками при `atlassian.py conf publish`), `scripts/structure_check.py` и `conf structure <id>` (когда раздел пора группировать).
-- **Ревью merge request** — `scripts/mr_size.py` (размер по объектам метаданных и ручным строкам BSL), `scripts/mr_review.py` (первый проход P1/P2, второе мнение), `scripts/defect_trace.py` (какая задача принесла дефект); `docs/MR_REVIEW.md`, чек-лист `core/skills/1c-dev/references/review-checklist.md`.
+- **Ревью merge request** — `scripts/mr_size.py` (размер по объектам метаданных и ручным строкам BSL), `scripts/mr_review.py` (первый проход P1/P2, второе мнение; `status|create|note|merge|sync-main` — работа с MR через API), `scripts/defect_trace.py` (какая задача принесла дефект); `docs/MR_REVIEW.md`, чек-лист `core/skills/1c-dev/references/review-checklist.md`.
+- **Защиты от утечек в сессии агента** — PreToolUse-хук `scripts/pretool_guard.py` (отказ на вывод `.env`, командную строку процессов без маски, запись файла через here-doc), безопасные замены `scripts/env_keys.py` (только имена ключей `.env`) и `scripts/proc_list.py` (процессы с маской паролей).
 - Свой коннектор добавляется тонким скриптом в `scripts/` или инструментом в сервере `onec-ops`. Секреты — только
   через переменные окружения.
 

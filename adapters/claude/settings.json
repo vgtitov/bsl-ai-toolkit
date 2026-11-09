@@ -19,6 +19,18 @@
         ]
       }
     ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell|Read|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 30,
+            "command": "P=$(for c in python3 python; do \"$c\" -c '' </dev/null >/dev/null 2>&1 && { echo \"$c\"; break; }; done); ${P:-uv run --quiet --no-project --python 3.12 python} \"${CLAUDE_PROJECT_DIR:-.}/scripts/pretool_guard.py\"; [ $? -eq 2 ] && exit 2; exit 0"
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [
@@ -36,5 +48,6 @@
       }
     ]
   },
-  "//7": "SessionStart: scripts/repo_freshness.py — раз в сутки git fetch; если клон отстал от upstream, одна строка в контекст агента «предложи обновиться». Сам pull не делает. Молчит на пин-теге."
+  "//7": "SessionStart: scripts/repo_freshness.py — раз в сутки git fetch; если клон отстал от upstream, одна строка в контекст агента «предложи обновиться». Сам pull не делает. Молчит на пин-теге.",
+  "//8": "PreToolUse: scripts/pretool_guard.py — отказ (exit 2) на вывод .env (замена scripts/env_keys.py), командную строку процессов без маски (scripts/proc_list.py) и запись файла через here-doc (инструмент Write/Edit). Нет Python/uv или ошибка хука — пропуск (exit 0)."
 }

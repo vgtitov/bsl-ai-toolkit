@@ -5,6 +5,16 @@
 ## [Unreleased]
 
 ### Added
+- PreToolUse-хук `scripts/pretool_guard.py` (`adapters/claude/settings.json`): отказ до запуска инструмента на вывод
+  `.env` (Read, Grep с выводом строк, cat/Get-Content/Select-String… в т.ч. за `sudo`/`env`/`xargs`), на командную
+  строку процессов без маски (Win32_Process/wmic/`ps -ef`/`tasklist /v`) и на запись файла через here-doc или
+  here-string (интерпретатор с here-doc-скриптом пропускается). Замены: `scripts/env_keys.py` — только имена ключей,
+  `scripts/proc_list.py` — процессы с маской паролей. Нет Python/uv или ошибка хука — пропуск.
+- `mr_review.py status|create|note|merge|sync-main` — работа с MR через API в UTF-8: `merge` merge-коммитом с
+  проверками HEAD, отставания, `sha` и `mergeable` (ждёт пересчёта статуса до 60 с), `develop`/`main`/`master` и
+  защищённые ветки не удаляет; `sync-main` — `git merge` цели, конфликт только в `CHANGELOG.md` (строки ветки в
+  `[Unreleased]` / `### Added`) собирает сам. Узел только явный, токен `--token-env`/`GITLAB_TOKEN_ENV`, TLS с
+  `--cafile`/`GITLAB_CA_FILE` без отключения проверки.
 - `1c-meta form add-attribute-column` / `remove-attribute-column` / `remove-attribute` — колонка реквизита формы
   «таблица значений» и удаление колонки или реквизита, **оба формата**: Конфигуратор `Form.xml` и EDT `Form.form`
   (формат по расширению; EDT MCP колонку во вложенном реквизите не создаёт). Тип — `String | Boolean | Date |

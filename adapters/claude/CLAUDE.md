@@ -10,7 +10,9 @@
 
 ## Хуки (детерминированные проверки)
 `.claude/settings.json` — `PostToolUse` на `Edit|Write|MultiEdit`: после правки `*.bsl` авто-прогон BSL Language Server
-(MCP `bsl-ls` / CLI). Агент видит ошибки сразу, чинит без траты токенов на запуск. Плюс git-хуки
+(MCP `bsl-ls` / CLI). Агент видит ошибки сразу, чинит без траты токенов на запуск. `PreToolUse` на
+`Bash|PowerShell|Read|Grep` (`scripts/pretool_guard.py`) отказывает в выводе `.env` (имена ключей — `scripts/env_keys.py`),
+командной строке процессов без маски (`scripts/proc_list.py`) и записи файла через here-doc (инструмент Write/Edit). Плюс git-хуки
 (`scripts/install_git_hooks.py`): commit-msg (чистые сообщения) + pre-commit (`bsl_guard.py` — детектор «запрос в цикле») + pre-push (проверки репозитория из `scripts/hooks/pre-push` и `git lfs pre-push`; требует git-lfs только в LFS-репозиториях).
 
 ## MCP

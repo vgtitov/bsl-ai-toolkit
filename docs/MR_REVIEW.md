@@ -49,6 +49,20 @@ GITLAB_HOST=gitlab.example.ru GITLAB_TOKEN=... python scripts/mr_review.py --mr 
 ```
 Читает описание, статус, размер, наличие CI и дифф MR через API (только чтение), показывает находки по описанию и CI и по умолчанию просит второе мнение другой модели (`--no-second-opinion` отключает). Токен берётся из `GITLAB_TOKEN` или `GITLAB_PERSONAL_ACCESS_TOKEN`, узел только явный (`--host` или `GITLAB_HOST`: имя узла и необязательный порт, без логина, пути и параметров), перенаправления запрещены, чтобы токен не ушёл на другой адрес. Ошибки сети и ответа печатаются коротко, без токена. Дифф с кодом корпоративного проекта уходит только корпоративным проверяющим (`AI_TOOLKIT_CORP=1`).
 
+## Работа с MR из терминала: status, create, note, merge, sync-main
+```bash
+python scripts/mr_review.py status 12
+python scripts/mr_review.py create --source feat/x --target main --title "..." [--description-file mr.md]
+python scripts/mr_review.py note 12 --body-file note.md
+python scripts/mr_review.py merge 12 --branch feat/x --repo путь/к/worktree      # только по слову ревьюера
+python scripts/mr_review.py sync-main --repo путь/к/worktree [--target main]
+```
+Запись через API на `urllib` в UTF-8 (PowerShell 5.1 `Invoke-RestMethod` портит кириллицу в заголовке и описании). Узел, как у `--mr`, только явный: `--host` или `GITLAB_HOST`, не из `git remote`. Проект — `--project` или путь из `origin`. Токен — `--token-env ИМЯ` или `GITLAB_TOKEN_ENV=ИМЯ` (если у вас несколько серверов и свои имена ключей), иначе `GITLAB_TOKEN` / `GITLAB_PERSONAL_ACCESS_TOKEN`; `.env` рабочего каталога подхватывается без перезаписи env, значение не печатается. TLS проверяется всегда: сервер с самоподписанным сертификатом — `--cafile` или `GITLAB_CA_FILE` (pem сервера; получить `openssl s_client -showcerts -connect <узел>:443` и сверить отпечаток с администратором).
+
+- `create` без `--description-file` берёт `.gitlab/merge_request_templates/Default.md` репозитория, иначе `docs/templates/merge_request_description.md`.
+- `merge` вливает merge-коммитом (`squash=false`, передаёт `sha`) и отказывает, если в каталоге не та ветка, HEAD не равен `origin/<ветка>`, ветка не содержит `origin/<цель>`, MR не открыт, `sha` MR не равен HEAD или `detailed_merge_status` не `mergeable`. Пока GitLab считает статус (`checking`, `unchecked`, `preparing`), ждёт до `--wait` секунд (60). Исходную ветку удаляет только у обычной ветки: у `develop`, `main`, `master` и защищённой (поле `protected` ветки по API; ошибка запроса = защищена) — никогда, и после вливания проверяет, что она осталась на `origin`. Вливает ревьюер: агент запускает `merge` только по его явному слову.
+- `sync-main` делает `git merge origin/<цель>` в ветку (не rebase). Конфликт только в `CHANGELOG.md` собирает сам: версия цели плюс строки, которые ветка добавила в `[Unreleased]` под первый `### Added`. Ветка правила или удаляла строки, писала в другие разделы, или конфликтуют другие файлы — остановка со списком, сводит человек.
+
 ## Комментарии и обсуждения
 Замечания пишутся в MR комментарием по строке кода и начинаются с `блокер:` (без исправления не вливаем) или `желательно:`. Общее замечание одним сводным комментарием. В чат уходит только ссылка на MR. Автор отвечает в том же треде и правит код; обсуждение с `блокер:` закрывает ревьюер после проверки нового диффа; вливает ревьюер, не автор. Включите в GitLab «обсуждения должны быть закрыты перед слиянием». Порядок для агента: `core/skills/1c-dev/references/mr-review-agent.md`, шаблон описания MR: `docs/templates/merge_request_description.md`.
 
