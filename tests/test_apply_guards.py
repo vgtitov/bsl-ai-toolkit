@@ -479,14 +479,22 @@ def test_merge_dump_info_nested_dump_keeps_owner_entries():
     assert merged.rstrip().endswith('configVersion="n"/>\n' + _CDI_TAIL)
 
 
-def test_merge_partial_dump_without_old_dump_info_copies_new(tmp_path):
+# DISCIPLINE_ALLOW_TEST_EDIT: ревью №5 — частичный реестр в пустой --out больше не пишется: с ним
+# существующие объекты, которых в нём нет, при точечной загрузке сошли бы за новые и потеряли модули
+def test_merge_partial_dump_without_old_dump_info_does_not_save_partial(tmp_path, capsys):
     m = _ds()
     out, src = tmp_path / "out", tmp_path / "src"
     out.mkdir()
     _touch(src, "Catalogs/Товары.xml")
     (src / "ConfigDumpInfo.xml").write_text(NEW_CDI, encoding="utf-8")
     m.merge_partial_dump(src, out)
-    assert (out / "ConfigDumpInfo.xml").read_text(encoding="utf-8") == NEW_CDI
+    assert not (out / "ConfigDumpInfo.xml").exists()
+    assert (out / "Catalogs/Товары.xml").exists()
+    assert "реестр неполный" in capsys.readouterr().out
+    # без реестра xml без Ext — отказ, пока не передан --allow-missing-ext
+    gaps = dumpload.partial_load_gaps(out, ["Catalogs/Товары.xml"])
+    assert gaps and "ConfigDumpInfo" in gaps[0]
+    assert dumpload.partial_load_gaps(out, ["Catalogs/Товары.xml"], allow_missing_ext=True) == []
 
 
 # ── повторное ревью ───────────────────────────────────────────────────────────

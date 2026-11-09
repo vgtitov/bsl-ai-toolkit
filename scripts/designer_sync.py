@@ -223,7 +223,12 @@ def merge_partial_dump(src: Path, dst: Path) -> None:
     old_info = info_dst.read_bytes() if info_dst.is_file() else None
     new_raw = info_src.read_bytes() if info_src.is_file() else None
     # итоговый реестр — ДО любой записи в dst: битый файл не должен оставить --out наполовину перенесённым
-    final = new_raw if old_info is None else None
+    final = None
+    if old_info is None and new_raw:
+        # частичный реестр как полный: существующие объекты, которых в нём нет, при следующей
+        # точечной загрузке сошли бы за новые, и проверка пропустила бы их xml без модулей
+        print("[!] ConfigDumpInfo.xml из точечной выгрузки не сохранён: реестр неполный; "
+              "для защиты загрузки нужна полная выгрузка")
     if old_info is not None and new_raw:
         bom = b"\xef\xbb\xbf"
         try:
