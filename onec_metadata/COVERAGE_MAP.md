@@ -74,6 +74,9 @@
 ## Формы (все объекты, у кого есть формы) — блок P4
 Управляемые формы (Form у Catalog/Document/…, CommonForm). Спека — `docs/superpowers/specs/*-forms-*`.
 - **`form add-attribute`** — реквизит формы: **оба формата** (Конфигуратор `lf:`, EDT `attributes`).
+- **`form set-attribute-type`** — тип СУЩЕСТВУЮЩЕГО реквизита формы (в т.ч. основного): **оба формата**
+  ✅ 2026-11-06. Блок типа создаётся при отсутствии (EDT — сразу после `<id>`, Конфигуратор — после
+  `Title`), лишние квалификаторы снимаются.
 - **`form add-field`** — визуальное поле: **оба формата** ✅ 2026-07-15. Конфигуратор — `InputField` в
   `ChildItems`; EDT — `items form:FormField` (+ `InputFieldExtInfo`), id элемента и вложенных
   extendedTooltip/contextMenu — свежие в пространстве ЭЛЕМЕНТОВ. Привязка через DataPath.
