@@ -558,3 +558,54 @@ def test_remote_watchdog_growing_out_is_progress(monkeypatch):
     threading.Timer(0.5, r.stop.set).start()
     smoke._run_watched(r, "1cv8", timeout=60, log="l", stall=0.2, poll=0.05)
     assert not r.killed
+
+
+# ── ревью №4 ──────────────────────────────────────────────────────────────────
+
+def test_base_key_and_ib_creds_by_base_kind(tmp_path):
+    m = _ds()
+    assert m.base_key(r"srv\ERP_Test") == "ERP_Test"
+    for file_base in (r"C:\bases\erp", r"d:/bases/erp", r"\\srv\share\erp", "/opt/bases/erp",
+                      'File="C:\\bases\\erp";', "FILE=C:\\b", str(tmp_path)):
+        assert m.base_key(file_base) is None, file_base
+        assert m.ib_creds(file_base, None, {}) == (None, None)
+    assert m.ib_creds(r"srv\ERP_Test", None, {"ONEC_IB_USER": "u", "ONEC_IB_PASS_ERP_TEST": "p"}) == ("u", "p")
+    assert m.ib_creds(r"srv\ERP_Test", "kz", {"ONEC_IB_USER": "u", "ONEC_IB_PASS_KZ": "k"}) == ("u", "k")
+
+
+def test_broken_new_dump_info_leaves_out_untouched(tmp_path):
+    m = _ds()
+    out, src = tmp_path / "out", tmp_path / "src"
+    out.mkdir()
+    (out / "ConfigDumpInfo.xml").write_text(OLD_CDI, encoding="utf-8")
+    _touch(out, MODULE, "старый модуль")
+    _touch(src, MODULE, "новый модуль")
+    (src / "ConfigDumpInfo.xml").write_text(
+        _CDI_HEAD + '\t\t<Metadata name="Catalog.Товары" id="2">\n', encoding="utf-8")   # не закрыт
+    with pytest.raises(SystemExit) as e:
+        m.merge_partial_dump(src, out)
+    assert str(src) in str(e.value)
+    assert (out / MODULE).read_text(encoding="utf-8") == "старый модуль"
+    assert (out / "ConfigDumpInfo.xml").read_text(encoding="utf-8") == OLD_CDI
+    assert not (out / "ConfigDumpInfo.xml.tmp").exists()
+
+
+@pytest.mark.parametrize("text", [
+    "Если Условие Тогда Возврат; КонецЕсли;",
+    "Если Истина Тогда\n  Возврат;\nКонецЕсли;",
+    "If True Then return; EndIf;",
+])
+def test_return_anywhere_in_code_is_refused(text):
+    assert smoke._RETURN_RE.search(smoke._code_only(text))
+
+
+@pytest.mark.parametrize("text", [
+    'Отчет = "текст Возврат";',
+    'Отчет = "кавычка "" и Возврат";',
+    'Отчет = "строка\n|Возврат в продолжении";',
+    "// Возврат в комментарии\nОтчет = 1;",
+    "Отчет = Док.Возврат;",                 # свойство, а не оператор
+    "ВозвратТоваров = 1;",
+])
+def test_return_in_strings_comments_and_names_is_allowed(text):
+    assert not smoke._RETURN_RE.search(smoke._code_only(text))

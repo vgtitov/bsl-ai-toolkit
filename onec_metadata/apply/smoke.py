@@ -109,7 +109,35 @@ def deploy_smoke_runner(r: RunnerLike, ib: str, user: str, pwd: str, *,
     return out_epf
 
 
-_RETURN_RE = re.compile(r"(?im)^\s*(Возврат|Return)\b")
+_RETURN_RE = re.compile(r"(?<![\w.])(Возврат|Return)(?!\w)", re.IGNORECASE)
+
+
+def _code_only(text: str) -> str:
+    """Текст BSL без комментариев `//…` и строковых литералов (`""` внутри строки, многострочные
+    строки с `|`): чтобы искать операторы, а не слова в строках и комментариях."""
+    out, i, in_str, n = [], 0, False, len(text)
+    while i < n:
+        c = text[i]
+        if in_str:
+            if c == '"':
+                if i + 1 < n and text[i + 1] == '"':
+                    i += 2
+                    continue
+                in_str = False
+            elif c == "\n":
+                out.append(c)
+            i += 1
+            continue
+        if c == "/" and text.startswith("//", i):
+            j = text.find("\n", i)
+            i = n if j < 0 else j
+            continue
+        if c == '"':
+            in_str = True
+        else:
+            out.append(c)
+        i += 1
+    return "".join(out)
 
 # Сколько секунд сеанс может жить при неизменном /Out (и неизменном локальном кэше), прежде
 # чем сторож его остановит. 0 — сторож выключен. Только для локального транспорта: на удалённом
@@ -191,7 +219,7 @@ def run_smoke(r: RunnerLike, ib: str, user: str, pwd: str, *,
     stall — см. resolve_stall (None: локально 600 с, удалённо сторож выключен).
     """
     stall = resolve_stall(r, stall)
-    if _RETURN_RE.search(scenario_text):
+    if _RETURN_RE.search(_code_only(scenario_text)):
         raise ApplyError("smoke: в сценарии оператор Возврат. Сценарий исполняется через "
                          "Выполнить() вне процедуры, Возврат там не компилируется и роняет весь "
                          "сценарий — ранний выход делай флагом и Если … КонецЕсли")

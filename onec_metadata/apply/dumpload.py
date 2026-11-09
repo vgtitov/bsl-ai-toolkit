@@ -290,8 +290,11 @@ _NAME_RE = re.compile(r'<Metadata\s+name="([^"]+)"')
 
 def _dump_info_units(lines: list[str]):
     """(голова, [(имя, [строки записи с вложенными])], хвост) — записи верхнего уровня ConfigVersions."""
-    start = next(i for i, ln in enumerate(lines) if "<ConfigVersions" in ln) + 1
-    end = max(i for i, ln in enumerate(lines) if "</ConfigVersions>" in ln)
+    starts = [i for i, ln in enumerate(lines) if "<ConfigVersions" in ln]
+    ends = [i for i, ln in enumerate(lines) if "</ConfigVersions>" in ln]
+    if not starts or not ends or ends[-1] <= starts[0]:
+        raise ValueError("нет блока <ConfigVersions>…</ConfigVersions>")
+    start, end = starts[0] + 1, ends[-1]
     units, i = [], start
     while i < end:
         m = _NAME_RE.search(lines[i])
@@ -301,6 +304,8 @@ def _dump_info_units(lines: list[str]):
             continue
         j, depth = i, 0
         while True:
+            if j >= end:
+                raise ValueError(f'незакрытая запись <Metadata name="{m.group(1)}">')
             depth += lines[j].count("<Metadata") - lines[j].count("/>") - lines[j].count("</Metadata>")
             j += 1
             if depth <= 0:

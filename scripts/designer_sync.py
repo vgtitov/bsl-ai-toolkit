@@ -81,7 +81,7 @@ def resolve_cred(kind: str, keys, env=None):
 def base_key(base: str):
     """Имя базы из «сервер\\база» — ключ учётки по умолчанию; для файловой базы None."""
     s = (base or "").strip().strip('"')
-    if re.match(r"^[A-Za-z]:[\\/]|^\\\\|^/|^(?i:file=)", s) or Path(s).is_dir():
+    if re.match(r"^[a-z]:[\\/]|^\\\\|^/|^file=", s, flags=re.IGNORECASE) or Path(s).is_dir():
         return None
     return s.rsplit("\\", 1)[-1] if "\\" in s else None
 
@@ -221,16 +221,23 @@ def merge_partial_dump(src: Path, dst: Path) -> None:
     from onec_metadata.apply import dumpload
     info_dst, info_src = dst / "ConfigDumpInfo.xml", src / "ConfigDumpInfo.xml"
     old_info = info_dst.read_bytes() if info_dst.is_file() else None
-    shutil.copytree(src, dst, dirs_exist_ok=True)
-    if old_info is not None:
+    new_raw = info_src.read_bytes() if info_src.is_file() else None
+    # итоговый реестр — ДО любой записи в dst: битый файл не должен оставить --out наполовину перенесённым
+    final = new_raw if old_info is None else None
+    if old_info is not None and new_raw:
         bom = b"\xef\xbb\xbf"
-        new_raw = info_src.read_bytes() if info_src.is_file() else b""
-        if not new_raw:
-            info_dst.write_bytes(old_info)
-            return
-        merged = dumpload.merge_dump_info(old_info.removeprefix(bom).decode("utf-8"),
-                                          new_raw.removeprefix(bom).decode("utf-8"))
-        info_dst.write_bytes((bom if old_info.startswith(bom) else b"") + merged.encode("utf-8"))
+        try:
+            merged = dumpload.merge_dump_info(old_info.removeprefix(bom).decode("utf-8"),
+                                              new_raw.removeprefix(bom).decode("utf-8"))
+        except (ValueError, UnicodeDecodeError) as e:
+            raise SystemExit(f"ConfigDumpInfo.xml выгрузки не разобран ({e}); {dst} не изменён, "
+                             f"выгрузка оставлена для разбора: {src}") from None
+        final = (bom if old_info.startswith(bom) else b"") + merged.encode("utf-8")
+    shutil.copytree(src, dst, dirs_exist_ok=True, ignore=shutil.ignore_patterns("ConfigDumpInfo.xml"))
+    if final is not None:
+        tmp = info_dst.with_name(info_dst.name + ".tmp")
+        tmp.write_bytes(final)
+        os.replace(tmp, info_dst)
 
 
 def check_partial_dump_forms(dump_dir: Path, before: dict, requested=None) -> None:
