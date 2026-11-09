@@ -196,7 +196,7 @@ def changed_files(dump_dir: str):
         i += 1
         if len(entry) < 4:
             continue
-        if entry[0] in "RC":
+        if set(entry[:2]) & {"R", "C"}:                # в индексе (R ) или в рабочем каталоге ( R)
             i += 1                                     # следом — старый путь переименования
         out.append(entry[3:].replace("\\", "/"))
     return sorted(out)

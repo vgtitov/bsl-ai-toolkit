@@ -332,6 +332,17 @@ def test_changed_files_cyrillic_and_rename(tmp_path):
     assert m.changed_files(str(tmp_path)) == ["Catalogs/Новое.xml", "Catalogs/Товары/Ext/ObjectModule.bsl"]
 
 
+def test_changed_files_rename_status_in_either_column(monkeypatch, tmp_path):
+    m = _ds()
+    (tmp_path / ".git").mkdir()
+
+    class R:
+        returncode = 0
+        stdout = " R Catalogs/Новое.xml\0Catalogs/Старое.xml\0R  A.xml\0B.xml\0?? C.bsl\0"
+    monkeypatch.setattr(m.subprocess, "run", lambda *a, **kw: R())
+    assert m.changed_files(str(tmp_path)) == ["A.xml", "C.bsl", "Catalogs/Новое.xml"]
+
+
 def test_dump_log_next_to_out_keeps_dotted_name(monkeypatch, tmp_path):
     out = tmp_path / "src.v2"
     (tmp_path / "src.log").write_text("чужой лог", encoding="utf-8")
