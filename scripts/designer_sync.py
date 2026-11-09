@@ -215,7 +215,11 @@ def check_partial_load(src_dir: Path, files, allow_missing_ext: bool = False) ->
 
 def merge_partial_dump(src: Path, dst: Path) -> None:
     """Перенести проверенную точечную выгрузку в рабочий каталог: каталог и xml каждого
-    выгруженного объекта заменяются целиком, остальное в dst не трогается."""
+    выгруженного объекта заменяются целиком, остальное в dst не трогается. ConfigDumpInfo.xml
+    не заменяется: в нём меняются только записи выгруженных объектов (dumpload.merge_dump_info)."""
+    from onec_metadata.apply import dumpload
+    info_dst, info_src = dst / "ConfigDumpInfo.xml", src / "ConfigDumpInfo.xml"
+    old_info = info_dst.read_bytes() if info_dst.is_file() else None
     tops = set()
     for p in src.rglob("*"):
         if p.is_file():
@@ -226,6 +230,16 @@ def merge_partial_dump(src: Path, dst: Path) -> None:
         shutil.rmtree(dst / kind / name, ignore_errors=True)
         (dst / kind / f"{name}.xml").unlink(missing_ok=True)
     shutil.copytree(src, dst, dirs_exist_ok=True)
+    if old_info is not None:
+        bom = b"\xef\xbb\xbf"
+        new_raw = info_src.read_bytes() if info_src.is_file() else b""
+        if not new_raw:
+            info_dst.write_bytes(old_info)
+            return
+        merged = dumpload.merge_dump_info(
+            old_info.removeprefix(bom).decode("utf-8"), new_raw.removeprefix(bom).decode("utf-8"),
+            {f"{dumpload.dir_type(kind)}.{name}" for kind, name in tops})
+        info_dst.write_bytes((bom if old_info.startswith(bom) else b"") + merged.encode("utf-8"))
 
 
 def check_partial_dump_forms(dump_dir: Path, before: dict) -> None:

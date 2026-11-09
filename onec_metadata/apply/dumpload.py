@@ -276,8 +276,63 @@ def _full_name(rel: str, names: set) -> str | None:
         return next((n for n in names if n.startswith("Configuration.") and n.count(".") == 1), None)
     if len(parts) not in (2, 4) or (len(parts) == 4 and parts[2] != "Forms"):
         return None
-    kind = _DIR_TYPE.get(parts[0], parts[0][:-1] if parts[0].endswith("s") else parts[0])
-    return f"{kind}.{parts[1]}" + (f".Form.{parts[3]}" if len(parts) == 4 else "")
+    return f"{dir_type(parts[0])}.{parts[1]}" + (f".Form.{parts[3]}" if len(parts) == 4 else "")
+
+
+def dir_type(kind_dir: str) -> str:
+    """Каталог выгрузки → тип в ConfigDumpInfo.xml: Catalogs → Catalog."""
+    return _DIR_TYPE.get(kind_dir, kind_dir[:-1] if kind_dir.endswith("s") else kind_dir)
+
+
+_NAME_RE = re.compile(r'<Metadata\s+name="([^"]+)"')
+
+
+def _dump_info_units(lines: list[str]):
+    """(голова, [(имя, [строки записи с вложенными])], хвост) — записи верхнего уровня ConfigVersions."""
+    start = next(i for i, ln in enumerate(lines) if "<ConfigVersions" in ln) + 1
+    end = max(i for i, ln in enumerate(lines) if "</ConfigVersions>" in ln)
+    units, i = [], start
+    while i < end:
+        m = _NAME_RE.search(lines[i])
+        if not m:                                   # пустая/служебная строка — сама по себе
+            units.append((None, [lines[i]]))
+            i += 1
+            continue
+        j, depth = i, 0
+        while True:
+            depth += lines[j].count("<Metadata") - lines[j].count("/>") - lines[j].count("</Metadata>")
+            j += 1
+            if depth <= 0:
+                break
+        units.append((m.group(1), lines[i:j]))
+        i = j
+    return lines[:start], units, lines[end:]
+
+
+def merge_dump_info(old_text: str, new_text: str, objects: set) -> str:
+    """ConfigDumpInfo.xml полной выгрузки + точечной: записи объектов `objects` («Тип.Имя») — из
+    новой, остальные — как были. Порядок, формат и переводы строк старого файла сохраняются.
+    Иначе точечная выгрузка затирала полный реестр, и проверка загрузки теряла чужие модули."""
+    eol = "\r\n" if "\r\n" in old_text else "\n"
+    owner = lambda name: next((o for o in objects if name == o or name.startswith(o + ".")), None)
+    head, old_units, tail = _dump_info_units(old_text.splitlines(keepends=True))
+    _, new_units, _ = _dump_info_units(new_text.splitlines(keepends=True))
+    fresh = {}
+    for name, block in new_units:
+        o = name and owner(name)
+        if o:
+            fresh.setdefault(o, []).extend(ln.rstrip("\r\n") + eol for ln in block)
+    out, placed = list(head), set()
+    for name, block in old_units:
+        o = name and owner(name)
+        if not o or o not in fresh:                  # в новой выгрузке объекта нет — старое не теряем
+            out += block
+        elif o not in placed:
+            out += fresh.get(o, [])
+            placed.add(o)
+    for o in sorted(set(fresh) - placed):                # новые объекты — в конец реестра
+        out += fresh[o]
+    return "".join(out + tail)
 
 
 def _required_by_dump_info(rel: str, full: str, names: set) -> list[str]:

@@ -387,3 +387,60 @@ def test_stuck_git_shells():
              {"Id": 2, "Path": r"C:\Program Files\Git\bin\bash.exe", "Age": 0.5},
              {"Id": 3, "Path": r"C:\tools\wsl\bash.exe", "Age": 9}]
     assert doctor.stuck_git_shells(procs) == [(1, 5.0)]
+
+
+# ── ConfigDumpInfo.xml при переносе точечной выгрузки ─────────────────────────
+
+_CDI_HEAD = ('<?xml version="1.0" encoding="UTF-8"?>\n<ConfigDumpInfo xmlns="http://v8.1c.ru/8.3/xcf/dumpinfo" '
+             'format="Hierarchical" version="2.20">\n\t<ConfigVersions>\n')
+_CDI_TAIL = "\t</ConfigVersions>\n</ConfigDumpInfo>"
+
+OLD_CDI = _CDI_HEAD + (
+    '\t\t<Metadata name="Configuration.Тест" id="1" configVersion="r1"/>\n'
+    '\t\t<Metadata name="Catalog.Прочее" id="7" configVersion="p1"/>\n'
+    '\t\t<Metadata name="Catalog.Прочее.ObjectModule" id="7.0" configVersion="p2"/>\n'
+    '\t\t<Metadata name="Catalog.Товары" id="2" configVersion="old">\n'
+    '\t\t\t<Metadata name="Catalog.Товары.Attribute.Код" id="3"/>\n'
+    '\t\t</Metadata>\n'
+    '\t\t<Metadata name="Catalog.Товары.ObjectModule" id="2.0" configVersion="old"/>\n'
+    '\t\t<Metadata name="Catalog.ТоварыАрхив" id="9" configVersion="z1"/>\n') + _CDI_TAIL
+
+NEW_CDI = _CDI_HEAD + (
+    '\t\t<Metadata name="Configuration.Тест" id="1" configVersion="ЧАСТИЧНАЯ"/>\n'
+    '\t\t<Metadata name="Catalog.Товары" id="2" configVersion="new"/>\n'
+    '\t\t<Metadata name="Catalog.Товары.ManagerModule" id="2.3" configVersion="new"/>\n'
+    '\t\t<Metadata name="Catalog.Товары.ObjectModule" id="2.0" configVersion="new"/>\n') + _CDI_TAIL
+
+
+def test_merge_partial_dump_keeps_full_dump_info(tmp_path):
+    """В --out полный реестр на два объекта, точечно выгружен один: записи второго на месте,
+    первого — новые; корень, формат, BOM и CRLF старого файла сохранены."""
+    m = _ds()
+    out, src = tmp_path / "out", tmp_path / "src"
+    out.mkdir()
+    (out / "ConfigDumpInfo.xml").write_bytes(b"\xef\xbb\xbf" + OLD_CDI.replace("\n", "\r\n").encode("utf-8"))
+    _touch(src, "Catalogs/Товары.xml", "<new/>")
+    (src / "ConfigDumpInfo.xml").write_text(NEW_CDI, encoding="utf-8")
+    m.merge_partial_dump(src, out)
+    raw = (out / "ConfigDumpInfo.xml").read_bytes()
+    assert raw.startswith(b"\xef\xbb\xbf") and b"\r\n" in raw and b"\n" not in raw.replace(b"\r\n", b"")
+    text = raw[3:].decode("utf-8")
+    expected = _CDI_HEAD + (
+        '\t\t<Metadata name="Configuration.Тест" id="1" configVersion="r1"/>\n'
+        '\t\t<Metadata name="Catalog.Прочее" id="7" configVersion="p1"/>\n'
+        '\t\t<Metadata name="Catalog.Прочее.ObjectModule" id="7.0" configVersion="p2"/>\n'
+        '\t\t<Metadata name="Catalog.Товары" id="2" configVersion="new"/>\n'
+        '\t\t<Metadata name="Catalog.Товары.ManagerModule" id="2.3" configVersion="new"/>\n'
+        '\t\t<Metadata name="Catalog.Товары.ObjectModule" id="2.0" configVersion="new"/>\n'
+        '\t\t<Metadata name="Catalog.ТоварыАрхив" id="9" configVersion="z1"/>\n') + _CDI_TAIL
+    assert text == expected.replace("\n", "\r\n")             # «ТоварыАрхив» — не запись «Товары»
+
+
+def test_merge_partial_dump_without_old_dump_info_copies_new(tmp_path):
+    m = _ds()
+    out, src = tmp_path / "out", tmp_path / "src"
+    out.mkdir()
+    _touch(src, "Catalogs/Товары.xml")
+    (src / "ConfigDumpInfo.xml").write_text(NEW_CDI, encoding="utf-8")
+    m.merge_partial_dump(src, out)
+    assert (out / "ConfigDumpInfo.xml").read_text(encoding="utf-8") == NEW_CDI
