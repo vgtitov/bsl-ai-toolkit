@@ -112,8 +112,23 @@ def deploy_smoke_runner(r: RunnerLike, ib: str, user: str, pwd: str, *,
 _RETURN_RE = re.compile(r"(?im)^\s*(Возврат|Return)\b")
 
 # Сколько секунд сеанс может жить при неизменном /Out (и неизменном локальном кэше), прежде
-# чем сторож его остановит. 0 — сторож выключен.
+# чем сторож его остановит. 0 — сторож выключен. Только для локального транспорта: на удалённом
+# хосте кэш клиента отсюда не виден, а одного /Out мало — ложно убить рабочий сеанс хуже, чем
+# поздно заметить зависание, поэтому удалённо сторож по умолчанию выключен (включается явным stall).
 DEFAULT_STALL = 600
+
+
+def _is_remote(r: RunnerLike) -> bool:
+    return bool(getattr(r, "host", ""))
+
+
+def resolve_stall(r: RunnerLike, stall: int | None) -> int:
+    """None — умолчание по транспорту (локально DEFAULT_STALL, удалённо выкл.); < 0 — отказ."""
+    if stall is None:
+        return 0 if _is_remote(r) else DEFAULT_STALL
+    if stall < 0:
+        raise ApplyError(f"smoke: stall не может быть отрицательным ({stall}); 0 — сторож выключен")
+    return stall
 
 
 def _kill_by_log(r: RunnerLike, log: str) -> None:
@@ -150,7 +165,8 @@ def _run_watched(r: RunnerLike, cmd: str, *, timeout: int, log: str, stall: int,
             break
         if not stall:
             continue
-        sig = (r.read_text(log, timeout=60), client_cache_bytes())
+        # удалённо прогресс — только /Out: локальный кэш к удалённому сеансу отношения не имеет
+        sig = (r.read_text(log, timeout=60), None if _is_remote(r) else client_cache_bytes())
         now = time.monotonic()
         if sig != last:
             last, since = sig, now
@@ -168,11 +184,13 @@ def _run_watched(r: RunnerLike, cmd: str, *, timeout: int, log: str, stall: int,
 
 def run_smoke(r: RunnerLike, ib: str, user: str, pwd: str, *,
               scenario_text: str, epf: str, workdir: str,
-              timeout: int = 900, stall: int = DEFAULT_STALL) -> str:
+              timeout: int = 900, stall: int | None = None) -> str:
     """Выполнить серверный BSL-сценарий, вернуть текст отчёта.
 
     ApplyError, если файл-результат отсутствует или содержит __SMOKE_FAIL__.
+    stall — см. resolve_stall (None: локально 600 с, удалённо сторож выключен).
     """
+    stall = resolve_stall(r, stall)
     if _RETURN_RE.search(scenario_text):
         raise ApplyError("smoke: в сценарии оператор Возврат. Сценарий исполняется через "
                          "Выполнить() вне процедуры, Возврат там не компилируется и роняет весь "

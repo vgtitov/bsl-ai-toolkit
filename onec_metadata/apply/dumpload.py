@@ -270,13 +270,14 @@ def dump_info_names(src_dir: Path) -> set | None:
 
 def _full_name(rel: str, names: set) -> str | None:
     """Полное имя объекта в ConfigDumpInfo по пути его xml: Catalogs/X.xml → Catalog.X,
-    Catalogs/X/Forms/F.xml → Catalog.X.Form.F, Configuration.xml → Configuration.<Имя>."""
+    Catalogs/X/Forms/F.xml → Catalog.X.Form.F, Catalogs/X/Commands/C.xml → Catalog.X.Command.C,
+    Subsystems/A/Subsystems/B.xml → Subsystem.A.Subsystem.B, Configuration.xml → Configuration.<Имя>."""
     parts = rel[:-4].split("/")
     if parts == ["Configuration"]:
         return next((n for n in names if n.startswith("Configuration.") and n.count(".") == 1), None)
-    if len(parts) not in (2, 4) or (len(parts) == 4 and parts[2] != "Forms"):
+    if len(parts) % 2:
         return None
-    return f"{dir_type(parts[0])}.{parts[1]}" + (f".Form.{parts[3]}" if len(parts) == 4 else "")
+    return ".".join(f"{dir_type(parts[i])}.{parts[i + 1]}" for i in range(0, len(parts), 2))
 
 
 def dir_type(kind_dir: str) -> str:
@@ -345,8 +346,9 @@ def _required_by_dump_info(rel: str, full: str, names: set) -> list[str]:
         tail = n[len(full) + 1:].split(".")
         if len(tail) == 1 and tail[0].endswith("Module"):           # ObjectModule, Module, SessionModule…
             need.append(f"{base}Ext/{tail[0]}.bsl")
-        elif len(tail) == 3 and tail[0] == "Command" and tail[2] == "CommandModule":
-            need.append(f"{base}Commands/{tail[1]}/Ext/CommandModule.bsl")
+        elif len(tail) == 3 and tail[0] != "Form" and tail[2].endswith("Module"):
+            # модуль вложенного объекта: Command.C.CommandModule, Recalculation.R.RecordSetModule
+            need.append(f"{base}{tail[0]}s/{tail[1]}/Ext/{tail[2]}.bsl")
         elif tail == ["Form"]:                                       # сама форма
             need.append(f"{base}Ext/Form.xml")
     return need
@@ -376,7 +378,7 @@ def partial_load_gaps(src_dir: Path, files: list[str], allow_missing_ext: bool =
         need = []
         if names is not None:
             full = _full_name(rel, names)
-            if full in names:
+            if full and (full in names or any(n.startswith(full + ".") for n in names)):
                 need += _required_by_dump_info(rel, full, names)
         elif not ext_dir.is_dir() and not allow_missing_ext:
             gaps.append(f"{rel} → нет ни {ext_dir.relative_to(src_dir).as_posix()}/, ни ConfigDumpInfo.xml: "
@@ -406,8 +408,13 @@ def partial_dump_form_problems(dump_dir: Path, before: dict) -> list[str]:
     этого каталога и пропали, или события есть, а модуля нет.
     """
     dump_dir = Path(dump_dir)
-    problems = []
-    for rel, had_events in sorted(form_snapshot(dump_dir).items()):
+    now = form_snapshot(dump_dir)
+    dumped = {p.relative_to(dump_dir).parts[:2] for p in dump_dir.rglob("*") if p.is_file()}
+    dumped |= {(a, b[:-4]) for a, b in dumped if b.endswith(".xml")}
+    # форма выгруженного объекта была и пропала: перенос заменит объект целиком и удалит её
+    problems = [f"{rel}: форма была в прошлой выгрузке, в новой её нет"
+                for rel in sorted(before) if rel not in now and tuple(rel.split("/")[:2]) in dumped]
+    for rel, had_events in sorted(now.items()):
         module = dump_dir / Path(rel).parent / "Form" / "Module.bsl"
         if had_events and not module.is_file():
             problems.append(f"{rel}: события есть, модуля Form/Module.bsl нет")

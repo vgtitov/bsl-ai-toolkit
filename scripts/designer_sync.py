@@ -475,7 +475,7 @@ def main(argv=None):
     p = sub.add_parser("updatedb", parents=[common], help="UpdateDBCfg (основная или --ext)")
     a = ap.parse_args(argv)
 
-    if a.host:
+    if getattr(a, "host", None):                  # у status нет --host
         require_remote_bin()
 
     if a.cmd in ("repo", "updatedb"):

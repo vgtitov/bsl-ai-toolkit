@@ -65,6 +65,13 @@ def default_workdir(host: str | None) -> str:
     return str(Path(tempfile.gettempdir()) / "onec_smoke")
 
 
+def _non_negative(text: str) -> int:
+    value = int(text)
+    if value < 0:
+        raise argparse.ArgumentTypeError("должно быть >= 0 (0 — не следить)")
+    return value
+
+
 def build_parser():
     ap = argparse.ArgumentParser(
         description="Лестница тестирования 1С: синтакс-контроль (ступень 1) и смоук (ступень 2)")
@@ -84,9 +91,11 @@ def build_parser():
                    help="файл серверного BSL; итог — в строковой переменной Отчет")
     s.add_argument("--deploy", action="store_true", help="пересобрать раннер .epf перед прогоном")
     s.add_argument("--timeout", type=int, default=900, help="таймаут сеанса, сек (умолч. 900)")
-    s.add_argument("--stall", type=int, default=600,
-                   help="остановить сеанс, если /Out и кэш не менялись столько секунд "
-                        "(признак некомпилируемого модуля или модального окна); 0 — не следить")
+    s.add_argument("--stall", type=_non_negative, default=None,
+                   help="остановить сеанс, если /Out (и локальный кэш) не менялись столько секунд "
+                        "(признак некомпилируемого модуля или модального окна); 0 — не следить. "
+                        "Умолчание: локально 600, с --host выключен (кэш сервера отсюда не виден, "
+                        "по одному /Out легко убить рабочий сеанс)")
 
     v = sub.add_parser("serve", help="автономный сервер: HTTP к ФАЙЛОВОЙ базе без веб-сервера")
     v.add_argument("--base", required=True, help="каталог файловой ИБ")

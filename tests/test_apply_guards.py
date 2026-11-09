@@ -444,3 +444,74 @@ def test_merge_partial_dump_without_old_dump_info_copies_new(tmp_path):
     (src / "ConfigDumpInfo.xml").write_text(NEW_CDI, encoding="utf-8")
     m.merge_partial_dump(src, out)
     assert (out / "ConfigDumpInfo.xml").read_text(encoding="utf-8") == NEW_CDI
+
+
+# ── повторное ревью ───────────────────────────────────────────────────────────
+
+def test_status_without_host_option(tmp_path, capsys):
+    m = _ds()
+    m.main(["status", "--out", str(tmp_path)])                    # без AttributeError на a.host
+    assert "не под git" in capsys.readouterr().out
+
+
+def test_form_missing_from_new_dump_of_same_object(tmp_path):
+    """Форма выгруженного объекта была в прошлой выгрузке и не пришла — перенос удалил бы её."""
+    old_dir, new_dir = tmp_path / "old", tmp_path / "new"
+    _touch(old_dir, FORM, "<Form/>")
+    _touch(old_dir, "Catalogs/Прочее/Forms/Ф/Ext/Form.xml", "<Form/>")
+    before = dumpload.form_snapshot(old_dir)
+    _touch(new_dir, "Catalogs/Товары.xml", "<x/>")                   # выгружен только «Товары», без формы
+    problems = dumpload.partial_dump_form_problems(new_dir, before)
+    assert problems == [f"{FORM}: форма была в прошлой выгрузке, в новой её нет"]   # «Прочее» не выгружали
+
+
+def test_nested_command_xml_requires_its_module(tmp_path):
+    (tmp_path / "ConfigDumpInfo.xml").write_text(DUMP_INFO, encoding="utf-8")
+    _touch(tmp_path, "Catalogs/Товары/Commands/Открыть.xml")
+    gaps = dumpload.partial_load_gaps(tmp_path, ["Catalogs/Товары/Commands/Открыть.xml"])
+    assert gaps and "Catalogs/Товары/Commands/Открыть/Ext/CommandModule.bsl" in gaps[0]
+    assert dumpload.partial_load_gaps(tmp_path, [
+        "Catalogs/Товары/Commands/Открыть.xml",
+        "Catalogs/Товары/Commands/Открыть/Ext/CommandModule.bsl"]) == []
+
+
+def test_nested_recalculation_module_required_with_register(tmp_path):
+    info = DUMP_INFO.replace(
+        "\t</ConfigVersions>",
+        '\t\t<Metadata name="CalculationRegister.Начисления" id="8"/>\n'
+        '\t\t<Metadata name="CalculationRegister.Начисления.Recalculation.Пересчет.RecordSetModule" id="8.1"/>\n'
+        "\t</ConfigVersions>")
+    (tmp_path / "ConfigDumpInfo.xml").write_text(info, encoding="utf-8")
+    _touch(tmp_path, "CalculationRegisters/Начисления.xml")
+    gaps = dumpload.partial_load_gaps(tmp_path, ["CalculationRegisters/Начисления.xml"])
+    assert any("CalculationRegisters/Начисления/Recalculations/Пересчет/Ext/RecordSetModule.bsl" in g
+               for g in gaps)
+
+
+def test_stall_defaults_by_transport_and_rejects_negative():
+    class Local:
+        host = ""
+    assert smoke.resolve_stall(Local(), None) == smoke.DEFAULT_STALL
+    assert smoke.resolve_stall(_HangingRunner(), None) == 0           # удалённо — выключен
+    assert smoke.resolve_stall(_HangingRunner(), 120) == 120
+    with pytest.raises(ApplyError):
+        smoke.resolve_stall(Local(), -1)
+
+
+def test_remote_watchdog_ignores_local_cache(monkeypatch):
+    """Удалённый сеанс: прогресс — только /Out; локальный кэш не читается вовсе."""
+    monkeypatch.setattr(smoke, "client_cache_bytes",
+                        lambda: pytest.fail("локальный кэш к удалённому сеансу не относится"))
+    r = _HangingRunner()
+    with pytest.raises(ApplyError):
+        smoke._run_watched(r, "1cv8 ENTERPRISE", timeout=60, log="C:\\w\\o.log", stall=0.2, poll=0.05)
+    assert r.killed
+
+
+def test_remote_watchdog_growing_out_is_progress(monkeypatch):
+    r = _HangingRunner()
+    ticks = iter(range(10 ** 6))
+    r.read_text = lambda path, timeout=60: "строка\n" * next(ticks)    # /Out растёт
+    threading.Timer(0.5, r.stop.set).start()
+    smoke._run_watched(r, "1cv8", timeout=60, log="l", stall=0.2, poll=0.05)
+    assert not r.killed
