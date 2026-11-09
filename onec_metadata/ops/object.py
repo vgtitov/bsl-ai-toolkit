@@ -412,8 +412,10 @@ def _copy_controlled(text: str, fmt: str, base_text: str, edt_tpl: str) -> str:
     из типовой, иначе EDT: «значение контролируемого свойства не совпадает с расширяемой конфигурацией»."""
     controlled = [t for t in re.findall(r"^    <(\w+)>Checked</\1>", edt_tpl, re.M)
                   if t != "extendedConfigurationObject"]
+    base_text = base_text.replace("\r\n", "\n")
+    if "<typeExtension>" in edt_tpl:                     # тип объекта (константа) — контролируется целиком
+        text = _copy_type(text, fmt, base_text)
     if fmt == "edt":
-        base_text = base_text.replace("\r\n", "\n")
         lines = [m.group(0) for m in re.finditer(r"^  <(\w+)>[^<\n]*</\1>\n", base_text, re.M)
                  if m.group(1) in controlled]          # EDT пишет только не-умолчания — их и переносим
         close = re.search(r"^</mdclass:\w+>", text, re.M)
@@ -423,6 +425,31 @@ def _copy_controlled(text: str, fmt: str, base_text: str, edt_tpl: str) -> str:
         m = re.search(rf"<{cap}>([^<]*)</{cap}>", base_text)
         if m and re.search(rf"<{cap}>", text):
             text = _set_cfg_prop(text, tag, m.group(1))
+    return text
+
+
+def _copy_type(text: str, fmt: str, base_text: str) -> str:
+    """Тип заимствованного = тип объекта типовой. EDT: `typeExtension` — по `<types>` на каждый тип
+    (`state` Checked) и квалификаторы типовой, как у реквизитов анЯдро; Конфигуратор: блок `<Type>` целиком."""
+    if fmt == "edt":
+        m = re.search(r"^  <type>\n(.*?)^  </type>\n", base_text, re.M | re.S)
+        if not m:
+            raise OpPreconditionError("у объекта типовой нет типа — заимствование не собрать")
+        body = m.group(1)
+        types = "".join(f"      <types>\n        <state>Checked</state>\n        <type>{t}</type>\n      </types>\n"
+                        for t in re.findall(r"^    <types>([^<]+)</types>", body, re.M))
+        quals = "".join(re.sub(r"^(?=.)", "  ", q.group(0), flags=re.M)
+                        for q in re.finditer(r"^    <(\w+Qualifiers)>\n.*?^    </\1>\n", body, re.M | re.S))
+        new = f"    <typeExtension>\n{types}{quals}    </typeExtension>\n"
+        text, n = re.subn(r"^    <typeExtension>\n.*?^    </typeExtension>\n", lambda _: new, text,
+                          count=1, flags=re.M | re.S)
+    else:
+        m = re.search(r"^(\t+)<Type>\n.*?^\1</Type>\n", base_text, re.M | re.S)
+        if not m:
+            raise OpPreconditionError("у объекта типовой нет типа — заимствование не собрать")
+        text, n = re.subn(r"^(\t+)<Type>\n.*?^\1</Type>\n", lambda _: m.group(0), text, count=1, flags=re.M | re.S)
+    if not n:
+        raise OpPreconditionError("эталон заимствования: блок типа не найден — переснять эталоны")
     return text
 
 
@@ -482,7 +509,19 @@ def delete(src: Path, ref: str) -> list[Path]:
         raise OpPreconditionError(f"на {kind}.{name} есть ссылки — сначала убери их:\n  " + "\n  ".join(hits))
     manifest_text = _manifest_remove(p, kind, name)
     removed = [x for x in p.object_paths(kind, name) if x.exists()]
-    _write_atomic(p.manifest, manifest_text)
-    for x in removed:
-        shutil.rmtree(x) if x.is_dir() else x.unlink()
+    # сначала файлы — в корзину рядом (тот же том, перенос атомарный), потом манифест; сбой — всё назад
+    trash = Path(tempfile.mkdtemp(prefix=".object_delete_", dir=p.root))
+    moved = []
+    try:
+        for i, x in enumerate(removed):
+            dst = trash / f"{i}_{x.name}"
+            os.replace(x, dst)
+            moved.append((x, dst))
+        _write_atomic(p.manifest, manifest_text)
+    except BaseException:
+        for x, dst in reversed(moved):
+            os.replace(dst, x)
+        shutil.rmtree(trash, ignore_errors=True)
+        raise
+    shutil.rmtree(trash, ignore_errors=True)
     return removed

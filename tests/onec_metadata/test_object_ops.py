@@ -150,6 +150,68 @@ def test_adopted_register_copies_controlled_properties(tmp_path, fmt):
         assert "<InformationRegisterPeriodicity>Nonperiodical<" in plain
 
 
+EDT_NUMBER_TYPE = ("  <type>\n    <types>Number</types>\n    <numberQualifiers>\n      <precision>15</precision>\n"
+                   "      <scale>2</scale>\n    </numberQualifiers>\n  </type>\n")
+# блок, который EDT 2025.2.6.4 сам написал при заимствовании константы Число(15,2) (проба 09.11)
+EDT_NUMBER_EXT = ("    <typeExtension>\n      <types>\n        <state>Checked</state>\n        <type>Number</type>\n"
+                  "      </types>\n      <numberQualifiers>\n        <precision>15</precision>\n        <scale>2</scale>\n"
+                  "      </numberQualifiers>\n    </typeExtension>\n")
+
+
+def test_adopted_constant_takes_type_from_base_edt(tmp_path):
+    base = project(tmp_path, "edt_base")
+    b = obj.add(base, "Constant", "КЧисло", {})
+    t = read(b)
+    b.write_text(re.sub(r"  <type>\n.*?  </type>\n", lambda _: EDT_NUMBER_TYPE, t, flags=re.S), encoding="utf-8")
+    ext = project(tmp_path, "edt_ext")
+    a = read(obj.adopt(ext, base, "Constant.КЧисло"))
+    assert EDT_NUMBER_EXT in a and "String" not in a
+    b2 = obj.add(base, "Constant", "КСостав", {})
+    b2.write_text(re.sub(r"  <type>\n.*?  </type>\n",
+                         lambda _: "  <type>\n    <types>CatalogRef.Валюты</types>\n    <types>Boolean</types>\n  </type>\n",
+                         read(b2), flags=re.S), encoding="utf-8")
+    a2 = read(obj.adopt(ext, base, "Constant.КСостав"))
+    assert re.findall(r"<type>(\S+)</type>", a2) == ["CatalogRef.Валюты", "Boolean"]
+
+
+def test_adopted_constant_takes_type_from_base_cfg(tmp_path):
+    base = project(tmp_path, "cfg_base")
+    b = obj.add(base, "Constant", "КЧисло", {})
+    block = ("\t\t\t<Type>\n\t\t\t\t<v8:Type>xs:decimal</v8:Type>\n\t\t\t\t<v8:NumberQualifiers>\n"
+             "\t\t\t\t\t<v8:Digits>15</v8:Digits>\n\t\t\t\t\t<v8:FractionDigits>2</v8:FractionDigits>\n"
+             "\t\t\t\t\t<v8:AllowedSign>Any</v8:AllowedSign>\n\t\t\t\t</v8:NumberQualifiers>\n\t\t\t</Type>\n")
+    t = read(b).replace("\r\n", "\n")
+    b.write_bytes(re.sub(r"\t\t\t<Type>\n.*?\t\t\t</Type>\n", lambda _: block, t, flags=re.S).encode("utf-8"))
+    ext = project(tmp_path, "cfg_ext")
+    a = read(obj.adopt(ext, base, "Constant.КЧисло")).replace("\r\n", "\n")
+    assert block in a and "xs:string" not in a
+
+
+def test_adopted_common_module_does_not_carry_privileged(tmp_path):
+    """Проба EDT 09.11: privileged и returnValuesReuse у заимствованного не контролируются и не переносятся."""
+    base = project(tmp_path, "edt_base")
+    obj.add(base, "CommonModule", "Прив", {}, context="server", privileged=True)
+    ext = project(tmp_path, "edt_ext")
+    a = read(obj.adopt(ext, base, "CommonModule.Прив"))
+    assert re.findall(r"^  <(\w+)>true</\1>", a, re.M) == ["server"]      # пресет EDT: только server
+    assert "privileged" not in a
+
+
+def test_delete_rolls_back_when_manifest_write_fails(tmp_path, monkeypatch):
+    src = project(tmp_path, "cfg_base")
+    path = obj.add(src, "Catalog", "Товары", SYN)
+    manifest = src / "Configuration.xml"
+    before = manifest.read_bytes()
+
+    def boom(*a, **kw):
+        raise OSError("диск занят")
+    monkeypatch.setattr(obj, "_write_atomic", boom)
+    with pytest.raises(OSError):
+        obj.delete(src, "Catalog.Товары")
+    assert path.is_file() and manifest.read_bytes() == before
+    assert not list(src.glob(".object_delete_*"))
+
+
 @pytest.mark.parametrize("fmt", ["edt", "cfg"])
 def test_adopt_refusals(tmp_path, fmt):
     base = project(tmp_path, f"{fmt}_base")
