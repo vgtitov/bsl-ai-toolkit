@@ -377,10 +377,12 @@ def _edt_module(root, name, body, adopted=False):
     return d / "Module.bsl"
 
 
-def _edt_root(tmp_path, sub="src"):
+def _edt_root(tmp_path, sub="src", extension=False):
     root = tmp_path / sub
     (root / "Configuration").mkdir(parents=True)
-    (root / "Configuration" / "Configuration.mdo").write_text("<x/>", encoding="utf-8")
+    body = ("<x><configurationExtensionPurpose>Customization</configurationExtensionPurpose></x>"
+            if extension else "<x/>")
+    (root / "Configuration" / "Configuration.mdo").write_text(body, encoding="utf-8")
     return root
 
 
@@ -548,7 +550,7 @@ def test_extension_adopted_module_needs_base_root(tmp_path, monkeypatch):
     основной конфигурации правило молчит, с BSL_GUARD_EXTRA_ROOTS — проверяет по обоим."""
     base = _edt_root(tmp_path, "base/src")
     _edt_module(base, "ОбщийМодуль1", _LIB)
-    ext = _edt_root(tmp_path, "ext/src")
+    ext = _edt_root(tmp_path, "ext/src", extension=True)
     _edt_module(ext, "ОбщийМодуль1",
                 '&После("Есть")\nПроцедура мр_ПослеЕсть() Экспорт\nКонецПроцедуры\n\n'
                 "Процедура мр_Новый() Экспорт\nКонецПроцедуры\n", adopted=True)
@@ -563,7 +565,65 @@ def test_extension_adopted_module_needs_base_root(tmp_path, monkeypatch):
     monkeypatch.delenv("BSL_GUARD_EXTRA_ROOTS", raising=False)
     assert _unknown(m.scan_file(caller)) == []
     monkeypatch.setenv("BSL_GUARD_EXTRA_ROOTS", str(tmp_path / "base"))   # каталог проекта, без src
-    assert [line for line, _ in _unknown(m.scan_file(caller))] == [4, 5]
+    found = [f for f in m.scan_file(caller) if f.code == "unknown-module-method"]
+    assert [f.line for f in found] == [4, 5]
+    # модуль «свой» только благодаря extra-корню: корень мог быть от другой конфигурации
+    assert {f.severity for f in found} == {m.WARNING}
+
+
+def test_extra_roots_ignored_outside_extension(tmp_path, monkeypatch):
+    """Переменная задана под расширение A, а файл из основной конфигурации Y: модули A
+    к Y не подмешиваются, своя ошибка Y остаётся блокирующей."""
+    a = _edt_root(tmp_path, "a/src")
+    _edt_module(a, "ОбщийМодуль1", "Процедура ТолькоВА() Экспорт\nКонецПроцедуры\n")
+    y = _edt_root(tmp_path, "y/src")
+    _edt_module(y, "ОбщийМодуль1", _LIB)
+    caller = _edt_module(y, "ОбщийМодуль2", (
+        "Процедура П() Экспорт\n"
+        "    ОбщийМодуль1.ТолькоВА();\n"
+        "КонецПроцедуры\n"))
+    monkeypatch.setenv("BSL_GUARD_EXTRA_ROOTS", str(tmp_path / "a"))
+    found = [f for f in _mod().scan_file(caller) if f.code == "unknown-module-method"]
+    assert [(f.line, f.severity) for f in found] == [(2, "error")]
+
+
+def test_export_on_next_line_and_broken_cache(tmp_path, monkeypatch):
+    root = _edt_root(tmp_path)
+    _edt_module(root, "ОбщийМодуль1", "Процедура Длинная(А,\n    Б)\n    Экспорт\nКонецПроцедуры\n")
+    caller = _edt_module(root, "ОбщийМодуль2", (
+        "Процедура П() Экспорт\n"
+        "    ОбщийМодуль1.Длинная(1, 2);\n"
+        "КонецПроцедуры\n"))
+    m = _mod()
+    monkeypatch.setattr(m.tempfile, "gettempdir", lambda: str(tmp_path))
+    for junk in ("[1, 2]", '{"v": 1, "mods": {"ОбщийМодуль1": "мусор"}}', "не json"):
+        for f in tmp_path.glob("bsl_guard_idx_*.json"):
+            f.write_text(junk, encoding="utf-8")
+        m._INDEX_CACHE.clear()
+        assert _unknown(m.scan_file(caller)) == []
+        assert list(tmp_path.glob("bsl_guard_idx_*.json"))
+
+
+def test_form_items_shadowed_by_module_var_and_tabular_section(tmp_path):
+    m = _mod()
+    text = ("Перем Элементы;\n\nПроцедура П()\n    Для Сч = 0 По 3 Цикл\n"
+            "        А = Элементы[Сч];\n    КонецЦикла;\nКонецПроцедуры\n")
+    assert [f for f in m.scan_text(text, "X.bsl") if f.code == "form-items-by-index"] == []
+    root = _edt_root(tmp_path)
+    d = root / "Catalogs" / "Товары"
+    d.mkdir(parents=True)
+    (d / "Товары.mdo").write_text(
+        "<mdclass:Catalog xmlns:mdclass=\"http://g5.1c.ru/v8/dt/metadata/mdclass\"><tabularSections><name>Элементы</name></tabularSections></mdclass:Catalog>",
+        encoding="utf-8")
+    f = d / "ObjectModule.bsl"
+    f.write_text("Процедура П()\n    А = Элементы[0];\nКонецПроцедуры\n", encoding="utf-8-sig")
+    assert [x for x in m.scan_file(f) if x.code == "form-items-by-index"] == []
+
+
+def test_query_alias_keyword_inside_query_literal_ignored():
+    text = ('Процедура П()\n    Запрос = Новый Запрос("ВЫБРАТЬ ""КАК и"" КАК Поле ИЗ Справочник.Т КАК Т");\n'
+            "КонецПроцедуры\n")
+    assert "query-alias-keyword" not in _codes(text)
 
 
 def test_ignore_mark_for_new_rule(tmp_path):

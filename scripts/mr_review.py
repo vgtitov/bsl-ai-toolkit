@@ -64,7 +64,7 @@ def _run(script: str, *args: str) -> tuple[int, str]:
 
 
 def bsl_guard_findings(f: Path, rel: str) -> list[tuple[str, str, str]]:
-    """Находки bsl_guard по файлу. Упавший guard — блокирующая находка, не молчание:
+    """Находки bsl_guard по файлу. Упавший guard — видимая находка P2, не молчание:
     иначе сломанная проверка выглядит как «чисто»."""
     stderr = ""
     try:
@@ -77,7 +77,8 @@ def bsl_guard_findings(f: Path, rel: str) -> list[tuple[str, str, str]]:
     except Exception as e:                       # таймаут, traceback, не-JSON
         # у traceback суть — в последней строке («ИмяОшибки: текст»), первая — заголовок
         err = stderr.splitlines()[-1] if stderr else (str(e) or type(e).__name__)
-        return [("P1", rel, "bsl_guard не выполнен: " + err[:200])]
+        # P2, не P1: ошибка самого guard не должна блокировать MR, но и не выглядит как «чисто»
+        return [("P2", rel, "bsl_guard не выполнен, проверь файл вручную: " + err[:200])]
     return [("P1" if it.get("severity", "error") == "error" else "P2",
              f'{rel}:{it.get("line")}', f'[{it.get("code")}] {it.get("message", "")[:160]}') for it in items]
 

@@ -49,7 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
     sv.add_argument("file")
 
     bg = sub.add_parser(
-        "bsl-gate", help="гейт производительности BSL (запрос-в-цикле) для дерева")
+        "bsl-gate", help="гейт bsl_guard для дерева (блокирующие находки сверх baseline)")
     bgsub = bg.add_subparsers(dest="bgcmd", required=True)
     bgc = bgsub.add_parser("check", help="exit 1, если есть находки сверх baseline")
     bgc.add_argument("root")

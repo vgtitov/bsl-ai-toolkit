@@ -275,7 +275,7 @@ _AVRO_DATE_ARITH = re.compile(r"\bЧисло\s*\(\s*[\w.]+\.\w+\s*\)\s*\*\s*8640
 # Объявление метода в любом модуле (для индекса экспортных методов общих модулей).
 _METHOD_DECL = re.compile(
     r"^[ \t]*(?:(?:Асинх|Async)[ \t]+)?(?:Процедура|Функция|Procedure|Function)[ \t]+(\w+)"
-    r"[ \t]*\(([^)]*)\)[ \t]*(Экспорт|Export)?", re.IGNORECASE | re.MULTILINE)
+    r"[ \t]*\(([^)]*)\)\s*(Экспорт|Export)?", re.IGNORECASE | re.MULTILINE)
 # Перехватчики расширения: методов модуля не добавляют, их имена не вызываются извне.
 _INTERCEPTOR = re.compile(
     r"&(?:Вместо|После|Перед|ИзменениеИКонтроль|Around|After|Before|ChangeAndValidate)\b",
@@ -290,6 +290,7 @@ def _query_alias_findings(strings, filename):
             continue
         # комментарии внутри текста запроса (и строки-комментарии BSL между `|`) — не код
         s = re.sub(r"//[^\n]*", lambda c: " " * len(c.group()), s)
+        s = re.sub(r'""[^"]*""', lambda c: " " * len(c.group()), s)   # строковый литерал запроса
         for m in _QUERY_ALIAS.finditer(s):
             word = m.group(1)
             if word.lower() in _QUERY_RESERVED:
@@ -303,6 +304,9 @@ def _query_alias_findings(strings, filename):
 def _form_items_findings(lines, procs, filename):
     out = []
     spans = sorted(procs.values())
+    in_proc = {ln for a, b in spans for ln in range(a, b + 1)}
+    module_names = _local_names("\n".join(l for i, l in enumerate(lines, 1) if i not in in_proc))
+    shadow_meta = None
     for lineno, line in enumerate(lines, start=1):
         for m in _FORM_ITEMS_INDEX.finditer(line):
             if line[:m.start()].rstrip().endswith("."):
@@ -311,8 +315,16 @@ def _form_items_findings(lines, procs, filename):
             a, b = next(((a, b) for a, b in spans if a <= lineno <= b), (1, len(lines)))
             body = "\n".join(lines[a - 1:b])
             bare = not re.match(r"(?:Форма|ЭтаФорма|Form|ThisForm)\b", m.group(0), re.IGNORECASE)
-            if bare and {"элементы", "items"} & _local_names(body):
+            if bare and {"элементы", "items"} & (module_names | _local_names(body)):
                 continue                         # своя переменная/параметр «Элементы» (массив, коллекция)
+            if bare:
+                if shadow_meta is None:          # реквизит или табличная часть «Элементы» объекта
+                    path = Path(filename)
+                    root = _project_root(path.resolve()) if path.is_file() else None
+                    shadow_meta = bool(root) and any(
+                        _metadata_has_name(path.resolve(), root, n) for n in ("Элементы", "Items"))
+                if shadow_meta:
+                    continue
             if not re.fullmatch(r"\d+", arg):
                 # только «Сч» или «Сч ± число»: склейка со строкой (`"Страница" + Сч`) — это имя
                 counter = re.fullmatch(r"([^\W\d]\w*)(?:\s*[-+]\s*\d+)?", arg)
@@ -378,8 +390,11 @@ def _root_modules(root: Path) -> dict:
     cache_file = Path(tempfile.gettempdir()) / (
         "bsl_guard_idx_" + hashlib.sha1(str(root.resolve()).encode("utf-8")).hexdigest()[:16] + ".json")
     try:
-        cache = json.loads(cache_file.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        raw = json.loads(cache_file.read_text(encoding="utf-8"))
+        cache = raw["mods"] if isinstance(raw, dict) and raw.get("v") == _CACHE_VERSION else {}
+        if not isinstance(cache, dict):
+            cache = {}
+    except (OSError, ValueError, KeyError, TypeError):
         cache = {}
     mods, fresh, changed = {}, {}, False
     for d in base.iterdir():
@@ -394,7 +409,7 @@ def _root_modules(root: Path) -> dict:
         except OSError:
             continue
         hit = cache.get(md.stem)
-        if not hit or hit[0] != stamp:
+        if not _cache_entry_ok(hit) or hit[0] != stamp:
             own = "belonging>adopted<" not in _read(md).lower().replace(" ", "")
             hit = [stamp, own, _module_methods(_read(bsl)) if stamp[1] else {}]
             changed = True
@@ -402,31 +417,54 @@ def _root_modules(root: Path) -> dict:
         mods[md.stem.lower()] = (md.stem, hit[1], hit[2])
     if changed or len(fresh) != len(cache):
         try:
-            cache_file.write_text(json.dumps(fresh, ensure_ascii=False), encoding="utf-8")
+            tmp = cache_file.with_name(f"{cache_file.name}.{os.getpid()}.tmp")
+            tmp.write_text(json.dumps({"v": _CACHE_VERSION, "mods": fresh}, ensure_ascii=False),
+                           encoding="utf-8")
+            os.replace(tmp, cache_file)
         except OSError:
             pass
     return mods
 
 
 _INDEX_CACHE = {}
+_CACHE_VERSION = 1
+
+
+def _cache_entry_ok(hit) -> bool:
+    return (isinstance(hit, list) and len(hit) == 3 and isinstance(hit[0], list)
+            and isinstance(hit[1], bool) and isinstance(hit[2], dict))
+
+
+def _is_extension(root: Path) -> bool:
+    for f in (root / "Configuration" / "Configuration.mdo", root / "Configuration.xml"):
+        if f.is_file():
+            return "configurationextensionpurpose" in _read(f).lower()
+    return False
 
 
 def _modules_index(root: Path) -> dict:
-    """Индекс общих модулей корня проекта и корней из BSL_GUARD_EXTRA_ROOTS (объединение)."""
+    """Индекс общих модулей корня проекта и корней из BSL_GUARD_EXTRA_ROOTS (объединение).
+
+    {модуль: (имя, свой ли, {метод: экспорт}, только_из_extra)}. Extra-корни подмешиваются
+    только к расширению: переменная одна на машину, а хук общий для всех проектов. Модуль,
+    который стал «своим» лишь благодаря extra-корню, проверяется предупреждением: корень
+    мог быть от другой конфигурации."""
     extra = [Path(p) for p in os.environ.get("BSL_GUARD_EXTRA_ROOTS", "").split(os.pathsep) if p.strip()]
+    if extra and not _is_extension(root):
+        extra = []
     key = (root, tuple(extra))
     if key in _INDEX_CACHE:
         return _INDEX_CACHE[key]
     merged = {}
-    for r in [root, *extra]:
+    for i, r in enumerate([root, *extra]):
         if not (r / "CommonModules").is_dir() and (r / "src" / "CommonModules").is_dir():
             r = r / "src"
         for low, (name, own, methods) in _root_modules(r).items():
-            _, was_own, was = merged.get(low, (name, False, {}))
+            _, was_own, was, _ = merged.get(low, (name, False, {}, False))
             joined = dict(was)
             for meth, exp in methods.items():
                 joined[meth] = joined.get(meth, False) or exp
-            merged[low] = (name, was_own or own, joined)
+            merged[low] = (name, was_own or own, joined, not was_own and own and i > 0)
     _INDEX_CACHE[key] = merged
     return merged
 
@@ -540,7 +578,10 @@ def _module_method_findings(lines, filename):
                 filename, lineno, "unknown-module-method",
                 f"{entry[0]}.{meth}: метод {what} в общем модуле {entry[0]} — в рантайме "
                 "«Метод объекта не обнаружен»; BSL LS и /CheckConfig без -ExtendedModulesCheck "
-                "это не ловят. Сверь имя по модулю"))
+                "это не ловят. Сверь имя по модулю"
+                + (" (модуль известен только по BSL_GUARD_EXTRA_ROOTS — сверь, что корень "
+                   "от той же конфигурации)" if entry[3] else ""),
+                WARNING if entry[3] else ERROR))
     return out
 
 
