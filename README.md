@@ -88,7 +88,7 @@ bsl-ai-toolkit/
 │   ├── skills/                 # SKILL.md × 8: 1c-dev · 1c-analyst · 1c-metadata · 1c-admin-devops · 1c-dba · 1c-expert · 1c-tester · 1c-estimation
 │   └── mcp/servers.json        # профиль MCP: onec-code · bsl-ls · onec-ops · onec-data (пути/креды через env)
 ├── adapters/                   # тонкие адаптеры под агентов (claude — эталон; codex/gemini — фолбэк; cursor/copilot/… — rulesync)
-│   ├── claude/                 #   CLAUDE.md (@AGENTS.md) + settings.json (хук bsl_guard)
+│   ├── claude/                 #   CLAUDE.md (@AGENTS.md) + settings.json (хуки bsl_guard, pretool_guard)
 │   └── README.md               #   матрица «агент → файл правил → MCP-конфиг» + провайдеры LLM (РФ/санкции)
 ├── build.sh                    # генерация из core/: CLAUDE.md · AGENTS.md · GEMINI.md · .mcp.json · .claude/  (закоммичены)
 ├── onec_metadata/              # ОС-независимый движок правок метаданных (Конфигуратор-XML + EDT .mdo/.dcs), byte-perfect
