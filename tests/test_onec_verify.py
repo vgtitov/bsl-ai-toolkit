@@ -85,7 +85,7 @@ def test_check_with_host_uses_ssh_runner(monkeypatch, tmp_path):
     assert isinstance(seen["runner"], Runner) and seen["runner"].host == "onec-srv"
 
 
-# DISCIPLINE_ALLOW_TEST_EDIT: новый тест — -ExtendedModulesCheck по умолчанию
+# DISCIPLINE_ALLOW_TEST_EDIT: -ExtendedModulesCheck по умолчанию только для расширения
 def test_check_adds_extended_modules_check_by_default(monkeypatch, tmp_path):
     """Без ключа /CheckConfig пропускает `Модуль.НетТакогоМетода()` (сверено на 8.3.27:
     «Ошибок не обнаружено», с ключом — «Возможно ошибочный метод», код 101)."""
@@ -98,9 +98,15 @@ def test_check_adds_extended_modules_check_by_default(monkeypatch, tmp_path):
     m.main(["check", "--base", SERVER_BASE, "--ext", "x", "--workdir", wd])
     m.main(["check", "--base", SERVER_BASE, "--ext", "x", "--workdir", wd,
             "--no-extended-modules-check"])
-    assert "-ExtendedModulesCheck" in seen[0]
-    assert "-ExtendedModulesCheck" not in seen[1]
-    assert set(ext.CHECK_MODES) <= set(seen[0]) and set(ext.CHECK_MODES) <= set(seen[1])
+    # основная конфигурация: шум типовой не мерили — только по явному флагу
+    m.main(["check", "--base", SERVER_BASE, "--workdir", wd])
+    m.main(["check", "--base", SERVER_BASE, "--workdir", wd, "--extended-modules-check"])
+    flags = ["-ExtendedModulesCheck" in s for s in seen]
+    assert flags == [True, False, False, True]
+    assert all(set(ext.CHECK_MODES) <= set(s) for s in seen)
+    with pytest.raises(SystemExit):        # взаимоисключающие флаги
+        m.main(["check", "--base", SERVER_BASE, "--workdir", wd,
+                "--extended-modules-check", "--no-extended-modules-check"])
 
 
 def test_check_extended_flag_reaches_designer_command():
