@@ -60,6 +60,8 @@ def load_cfe(r: Runner, ib: str, user: str, pwd: str, *, cfe: str,
 CHECK_MODES = ("-ThinClient", "-WebClient", "-Server", "-ExternalConnection",
                "-ThickClientManagedApplication", "-DistributiveModules",
                "-IncorrectReferences", "-ConfigLogIntegrity")
+# Вызовы «через точку»: метод общего модуля существует и экспортный.
+EXTENDED_MODULES_CHECK = "-ExtendedModulesCheck"
 
 
 def check_config(r: Runner, ib: str, user: str, pwd: str, *,
@@ -69,10 +71,12 @@ def check_config(r: Runner, ib: str, user: str, pwd: str, *,
 
     Это ЕДИНСТВЕННАЯ проверка, которую не заменяют BSL LS и статика: платформа
     компилирует модули во всех контекстах и видит недоступные в контексте вызовы
-    и битые ссылки метаданных. Вызов НЕСУЩЕСТВУЮЩЕГО метода общего модуля
-    (`Модуль.НетТакогоМетода()`) без `-ExtendedModulesCheck` НЕ ловится — его в
-    CHECK_MODES нет сознательно (сотни шумовых «Возможно ошибочное…» по типовой);
-    передай его в `modes` и фильтруй вывод по своим именам, или гоняй ветку смоуком.
+    и битые ссылки метаданных. Вызов НЕСУЩЕСТВУЮЩЕГО (или неэкспортного) метода
+    общего модуля (`Модуль.НетТакогоМетода()`) ловится только с
+    `EXTENDED_MODULES_CHECK` в `modes` («Возможно ошибочный метод», код возврата 101).
+    В CHECK_MODES его нет: проверка основной конфигурации с ним отчитывается и по
+    типовым модулям. С `-Extension` платформа проверяет только модули расширения
+    (сверено на 8.3.27) — поэтому `onec_verify check` добавляет ключ по умолчанию.
     `ext=None` — основная конфигурация, иначе расширение по имени.
     """
     log = log or _wpath("check_config.log")
