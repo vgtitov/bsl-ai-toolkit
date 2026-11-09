@@ -138,6 +138,13 @@ def build_parser() -> argparse.ArgumentParser:
     fma.add_argument("file", help="путь к Forms/<Имя>/Ext/Form.xml (или Form.form EDT)")
     fma.add_argument("--name", required=True, help="имя реквизита формы")
     fma.add_argument("--type", dest="type_ref", required=True, help="тип реквизита")
+    fmt = fmsub.add_parser("set-attribute-type",
+                           help="тип СУЩЕСТВУЮЩЕГО реквизита формы, в т.ч. основного (EDT и Конфигуратор)")
+    fmt.add_argument("file", help="Forms/<Имя>/Form.form (EDT) или Forms/<Имя>/Ext/Form.xml (Конфигуратор)")
+    fmt.add_argument("--name", required=True, help="имя реквизита формы")
+    fmt.add_argument("--type", dest="type_refs", action="append", required=True,
+                     help="тип: EDT - DataProcessorObject.Имя / CatalogRef.Имя / String; "
+                          "Конфигуратор - cfg:.../xs:...; повторить --type = составной тип")
     fmf = fmsub.add_parser("add-field")
     fmf.add_argument("file", help="путь к Forms/<Имя>/Ext/Form.xml (Конфигуратор)")
     fmf.add_argument("--name", required=True, help="имя элемента (InputField)")
@@ -317,6 +324,9 @@ def main() -> None:
             elif ns.fmcmd == "add-attribute":
                 from onec_metadata.ops.form import add_attribute as form_add_attr
                 form_add_attr(Path(ns.file), ns.name, ns.type_ref)
+            elif ns.fmcmd == "set-attribute-type":
+                from onec_metadata.ops.form import set_attribute_type
+                set_attribute_type(Path(ns.file), ns.name, ns.type_refs)
             elif ns.fmcmd in ("add-group", "add-decoration", "move", "set-title",
                               "add-table", "add-column", "add-column-group",
                               "add-button", "add-command", "add-list", "add-event", "add-checkbox", "remove"):
