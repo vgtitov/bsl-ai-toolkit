@@ -4,6 +4,7 @@
 в Пока/Для). Запуск:  python -m pytest -q tests/test_bsl_guard.py
 """
 import importlib
+import os
 import sys
 from pathlib import Path
 
@@ -569,6 +570,16 @@ def test_extension_adopted_module_needs_base_root(tmp_path, monkeypatch):
     assert [f.line for f in found] == [4, 5]
     # модуль «свой» только благодаря extra-корню: корень мог быть от другой конфигурации
     assert {f.severity for f in found} == {m.WARNING}
+
+
+def test_extra_only_module_stays_warning_with_two_extra_roots(tmp_path, monkeypatch):
+    for sub in ("b1/src", "b2/src"):
+        _edt_module(_edt_root(tmp_path, sub), "ОбщийМодуль1", _LIB)
+    ext = _edt_root(tmp_path, "ext/src", extension=True)
+    caller = _edt_module(ext, "мр_Модуль", "Процедура П() Экспорт\n    ОбщийМодуль1.Нет();\nКонецПроцедуры\n")
+    monkeypatch.setenv("BSL_GUARD_EXTRA_ROOTS", os.pathsep.join([str(tmp_path / "b1"), str(tmp_path / "b2")]))
+    found = [f for f in _mod().scan_file(caller) if f.code == "unknown-module-method"]
+    assert [(f.line, f.severity) for f in found] == [(2, "warning")]
 
 
 def test_extra_roots_ignored_outside_extension(tmp_path, monkeypatch):

@@ -455,16 +455,18 @@ def _modules_index(root: Path) -> dict:
     key = (root, tuple(extra))
     if key in _INDEX_CACHE:
         return _INDEX_CACHE[key]
-    merged = {}
+    merged, root_own = {}, set()
     for i, r in enumerate([root, *extra]):
         if not (r / "CommonModules").is_dir() and (r / "src" / "CommonModules").is_dir():
             r = r / "src"
         for low, (name, own, methods) in _root_modules(r).items():
+            if i == 0 and own:
+                root_own.add(low)
             _, was_own, was, _ = merged.get(low, (name, False, {}, False))
             joined = dict(was)
             for meth, exp in methods.items():
                 joined[meth] = joined.get(meth, False) or exp
-            merged[low] = (name, was_own or own, joined, not was_own and own and i > 0)
+            merged[low] = (name, was_own or own, joined, (was_own or own) and low not in root_own)
     _INDEX_CACHE[key] = merged
     return merged
 
