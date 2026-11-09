@@ -41,6 +41,7 @@
 import argparse
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -201,13 +202,30 @@ def _find_v8():
     return str(root / "bin" / ("1cv8.exe" if os.name == "nt" else "1cv8"))
 
 
-def check_partial_load(src_dir: Path, files) -> None:
+def check_partial_load(src_dir: Path, files, allow_missing_ext: bool = False) -> None:
     """Отказ ДО запуска, если xml объекта грузится без его Ext — платформа сотрёт модули."""
     from onec_metadata.apply import dumpload
-    gaps = dumpload.partial_load_gaps(src_dir, files)
+    gaps = dumpload.partial_load_gaps(src_dir, files, allow_missing_ext)
     if gaps:
         raise SystemExit("точечная загрузка сотрёт модули: xml объекта в списке без его Ext/*. "
-                         "Добавь в --files (из свежей выгрузки этой же базы):\n  " + "\n  ".join(gaps))
+                         "Добавь в --files (из свежей выгрузки этой же базы):\n  " + "\n  ".join(gaps)
+                         + "\nНовый объект без ConfigDumpInfo.xml в каталоге — --allow-missing-ext "
+                         "(риск: если объект в базе есть, его модули будут стёрты)")
+
+
+def merge_partial_dump(src: Path, dst: Path) -> None:
+    """Перенести проверенную точечную выгрузку в рабочий каталог: каталог и xml каждого
+    выгруженного объекта заменяются целиком, остальное в dst не трогается."""
+    tops = set()
+    for p in src.rglob("*"):
+        if p.is_file():
+            parts = p.relative_to(src).parts
+            if len(parts) >= 2 and parts[0] != "Ext":
+                tops.add((parts[0], Path(parts[1]).stem if len(parts) == 2 else parts[1]))
+    for kind, name in tops:
+        shutil.rmtree(dst / kind / name, ignore_errors=True)
+        (dst / kind / f"{name}.xml").unlink(missing_ok=True)
+    shutil.copytree(src, dst, dirs_exist_ok=True)
 
 
 def check_partial_dump_forms(dump_dir: Path, before: dict) -> None:
@@ -423,6 +441,9 @@ def main(argv=None):
     p = sub.add_parser("load", parents=[common], help="точечная загрузка файлов")
     p.add_argument("--files", help="пути файлов от каталога выгрузки, через запятую")
     p.add_argument("--changed", action="store_true", help="взять изменённые по git-статусу каталога выгрузки")
+    p.add_argument("--allow-missing-ext", action="store_true",
+                   help="без ConfigDumpInfo.xml пустить xml объекта без Ext (новый объект); "
+                        "если объект в базе есть — его модули будут стёрты")
     p = sub.add_parser("status", help="изменённые файлы каталога выгрузки")
     p.add_argument("--out", default="designer_src")
     p = sub.add_parser("deploy-extension", help="полный деплой расширения из исходников (--host обязателен)")
@@ -498,20 +519,27 @@ def main(argv=None):
         from onec_metadata.apply import dumpload
         objects = [o.strip() for o in (a.objects or "").split(",") if o.strip()] or None
         forms_before = dumpload.form_snapshot(Path(a.out))
+        # точечная — во временный ПУСТОЙ каталог: старые файлы a.out (Form/Module.bsl) иначе
+        # маскируют то, чего выгрузка не отдала; в a.out переносим только проверенное
+        target = tempfile.mkdtemp(prefix="ds_dump_") if objects else str(Path(a.out).resolve())
         if a.host:
             from onec_metadata.apply.runner import make_runner
             r = make_runner(a.host)
-            remote_dump(r, a.base, user, password, a.ext, objects, a.out)
+            remote_dump(r, a.base, user, password, a.ext, objects, target)
         else:
-            cmd, listfile = build_dump_cmd(v8, a.base, str(Path(a.out).resolve()), objects,
-                                           user, password, a.ext, log)
+            cmd, listfile = build_dump_cmd(v8, a.base, target, objects, user, password, a.ext, log)
             try:
                 _run(cmd, log)
             finally:
                 if listfile:
                     os.unlink(listfile)
         if objects:
-            check_partial_dump_forms(Path(a.out), forms_before)
+            try:
+                check_partial_dump_forms(Path(target), forms_before)
+            except SystemExit as e:
+                raise SystemExit(f"{e}\n{a.out} не изменён; выгрузка оставлена для разбора: {target}") from None
+            merge_partial_dump(Path(target), Path(a.out))
+            shutil.rmtree(target, ignore_errors=True)
         print(f"[ok] выгружено в {a.out}" + (f" через {a.host}" if a.host else "")
               + (f" (объекты: {len(objects)})" if objects else " (полная)"))
     elif a.cmd == "load":
@@ -523,7 +551,7 @@ def main(argv=None):
             files = got
         if not files:
             raise SystemExit("Нечего грузить: укажи --files или --changed (полная загрузка в базу с хранилищем запрещена платформой)")
-        check_partial_load(Path(a.out), files)
+        check_partial_load(Path(a.out), files, a.allow_missing_ext)
         if a.host:
             from onec_metadata.apply.runner import make_runner
             r = make_runner(a.host)

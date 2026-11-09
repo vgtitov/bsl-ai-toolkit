@@ -8,6 +8,7 @@ zip/Compress-Archive ломают кодировку имён (боевой ур
 """
 import filecmp
 import os
+import re
 import subprocess
 import sys
 import unicodedata
@@ -252,31 +253,86 @@ def roundtrip_verify(before: Path, after: Path, expect_changed: set,
             f"обещанные, но не изменившиеся: {missing}")
 
 
-def partial_load_gaps(src_dir: Path, files: list[str]) -> list[str]:
+# Каталог выгрузки → тип в ConfigDumpInfo.xml: обычно множественное число через «s», кроме этих.
+_DIR_TYPE = {"ChartsOfAccounts": "ChartOfAccounts", "ChartsOfCharacteristicTypes": "ChartOfCharacteristicTypes",
+             "ChartsOfCalculationTypes": "ChartOfCalculationTypes", "BusinessProcesses": "BusinessProcess",
+             "FilterCriteria": "FilterCriterion"}
+
+
+def dump_info_names(src_dir: Path) -> set | None:
+    """Имена `<Metadata name=…>` из ConfigDumpInfo.xml каталога выгрузки; None — файла нет."""
+    p = Path(src_dir) / "ConfigDumpInfo.xml"
+    if not p.is_file():
+        return None
+    return {unicodedata.normalize("NFC", n) for n in
+            re.findall(r'<Metadata\s+name="([^"]+)"', p.read_text("utf-8-sig", errors="replace"))}
+
+
+def _full_name(rel: str, names: set) -> str | None:
+    """Полное имя объекта в ConfigDumpInfo по пути его xml: Catalogs/X.xml → Catalog.X,
+    Catalogs/X/Forms/F.xml → Catalog.X.Form.F, Configuration.xml → Configuration.<Имя>."""
+    parts = rel[:-4].split("/")
+    if parts == ["Configuration"]:
+        return next((n for n in names if n.startswith("Configuration.") and n.count(".") == 1), None)
+    if len(parts) not in (2, 4) or (len(parts) == 4 and parts[2] != "Forms"):
+        return None
+    kind = _DIR_TYPE.get(parts[0], parts[0][:-1] if parts[0].endswith("s") else parts[0])
+    return f"{kind}.{parts[1]}" + (f".Form.{parts[3]}" if len(parts) == 4 else "")
+
+
+def _required_by_dump_info(rel: str, full: str, names: set) -> list[str]:
+    """Файлы модулей объекта, которые ConfigDumpInfo числит за ним (без вложенных форм)."""
+    base = "" if rel == "Configuration.xml" else rel[:-4] + "/"
+    need = []
+    for n in names:
+        if not n.startswith(full + "."):
+            continue
+        tail = n[len(full) + 1:].split(".")
+        if len(tail) == 1 and tail[0].endswith("Module"):           # ObjectModule, Module, SessionModule…
+            need.append(f"{base}Ext/{tail[0]}.bsl")
+        elif len(tail) == 3 and tail[0] == "Command" and tail[2] == "CommandModule":
+            need.append(f"{base}Commands/{tail[1]}/Ext/CommandModule.bsl")
+        elif tail == ["Form"]:                                       # сама форма
+            need.append(f"{base}Ext/Form.xml")
+    return need
+
+
+def partial_load_gaps(src_dir: Path, files: list[str], allow_missing_ext: bool = False) -> list[str]:
     """Файлы, без которых точечная загрузка СОТРЁТ части объекта в базе.
 
     `<Объект>.xml` в `-files` без его `<Объект>/Ext/*` платформа понимает как «у объекта
     модулей нет»: стирает модуль объекта/менеджера, а у корня (`Configuration.xml`) — модули
     сеанса и приложения, командный интерфейс, рабочую область, поддержку. load при этом
-    exit=0, и обратная выгрузка пустой Ext просто не отдаёт. Эвристика по каталогу-источнику:
-    что лежит в `<Объект>/Ext/` рядом с xml, то обязано быть и в списке.
+    exit=0, и обратная выгрузка пустой Ext просто не отдаёт.
+
+    Источник истины — ConfigDumpInfo.xml каталога выгрузки: все модули, которые он числит за
+    объектом, обязаны быть в списке (объекта там нет — он новый, Ext не нужен). Плюс всё, что
+    лежит в `<Объект>/Ext/` на диске. Без ConfigDumpInfo новый объект не отличить от неполной
+    выгрузки существующего: xml без Ext — отказ, если не `allow_missing_ext`.
     """
     src_dir = Path(src_dir)
     listed = {unicodedata.normalize("NFC", f.replace("\\", "/").lstrip("./")) for f in files}
+    names = dump_info_names(src_dir)
     gaps = []
     for rel in sorted(listed):
-        if not rel.lower().endswith(".xml"):
+        if not rel.lower().endswith(".xml") or "Ext" in rel.split("/") or rel == "ConfigDumpInfo.xml":
             continue
-        ext_dir = src_dir / rel[:-4] / "Ext"
-        if rel == "Configuration.xml":
-            ext_dir = src_dir / "Ext"
-        if not ext_dir.is_dir():
+        ext_dir = src_dir / ("Ext" if rel == "Configuration.xml" else rel[:-4] + "/Ext")
+        need = []
+        if names is not None:
+            full = _full_name(rel, names)
+            if full in names:
+                need += _required_by_dump_info(rel, full, names)
+        elif not ext_dir.is_dir() and not allow_missing_ext:
+            gaps.append(f"{rel} → нет ни {ext_dir.relative_to(src_dir).as_posix()}/, ни ConfigDumpInfo.xml: "
+                        "новый объект не отличить от неполной выгрузки существующего (модули сотрутся)")
             continue
-        for p in sorted(ext_dir.rglob("*")):
-            if p.is_file():
-                need = unicodedata.normalize("NFC", p.relative_to(src_dir).as_posix())
-                if need not in listed:
-                    gaps.append(f"{rel} → нет {need}")
+        if ext_dir.is_dir():
+            need += [p.relative_to(src_dir).as_posix() for p in ext_dir.rglob("*") if p.is_file()]
+        for n in sorted({unicodedata.normalize("NFC", x) for x in need}):
+            if n not in listed:
+                missing = "" if (src_dir / n).is_file() else " (нет и в каталоге — выгрузка неполная, нужна полная)"
+                gaps.append(f"{rel} → нет {n}{missing}")
     return gaps
 
 

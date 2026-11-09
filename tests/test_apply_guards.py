@@ -53,9 +53,78 @@ def test_partial_load_root_needs_whole_ext(tmp_path):
     assert gaps == ["Configuration.xml → нет Ext/ClientApplicationInterface.xml"]
 
 
+DUMP_INFO = """<?xml version="1.0" encoding="UTF-8"?>
+<ConfigDumpInfo xmlns="http://v8.1c.ru/8.3/xcf/dumpinfo" format="Hierarchical" version="2.20">
+\t<ConfigVersions>
+\t\t<Metadata name="Configuration.Тест" id="1" configVersion="a"/>
+\t\t<Metadata name="Configuration.Тест.SessionModule" id="1.1" configVersion="a"/>
+\t\t<Metadata name="Catalog.Товары" id="2" configVersion="b">
+\t\t\t<Metadata name="Catalog.Товары.Attribute.Код" id="3"/>
+\t\t</Metadata>
+\t\t<Metadata name="Catalog.Товары.ObjectModule" id="2.0" configVersion="c"/>
+\t\t<Metadata name="Catalog.Товары.ManagerModule" id="2.3" configVersion="c"/>
+\t\t<Metadata name="Catalog.Товары.Command.Открыть.CommandModule" id="4.0" configVersion="d"/>
+\t\t<Metadata name="Catalog.Товары.Form.ФормаЭлемента" id="5" configVersion="e"/>
+\t\t<Metadata name="Catalog.Товары.Form.ФормаЭлемента.Form" id="5.0" configVersion="e"/>
+\t</ConfigVersions>
+</ConfigDumpInfo>
+"""
+
+
+# DISCIPLINE_ALLOW_TEST_EDIT: ревью P1 — «нет Ext» больше не безопасно само по себе; новый объект
+# определяется по отсутствию в ConfigDumpInfo.xml, без него нужен явный --allow-missing-ext
 def test_partial_load_new_object_without_ext_dir_is_fine(tmp_path):
+    (tmp_path / "ConfigDumpInfo.xml").write_text(DUMP_INFO, encoding="utf-8")
     _touch(tmp_path, "Catalogs/Новый.xml")
     assert dumpload.partial_load_gaps(tmp_path, ["Catalogs/Новый.xml"]) == []
+
+
+def test_partial_load_dump_info_requires_modules_even_without_ext_dir(tmp_path):
+    """Неполная выгрузка существующего объекта: Ext на диске нет, но ConfigDumpInfo его модули знает."""
+    (tmp_path / "ConfigDumpInfo.xml").write_text(DUMP_INFO, encoding="utf-8")
+    _touch(tmp_path, "Catalogs/Товары.xml")
+    joined = "\n".join(dumpload.partial_load_gaps(tmp_path, ["Catalogs/Товары.xml"]))
+    for need in ("Catalogs/Товары/Ext/ObjectModule.bsl", "Catalogs/Товары/Ext/ManagerModule.bsl",
+                 "Catalogs/Товары/Commands/Открыть/Ext/CommandModule.bsl"):
+        assert need in joined
+    assert "выгрузка неполная" in joined
+    assert "ФормаЭлемента" not in joined                       # формы объекта при загрузке xml не стираются
+
+
+def test_partial_load_dump_info_form_and_root(tmp_path):
+    (tmp_path / "ConfigDumpInfo.xml").write_text(DUMP_INFO, encoding="utf-8")
+    _touch(tmp_path, "Configuration.xml")
+    _touch(tmp_path, "Catalogs/Товары/Forms/ФормаЭлемента.xml")
+    gaps = dumpload.partial_load_gaps(tmp_path, ["Configuration.xml",
+                                                 "Catalogs/Товары/Forms/ФормаЭлемента.xml"])
+    assert any("Ext/SessionModule.bsl" in g for g in gaps)
+    assert any("Catalogs/Товары/Forms/ФормаЭлемента/Ext/Form.xml" in g for g in gaps)
+
+
+def test_partial_load_without_dump_info_needs_explicit_flag(tmp_path):
+    _touch(tmp_path, "Catalogs/Новый.xml")
+    gaps = dumpload.partial_load_gaps(tmp_path, ["Catalogs/Новый.xml"])
+    assert gaps and "ConfigDumpInfo" in gaps[0]
+    assert dumpload.partial_load_gaps(tmp_path, ["Catalogs/Новый.xml"], allow_missing_ext=True) == []
+    _touch(tmp_path, "Catalogs/Новый/Ext/Predefined.xml")   # xml внутри Ext — не определение объекта
+    assert dumpload.partial_load_gaps(tmp_path, ["Catalogs/Новый/Ext/Predefined.xml"]) == []
+
+
+def test_designer_sync_allow_missing_ext_flag(monkeypatch, tmp_path):
+    m = _ds()
+    out = tmp_path / "out"
+    _touch(out, "Catalogs/Новый.xml")
+    base = tmp_path / "base"
+    base.mkdir()
+    monkeypatch.setenv("ONEC_V8_BIN", "1cv8")
+    ran = []
+    monkeypatch.setattr(m, "_run", lambda *a, **k: ran.append(a))
+    with pytest.raises(SystemExit) as e:
+        m.main(["load", "--base", str(base), "--out", str(out), "--files", "Catalogs/Новый.xml"])
+    assert "--allow-missing-ext" in str(e.value) and not ran
+    m.main(["load", "--base", str(base), "--out", str(out), "--files", "Catalogs/Новый.xml",
+            "--allow-missing-ext"])
+    assert ran
 
 
 def test_designer_sync_load_refuses_before_running(monkeypatch, tmp_path):
@@ -102,6 +171,53 @@ def test_complete_form_passes_with_warning(tmp_path, capsys):
     _touch(tmp_path, FORM, "<Form/>")
     with pytest.raises(SystemExit):
         m.check_partial_dump_forms(tmp_path, {FORM: True})
+
+
+def _dump_main(monkeypatch, tmp_path, fresh: dict):
+    """designer_sync dump --objects, где «платформа» кладёт в целевой каталог файлы `fresh`."""
+    m = _ds()
+    base = tmp_path / "base"
+    base.mkdir(exist_ok=True)
+    monkeypatch.setenv("ONEC_V8_BIN", "1cv8")
+    seen = {}
+
+    def fake_run(cmd, log):
+        target = Path(cmd[cmd.index("/DumpConfigToFiles") + 1])
+        seen["target"] = target
+        for rel, text in fresh.items():
+            _touch(target, rel, text)
+
+    monkeypatch.setattr(m, "_run", fake_run)
+    return m, base, seen
+
+
+def test_partial_dump_goes_to_empty_dir_and_leaves_out_untouched_on_loss(monkeypatch, tmp_path):
+    """Старый Form/Module.bsl в --out не маскирует, что новая выгрузка модуль не отдала."""
+    out = tmp_path / "out"
+    old_form = "<Form><Events><Event name='OnOpen'/></Events></Form>"
+    _touch(out, FORM, old_form)
+    _touch(out, MODULE, "старый модуль")
+    m, base, seen = _dump_main(monkeypatch, tmp_path, {"Catalogs/Товары.xml": "<x/>", FORM: old_form})
+    with pytest.raises(SystemExit) as e:
+        m.main(["dump", "--base", str(base), "--out", str(out), "--objects", "Справочник.Товары"])
+    assert "Module.bsl" in str(e.value) and str(seen["target"]) in str(e.value)
+    assert seen["target"] != out.resolve() and seen["target"].is_dir()   # временный оставлен для разбора
+    assert (out / MODULE).read_text(encoding="utf-8") == "старый модуль"
+    assert not (out / "Catalogs/Товары.xml").exists()                   # out не тронут
+
+
+def test_partial_dump_success_replaces_only_dumped_objects(monkeypatch, tmp_path):
+    out = tmp_path / "out"
+    _touch(out, "Catalogs/Товары/Ext/Устаревший.bsl")                  # исчез из объекта — уйдёт
+    _touch(out, "Catalogs/Прочее.xml", "не трогать")
+    form = "<Form><Events><Event name='OnOpen'/></Events></Form>"
+    m, base, seen = _dump_main(monkeypatch, tmp_path, {
+        "Catalogs/Товары.xml": "<new/>", FORM: form, MODULE: "новый модуль"})
+    m.main(["dump", "--base", str(base), "--out", str(out), "--objects", "Справочник.Товары"])
+    assert (out / MODULE).read_text(encoding="utf-8") == "новый модуль"
+    assert not (out / "Catalogs/Товары/Ext/Устаревший.bsl").exists()
+    assert (out / "Catalogs/Прочее.xml").read_text(encoding="utf-8") == "не трогать"
+    assert not seen["target"].exists()                                  # временный убран
 
 
 # ── лог прошлого запуска и подсказки по ответам платформы ─────────────────────
