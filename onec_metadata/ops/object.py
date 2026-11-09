@@ -19,6 +19,7 @@ import json
 import os
 import re
 import shutil
+import sys
 import tempfile
 import uuid
 from dataclasses import dataclass
@@ -511,6 +512,7 @@ def delete(src: Path, ref: str) -> list[Path]:
     removed = [x for x in p.object_paths(kind, name) if x.exists()]
     # сначала файлы — в корзину рядом (тот же том, перенос атомарный), потом манифест; сбой — всё назад
     trash = Path(tempfile.mkdtemp(prefix=".object_delete_", dir=p.root))
+    original = p.manifest.read_bytes()
     moved = []
     try:
         for i, x in enumerate(removed):
@@ -521,7 +523,13 @@ def delete(src: Path, ref: str) -> list[Path]:
     except BaseException:
         for x, dst in reversed(moved):
             os.replace(dst, x)
+        if p.manifest.read_bytes() != original:            # запись могла пройти до сбоя
+            p.manifest.write_bytes(original)
         shutil.rmtree(trash, ignore_errors=True)
         raise
-    shutil.rmtree(trash, ignore_errors=True)
+    try:
+        shutil.rmtree(trash)
+    except OSError as e:
+        print(f"[!] объект удалён из проекта, но корзина {trash} не убрана ({e}) — удали её вручную",
+              file=sys.stderr)
     return removed

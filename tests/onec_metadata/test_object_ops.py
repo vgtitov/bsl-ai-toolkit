@@ -203,13 +203,20 @@ def test_delete_rolls_back_when_manifest_write_fails(tmp_path, monkeypatch):
     manifest = src / "Configuration.xml"
     before = manifest.read_bytes()
 
+    real = obj._write_atomic
+
     def boom(*a, **kw):
         raise OSError("диск занят")
-    monkeypatch.setattr(obj, "_write_atomic", boom)
-    with pytest.raises(OSError):
-        obj.delete(src, "Catalog.Товары")
-    assert path.is_file() and manifest.read_bytes() == before
-    assert not list(src.glob(".object_delete_*"))
+
+    def written_then_boom(path_, text):                   # манифест уже записан, сбой после
+        real(path_, text)
+        raise OSError("сбой после записи")
+    for fail in (boom, written_then_boom):
+        monkeypatch.setattr(obj, "_write_atomic", fail)
+        with pytest.raises(OSError):
+            obj.delete(src, "Catalog.Товары")
+        assert path.is_file() and manifest.read_bytes() == before
+        assert not list(src.glob(".object_delete_*"))
 
 
 @pytest.mark.parametrize("fmt", ["edt", "cfg"])
