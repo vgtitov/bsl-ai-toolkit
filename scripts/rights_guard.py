@@ -230,6 +230,7 @@ def is_privileged_module(bsl_path: Path):
 
 _PRIVILEGED_CALL = re.compile(
     r"\b(?:УстановитьПривилегированныйРежим|SetPrivilegedMode)\s*\(\s*(\w+)\s*\)", re.IGNORECASE)
+_PROC_END = re.compile(r"^\s*(?:КонецПроцедуры|КонецФункции|EndProcedure|EndFunction)\b", re.IGNORECASE)
 _BLOCK_OPEN = re.compile(r"\b(?:Если|If|Цикл|Do|Попытка|Try)\b", re.IGNORECASE)
 _BLOCK_CLOSE = re.compile(r"\b(?:КонецЕсли|EndIf|КонецЦикла|EndDo|КонецПопытки|EndTry)\b", re.IGNORECASE)
 
@@ -237,15 +238,21 @@ _BLOCK_CLOSE = re.compile(r"\b(?:КонецЕсли|EndIf|КонецЦикла|E
 def _privileged_before(lines, start):
     """До запроса в его процедуре включён привилегированный режим — безусловно.
 
-    Решает ПОСЛЕДНИЙ вызов УстановитьПривилегированныйРежим(...) перед запросом: `Истина` на
-    уровне тела процедуры (не внутри Если/Цикл/Попытка) — подавляем; `Ложь` или включение
-    в блоке (может не выполниться) — предупреждение остаётся.
+    Консервативно: подавляем, только если перед запросом есть `Истина` на уровне тела
+    процедуры (не внутри Если/Цикл/Попытка) и во ВСЕЙ процедуре нет ни одного `Ложь`
+    (выключение до выполнения запроса по тексту не отследить).
     """
     first = 0
     for i in range(start, -1, -1):
         if _PROC_START.match(lines[i]):
             first = i + 1
             break
+    for line in lines[first:]:
+        if _PROC_END.match(line):
+            break
+        code = re.sub(r'"[^"]*"?', '""', line).split("//", 1)[0]
+        if any(m.group(1).lower() in ("ложь", "false") for m in _PRIVILEGED_CALL.finditer(code)):
+            return False
     depth, last = 0, None
     for line in lines[first:start]:
         if line.lstrip().startswith("|"):          # продолжение текста запроса

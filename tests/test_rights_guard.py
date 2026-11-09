@@ -185,6 +185,18 @@ def test_conditional_or_switched_off_privileged_mode_keeps_warning(tmp_path):
     assert [x["line"] for x in findings] == [5, 13]
 
 
+# DISCIPLINE_ALLOW_TEST_EDIT: ревью №3 - Ложь в любом месте процедуры, даже после текста запроса
+def test_privileged_off_after_query_text_keeps_warning(tmp_path):
+    f = tmp_path / "Module.bsl"
+    f.write_text("Процедура П()\n"
+                 "    УстановитьПривилегированныйРежим(Истина);\n" + _QUERY +   # строка 3
+                 "    УстановитьПривилегированныйРежим(Ложь);\n"
+                 "    Результат = Запрос.Выполнить();\n"
+                 "КонецПроцедуры\n", encoding="utf-8")
+    findings, _ = run(f)
+    assert [x["line"] for x in findings] == [3]
+
+
 def test_privileged_common_module_is_not_flagged(tmp_path):
     d = tmp_path / "src" / "CommonModules" / "МодульПривилегированный"
     d.mkdir(parents=True)

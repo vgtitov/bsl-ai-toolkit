@@ -305,6 +305,8 @@ def _form_items_findings(lines, procs, filename):
     spans = sorted(procs.values())
     for lineno, line in enumerate(lines, start=1):
         for m in _FORM_ITEMS_INDEX.finditer(line):
+            if line[:m.start()].rstrip().endswith("."):
+                continue                         # `Объект . Элементы[0]` — свойство другого объекта
             arg = m.group(1).strip()
             a, b = next(((a, b) for a, b in spans if a <= lineno <= b), (1, len(lines)))
             body = "\n".join(lines[a - 1:b])
