@@ -10,7 +10,8 @@
 Что делает (всё бесплатное и локальное, кроме необязательного второго мнения):
   1. размер по объектам метаданных и ручным строкам BSL (`mr_size.py`);
   2. описание MR: есть ли части «что», «зачем», «как проверить», «риск»;
-  3. по изменённым .bsl: `bsl_guard` (обращение к базе в цикле, P1), `rights_guard` (права и RLS, P1 или P2),
+  3. по изменённым .bsl: `bsl_guard` (обращение к базе в цикле, несуществующий метод общего модуля и др.:
+     блокирующие P1, предупреждения P2), `rights_guard` (права и RLS, P1 или P2),
      `bsl_ls_top` (частые замечания BSL LS, P2; нужны BSL_JAR и java, иначе молча пропускается);
   4. с `--second-opinion`: запрос второй модели с диффом, постановкой и чек-листом (`second_opinion.py ask`).
 Код выхода 1, если есть P1; иначе 0. Вывод короткий: только находки и их место.
@@ -74,9 +75,13 @@ def findings(repo: Path, base: str, description: str | None, max_objects: int, m
             out.append(("P2", "описание MR", "не хватает частей: " + ", ".join(gaps)))
     for f in changed_bsl(repo, base):
         rel = os.path.relpath(f, repo)
-        rc, o = _run("bsl_guard.py", str(f))
-        if rc != 0 and o:
-            out.append(("P1", rel, "обращение к базе в цикле: " + o.splitlines()[0][:160]))
+        rc, o = _run("bsl_guard.py", "--json", str(f))
+        try:
+            for it in json.loads(o) if o else []:
+                out.append(("P1" if it.get("severity", "error") == "error" else "P2",
+                            f'{rel}:{it.get("line")}', f'[{it.get("code")}] {it.get("message", "")[:160]}'))
+        except ValueError:
+            pass
         rc, o = _run("rights_guard.py", "--json", str(f))
         try:
             for it in json.loads(o) if o else []:

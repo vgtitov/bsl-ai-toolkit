@@ -207,17 +207,53 @@ def _query_blocks(lines):
             i += 1
 
 
+_PROC_START = re.compile(r"^\s*(?:(?:Асинх|Async)\s+)?(?:Процедура|Функция|Procedure|Function)\b",
+                         re.IGNORECASE)
+_PRIVILEGED_ON = re.compile(
+    r"^[^/\"]*\b(?:УстановитьПривилегированныйРежим|SetPrivilegedMode)\s*\(\s*(?:Истина|True)\s*\)",
+    re.IGNORECASE)
+
+
+def is_privileged_module(bsl_path: Path):
+    """Модуль привилегированного общего модуля (флаг «Привилегированный»): RLS там не действует."""
+    parts = bsl_path.parts
+    if bsl_path.name.lower() != "module.bsl" or len(parts) < 4:
+        return False
+    if parts[-2].lower() == "ext":                                   # Конфигуратор
+        name, kind_dir = parts[-3], bsl_path.parents[2]
+        md = kind_dir / f"{name}.xml"
+    else:                                                            # EDT
+        name, kind_dir = parts[-2], bsl_path.parents[1]
+        md = bsl_path.parent / f"{name}.mdo"
+    if kind_dir.name != "CommonModules" or not md.is_file():
+        return False
+    text = md.read_text(encoding="utf-8-sig", errors="replace").lower().replace(" ", "")
+    return "<privileged>true</privileged>" in text
+
+
+def _privileged_before(lines, start):
+    """В процедуре запроса до его текста включён привилегированный режим."""
+    for i in range(start, -1, -1):
+        if _PRIVILEGED_ON.search(lines[i]):
+            return True
+        if _PROC_START.match(lines[i]):
+            return False
+    return False
+
+
 def check_query_without_allowed(bsl_path: Path, findings):
     try:
         text = bsl_path.read_text(encoding="utf-8-sig", errors="replace")
     except OSError:
+        return
+    if is_privileged_module(bsl_path):
         return
     lines = text.splitlines()
     for start, block in _query_blocks(lines):
         if not _DATA_TABLE.search(block) or _ALLOWED.search(block):
             continue
         context = "\n".join(lines[max(0, start - 3):start + 1])
-        if _PRAGMA.search(context) or _PRAGMA.search(block):
+        if _PRAGMA.search(context) or _PRAGMA.search(block) or _privileged_before(lines, start):
             continue
         findings.append(Finding(
             str(bsl_path), start + 1, "query-without-allowed", "warning",

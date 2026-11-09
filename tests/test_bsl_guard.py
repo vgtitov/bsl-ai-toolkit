@@ -267,6 +267,227 @@ def test_ignore_inside_string_is_not_a_mark():
     assert _codes(text) == ["db-call-in-loop"]
 
 
+# DISCIPLINE_ALLOW_TEST_EDIT: новые правила — грабли, которые не ловят BSL LS и CheckConfig
+
+def _sev(text, name="X.bsl"):
+    return sorted((f.code, f.severity) for f in _mod().scan_text(text, name))
+
+
+def test_dash_in_comment_is_warning_not_blocking(tmp_path):
+    text = "// Расчёт — по строкам\n// интервал 1–2\nА = \"текст — в строке\";\n// обычный - дефис\n"
+    assert _sev(text) == [("dash-in-comment", "warning")] * 2
+    f = tmp_path / "m.bsl"
+    f.write_text(text, encoding="utf-8")
+    assert _mod().main([str(f), "--quiet"]) == 0          # предупреждение не валит хук/коммит
+
+
+def test_query_alias_keyword_flagged():
+    text = (
+        'Запрос.Текст = "ВЫБРАТЬ\n'
+        '|	Т.Ссылка КАК Ссылка,\n'
+        '|	Т.Код КАК Где\n'
+        '|ИЗ\n'
+        '|	Справочник.Товары КАК И";\n'
+    )
+    findings = _mod().scan_text(text, "X.bsl")
+    assert [(f.code, f.line) for f in findings] == [
+        ("query-alias-keyword", 3), ("query-alias-keyword", 5)]
+    assert "«Где»" in findings[0].message
+
+
+def test_query_alias_allowed_words_not_flagged():
+    # ВЫБРАТЬ/КОНЕЦ/ИТОГИ/ССЫЛКА платформа псевдонимом принимает; ВЫРАЗИТЬ(… КАК Число) — тип
+    text = (
+        'Т = "ВЫБРАТЬ Т.Ссылка КАК Ссылка, Т.Сумма КАК Итоги, ВЫРАЗИТЬ(Т.К КАК ЧИСЛО(10, 2)) КАК Конец\n'
+        '|ИЗ Справочник.Товары КАК Товары";\n'
+        'Сообщение = "Так же, как и раньше";\n'       # не текст запроса
+    )
+    assert _codes(text) == []
+
+
+def test_form_items_by_number_or_loop_counter_flagged():
+    text = (
+        "Процедура П()\n"
+        "    Первый = Элементы[0];\n"
+        "    Для Индекс = 0 По Элементы.Количество() - 1 Цикл\n"
+        "        Э = Форма.Элементы[Индекс];\n"
+        "    КонецЦикла;\n"
+        "КонецПроцедуры\n"
+    )
+    findings = _mod().scan_text(text, "X.bsl")
+    assert [(f.code, f.line, f.severity) for f in findings] == [
+        ("form-items-by-index", 2, "error"), ("form-items-by-index", 4, "error")]
+
+
+def test_form_items_by_name_and_tabular_section_not_flagged():
+    text = (
+        "Процедура П(ИмяЭлемента)\n"
+        "    Э = Элементы[ИмяЭлемента];\n"
+        "    Для Каждого Имя Из Имена Цикл\n"
+        "        Элементы[Имя].Видимость = Ложь;\n"
+        "    КонецЦикла;\n"
+        "    Строка = Объект.Элементы[0];\n"              # табличная часть «Элементы»
+        "    Кнопка = Группа.ПодчиненныеЭлементы[0];\n"
+        "КонецПроцедуры\n"
+        "Процедура Массивом(Элементы)\n"                     # параметр-массив с тем же именем
+        "    Для Индекс = 0 По Элементы.ВГраница() Цикл\n"
+        "        Элементы[Индекс].Видимость = Ложь;\n"
+        "    КонецЦикла;\n"
+        "КонецПроцедуры\n"
+    )
+    assert _codes(text) == []
+
+
+def test_corpus_false_positives_not_flagged():
+    # с корпуса типовой: комментарии внутри текста запроса, имя элемента склейкой со счётчиком
+    text = (
+        'Т = "ВЫБРАТЬ\n'
+        '|	ВЫБОР КОГДА Т.А ТОГДА 3 // Оставить, как есть\n'
+        '|	КОНЕЦ КАК Статус\n'
+        '	// где выпуск проходит как по фиксированной оценке\n'
+        '|ИЗ Т КАК Т";\n'
+        "Процедура П()\n"
+        "    Для Сч = 1 По 3 Цикл\n"
+        '        Элементы["Префикс" + Строка(Сч)].Доступность = Истина;\n'
+        "        Э = Элементы[Параметр.Имя + Сч];\n"
+        "    КонецЦикла;\n"
+        "КонецПроцедуры\n"
+    )
+    assert _codes(text) == []
+
+
+def test_avro_date_arithmetic_warning():
+    text = "Дата = '19700101' + Число(Сообщение.Date) * 86400;\nСекунд = Дней * 86400;\n"
+    assert _sev(text) == [("avro-date-arithmetic", "warning")]
+
+
+# --- несуществующий метод общего модуля (боевой: прошёл BSL LS и CheckConfig) -----
+
+def _edt_module(root, name, body, adopted=False):
+    d = root / "CommonModules" / name
+    d.mkdir(parents=True)
+    belonging = "\n  <objectBelonging>Adopted</objectBelonging>" if adopted else ""
+    (d / f"{name}.mdo").write_text(
+        f'<mdclass:CommonModule uuid="1">{belonging}\n  <name>{name}</name>\n</mdclass:CommonModule>\n',
+        encoding="utf-8")
+    (d / "Module.bsl").write_text(body, encoding="utf-8-sig")
+    return d / "Module.bsl"
+
+
+def _edt_root(tmp_path, sub="src"):
+    root = tmp_path / sub
+    (root / "Configuration").mkdir(parents=True)
+    (root / "Configuration" / "Configuration.mdo").write_text("<x/>", encoding="utf-8")
+    return root
+
+
+_LIB = (
+    "Функция Есть(Знач А,\n    Б = Неопределено) Экспорт\nКонецФункции\n\n"
+    "Procedure EnglishOne() Export\nEndProcedure\n\n"
+    "Процедура Внутренняя()\nКонецПроцедуры\n"
+)
+_CALLS = (
+    "Процедура Вызовы() Экспорт\n"
+    "    ОбщийМодуль1.Есть(1);\n"
+    "    ОбщийМодуль1.englishone();\n"                 # регистр имени не важен
+    "    ОбщийМодуль1.НетТакогоМетода();\n"
+    "    ОбщийМодуль1.Внутренняя();\n"
+    "    Справочники.Товары.НайтиПоКоду(1);\n"         # менеджер — не общий модуль
+    "    Запрос.Выполнить();\n"                        # переменная
+    "КонецПроцедуры\n"
+)
+
+
+def _unknown(findings):
+    return [(f.line, f.message.split(":")[0]) for f in findings if f.code == "unknown-module-method"]
+
+
+def test_unknown_common_module_method_edt(tmp_path):
+    root = _edt_root(tmp_path)
+    _edt_module(root, "ОбщийМодуль1", _LIB)
+    caller = _edt_module(root, "ОбщийМодуль2", _CALLS)
+    findings = _mod().scan_file(caller)
+    assert _unknown(findings) == [(4, "ОбщийМодуль1.НетТакогоМетода"), (5, "ОбщийМодуль1.Внутренняя")]
+    assert "без Экспорт" in next(f.message for f in findings if f.line == 5)
+    assert all(f.severity == "error" for f in findings)
+
+
+def test_unknown_common_module_method_designer_layout(tmp_path):
+    root = tmp_path / "cf"
+    root.mkdir()
+    (root / "Configuration.xml").write_text("<x/>", encoding="utf-8")
+    for name, body in (("ОбщийМодуль1", _LIB), ("ОбщийМодуль2", _CALLS)):
+        (root / "CommonModules" / name / "Ext").mkdir(parents=True)
+        (root / "CommonModules" / f"{name}.xml").write_text("<CommonModule/>", encoding="utf-8")
+        (root / "CommonModules" / name / "Ext" / "Module.bsl").write_text(body, encoding="utf-8")
+    findings = _mod().scan_file(root / "CommonModules" / "ОбщийМодуль2" / "Ext" / "Module.bsl")
+    assert [line for line, _ in _unknown(findings)] == [4, 5]
+
+
+def test_variable_or_tabular_section_named_like_module_not_flagged(tmp_path):
+    # с корпуса типовой: локальная переменная и табличная часть объекта с именем общего модуля
+    root = _edt_root(tmp_path)
+    _edt_module(root, "Пользователи", "Функция Текущий() Экспорт\nКонецФункции\n")
+    caller = _edt_module(root, "ОбщийМодуль2", (
+        "Процедура П() Экспорт\n"
+        "    Пользователи = Новый Массив;\n"
+        "    Пользователи.Добавить(1);\n"
+        "КонецПроцедуры\n"))
+    assert _unknown(_mod().scan_file(caller)) == []
+    obj = root / "Catalogs" / "Группы"
+    obj.mkdir(parents=True)
+    (obj / "Группы.mdo").write_text(
+        "<mdclass:Catalog>\n  <tabularSections>\n    <name>Пользователи</name>\n"
+        "  </tabularSections>\n</mdclass:Catalog>\n", encoding="utf-8")
+    (obj / "ObjectModule.bsl").write_text(
+        "Процедура ПередЗаписью(Отказ)\n    Н = Пользователи.Количество();\n"
+        "    Пользователи.НетТакого();\nКонецПроцедуры\n", encoding="utf-8")
+    assert _unknown(_mod().scan_file(obj / "ObjectModule.bsl")) == []
+    (obj / "ManagerModule.bsl").write_text(               # без затенения правило работает
+        "Процедура П()\n    Н = 1;\n    Пользователи.НетТакого();\nКонецПроцедуры\n", encoding="utf-8")
+    (obj / "Группы.mdo").write_text("<mdclass:Catalog/>", encoding="utf-8")
+    assert [line for line, _ in _unknown(_mod().scan_file(obj / "ManagerModule.bsl"))] == [3]
+
+
+def test_module_outside_project_is_silent(tmp_path):
+    f = tmp_path / "Module.bsl"
+    f.write_text(_CALLS, encoding="utf-8")
+    assert _unknown(_mod().scan_file(f)) == []
+
+
+def test_extension_adopted_module_needs_base_root(tmp_path, monkeypatch):
+    """В расширении заимствованный модуль содержит только добавленное: без исходников
+    основной конфигурации правило молчит, с BSL_GUARD_EXTRA_ROOTS — проверяет по обоим."""
+    base = _edt_root(tmp_path, "base/src")
+    _edt_module(base, "ОбщийМодуль1", _LIB)
+    ext = _edt_root(tmp_path, "ext/src")
+    _edt_module(ext, "ОбщийМодуль1",
+                '&После("Есть")\nПроцедура мр_ПослеЕсть() Экспорт\nКонецПроцедуры\n\n'
+                "Процедура мр_Новый() Экспорт\nКонецПроцедуры\n", adopted=True)
+    caller = _edt_module(ext, "мр_Модуль", (
+        "Процедура П() Экспорт\n"
+        "    ОбщийМодуль1.Есть(1);\n"
+        "    ОбщийМодуль1.мр_Новый();\n"
+        "    ОбщийМодуль1.мр_ПослеЕсть();\n"     # перехватчик методом модуля не становится
+        "    ОбщийМодуль1.Нет();\n"
+        "КонецПроцедуры\n"))
+    m = _mod()
+    monkeypatch.delenv("BSL_GUARD_EXTRA_ROOTS", raising=False)
+    assert _unknown(m.scan_file(caller)) == []
+    monkeypatch.setenv("BSL_GUARD_EXTRA_ROOTS", str(tmp_path / "base"))   # каталог проекта, без src
+    assert [line for line, _ in _unknown(m.scan_file(caller))] == [4, 5]
+
+
+def test_ignore_mark_for_new_rule(tmp_path):
+    root = _edt_root(tmp_path)
+    _edt_module(root, "ОбщийМодуль1", _LIB)
+    caller = _edt_module(root, "ОбщийМодуль2", (
+        "Процедура П() Экспорт\n"
+        "    ОбщийМодуль1.Динамический(); // bsl-guard: ignore unknown-module-method - метод добавляет другое расширение\n"
+        "КонецПроцедуры\n"))
+    assert _mod().scan_file(caller) == []
+
+
 def test_ignore_reaches_only_next_line():
     text = (
         "Для Каждого С Из Т Цикл\n"
