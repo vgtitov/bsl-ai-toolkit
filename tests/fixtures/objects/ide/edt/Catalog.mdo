@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:Catalog xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" uuid="ee98a989-b31e-4da3-b148-65191c037442">
+  <producedTypes>
+    <objectType typeId="5cdd4d5b-6404-4dbe-ae37-ae2f7d563565" valueTypeId="e798b708-c21d-4cef-896a-b93f773fed1e"/>
+    <refType typeId="8c5c4f71-8314-4b1d-a811-a436e96c6fda" valueTypeId="51d75e03-3c3f-413a-9a68-c83460466b41"/>
+    <selectionType typeId="bec1503d-4200-42af-8e83-63bd59805ffe" valueTypeId="12661c20-a745-4fe1-950b-8186195c5293"/>
+    <listType typeId="1bd83871-0eb3-49a9-a42b-521676f36437" valueTypeId="bae129ad-8ee6-4af3-9631-241309d66a99"/>
+    <managerType typeId="88d4c26c-2677-42da-aaf9-2a92da4cbb36" valueTypeId="a68f536b-2a4a-47a2-9c91-fc45d59ba8eb"/>
+  </producedTypes>
+  <name>МаркерЭталона</name>
+  <synonym>
+    <key>ru</key>
+    <value>Маркер синоним</value>
+  </synonym>
+  <useStandardCommands>true</useStandardCommands>
+  <inputByString>Catalog.МаркерЭталона.StandardAttribute.Code</inputByString>
+  <inputByString>Catalog.МаркерЭталона.StandardAttribute.Description</inputByString>
+  <fullTextSearchOnInputByString>DontUse</fullTextSearchOnInputByString>
+  <createOnInput>Use</createOnInput>
+  <fullTextSearch>Use</fullTextSearch>
+  <levelCount>2</levelCount>
+  <foldersOnTop>true</foldersOnTop>
+  <codeLength>9</codeLength>
+  <descriptionLength>25</descriptionLength>
+  <codeType>String</codeType>
+  <codeAllowedLength>Variable</codeAllowedLength>
+  <checkUnique>true</checkUnique>
+  <autonumbering>true</autonumbering>
+  <defaultPresentation>AsDescription</defaultPresentation>
+  <editType>InDialog</editType>
+  <choiceMode>BothWays</choiceMode>
+</mdclass:Catalog>

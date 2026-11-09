@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:Report xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" uuid="e532d2af-62b5-4007-a4bb-bcf86075675c">
+  <producedTypes>
+    <objectType typeId="8827b86c-6338-4b11-a7c1-c8b2d7cb259b" valueTypeId="d0fa221c-7f59-41af-b0dd-fc5a8c8e1118"/>
+    <managerType typeId="cfa17842-4d84-4cc7-91dc-1021a441f57b" valueTypeId="3df28a43-a022-4228-acba-ac3c6f96d513"/>
+  </producedTypes>
+  <name>МаркерЭталона</name>
+  <synonym>
+    <key>ru</key>
+    <value>Маркер синоним</value>
+  </synonym>
+  <useStandardCommands>true</useStandardCommands>
+</mdclass:Report>

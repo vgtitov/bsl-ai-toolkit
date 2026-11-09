@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:Document xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" uuid="e7cb42cf-674b-44fe-a17c-d4e00547ce44">
+  <producedTypes>
+    <objectType typeId="e11626f1-b2b1-4f4f-8304-bb862f62b4a3" valueTypeId="c37e25a9-51cf-4198-b840-9e2360034728"/>
+    <refType typeId="28ee17d4-eddd-491a-a24f-416abcf01238" valueTypeId="95bda9a4-9b24-4628-90d4-15abed053e7b"/>
+    <selectionType typeId="1cd2d91a-3c26-4fc4-ab4d-1fd898e936f0" valueTypeId="5adb071d-3a5f-42a8-ad75-5521758814be"/>
+    <listType typeId="d3719f84-8e9c-45ff-bff1-cb8d6229cad0" valueTypeId="502715e7-dcae-4474-b67b-c93a4d8fdd89"/>
+    <managerType typeId="6ddc3af8-8b63-43f1-aede-505067cc8ba1" valueTypeId="7103c860-8f19-44ee-b764-f6f441897bb7"/>
+  </producedTypes>
+  <name>МаркерЭталона</name>
+  <synonym>
+    <key>ru</key>
+    <value>Маркер синоним</value>
+  </synonym>
+  <useStandardCommands>true</useStandardCommands>
+  <inputByString>Document.МаркерЭталона.StandardAttribute.Number</inputByString>
+  <fullTextSearchOnInputByString>DontUse</fullTextSearchOnInputByString>
+  <createOnInput>Use</createOnInput>
+  <fullTextSearch>Use</fullTextSearch>
+  <numberType>String</numberType>
+  <numberLength>9</numberLength>
+  <numberAllowedLength>Variable</numberAllowedLength>
+  <checkUnique>true</checkUnique>
+  <autonumbering>true</autonumbering>
+  <postInPrivilegedMode>true</postInPrivilegedMode>
+  <unpostInPrivilegedMode>true</unpostInPrivilegedMode>
+</mdclass:Document>

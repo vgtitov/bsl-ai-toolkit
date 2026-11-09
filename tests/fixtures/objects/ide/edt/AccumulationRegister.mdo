@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:AccumulationRegister xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" uuid="9e7403f6-aef9-4675-a1c9-c80c47a5d247">
+  <producedTypes>
+    <selectionType typeId="c74c3afe-b198-4671-ba6c-cd63076d4106" valueTypeId="18d06844-89c9-4fdc-8040-8e2d9e39edc0"/>
+    <listType typeId="aafae484-eee3-4fc6-bcfd-bca8196dec8e" valueTypeId="c96797ab-bfb1-45f0-ad42-cb8a01ee7480"/>
+    <managerType typeId="a7fbb479-0021-4886-a16d-c264cbb8add3" valueTypeId="251aeac7-1428-4218-a14e-e06501d3830f"/>
+    <recordSetType typeId="ecda7fec-6f57-4984-a3c8-f9549538809b" valueTypeId="40c90329-1c7a-4889-b936-3a2db5076962"/>
+    <recordKeyType typeId="87b79710-81f6-474f-9501-850eecff62b2" valueTypeId="83b139fa-b080-4531-aa77-630fe9c3896c"/>
+    <recordType typeId="461df619-ec80-4e93-a0ba-17343fbd3d28" valueTypeId="bbc87e96-a9e2-4209-b2b4-6dffbc05d95b"/>
+  </producedTypes>
+  <name>МаркерЭталона</name>
+  <synonym>
+    <key>ru</key>
+    <value>Маркер синоним</value>
+  </synonym>
+  <useStandardCommands>true</useStandardCommands>
+  <dataLockControlMode>Managed</dataLockControlMode>
+  <enableTotalsSplitting>true</enableTotalsSplitting>
+</mdclass:AccumulationRegister>

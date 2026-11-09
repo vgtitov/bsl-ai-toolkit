@@ -1,0 +1,68 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<MetaDataObject xmlns="http://v8.1c.ru/8.3/MDClasses" xmlns:app="http://v8.1c.ru/8.2/managed-application/core" xmlns:cfg="http://v8.1c.ru/8.1/data/enterprise/current-config" xmlns:cmi="http://v8.1c.ru/8.2/managed-application/cmi" xmlns:ent="http://v8.1c.ru/8.1/data/enterprise" xmlns:lf="http://v8.1c.ru/8.2/managed-application/logform" xmlns:style="http://v8.1c.ru/8.1/data/ui/style" xmlns:sys="http://v8.1c.ru/8.1/data/ui/fonts/system" xmlns:v8="http://v8.1c.ru/8.1/data/core" xmlns:v8ui="http://v8.1c.ru/8.1/data/ui" xmlns:web="http://v8.1c.ru/8.1/data/ui/colors/web" xmlns:win="http://v8.1c.ru/8.1/data/ui/colors/windows" xmlns:xen="http://v8.1c.ru/8.3/xcf/enums" xmlns:xpr="http://v8.1c.ru/8.3/xcf/predef" xmlns:xr="http://v8.1c.ru/8.3/xcf/readable" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="2.20">
+	<InformationRegister uuid="88cb2626-514c-4a31-8399-9dfa881a7047">
+		<InternalInfo>
+			<xr:GeneratedType name="InformationRegisterRecord.МаркерЭталона" category="Record">
+				<xr:TypeId>5a05d388-e84d-4440-9f2f-afd901aa6895</xr:TypeId>
+				<xr:ValueId>fc98b231-27a9-405d-b2c3-eb7b2c3341dc</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="InformationRegisterManager.МаркерЭталона" category="Manager">
+				<xr:TypeId>868aa40c-d854-4197-acfd-f6042823c8af</xr:TypeId>
+				<xr:ValueId>b7ee66fc-5216-4ee5-a93a-70b878bfdfe3</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="InformationRegisterSelection.МаркерЭталона" category="Selection">
+				<xr:TypeId>fcfc1315-7567-44f4-8c84-4471a372be3a</xr:TypeId>
+				<xr:ValueId>1b252773-5ade-4037-8724-5127aaf3ca83</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="InformationRegisterList.МаркерЭталона" category="List">
+				<xr:TypeId>79e871eb-507b-4bb1-b555-411174b4d3eb</xr:TypeId>
+				<xr:ValueId>38276ac1-18f6-4abc-855d-75dd675a5e06</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="InformationRegisterRecordSet.МаркерЭталона" category="RecordSet">
+				<xr:TypeId>25cdfc00-fbff-4572-8b81-511c375eeb64</xr:TypeId>
+				<xr:ValueId>f109ec34-bfc8-49b3-bc0b-13fd3d9482fc</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="InformationRegisterRecordKey.МаркерЭталона" category="RecordKey">
+				<xr:TypeId>9e3bdb15-0da6-4665-87ce-5de1d0c324e4</xr:TypeId>
+				<xr:ValueId>1d8186a2-41b3-4f56-be09-5eeb250bd77a</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="InformationRegisterRecordManager.МаркерЭталона" category="RecordManager">
+				<xr:TypeId>fd7113f3-8146-4897-9c9f-583a13526409</xr:TypeId>
+				<xr:ValueId>a0b109b9-d0e7-4034-8110-9343ca40c2a4</xr:ValueId>
+			</xr:GeneratedType>
+		</InternalInfo>
+		<Properties>
+			<Name>МаркерЭталона</Name>
+			<Synonym>
+				<v8:item>
+					<v8:lang>ru</v8:lang>
+					<v8:content>Маркер синоним</v8:content>
+				</v8:item>
+			</Synonym>
+			<Comment/>
+			<UseStandardCommands>true</UseStandardCommands>
+			<EditType>InDialog</EditType>
+			<DefaultRecordForm/>
+			<DefaultListForm/>
+			<AuxiliaryRecordForm/>
+			<AuxiliaryListForm/>
+			<InformationRegisterPeriodicity>Nonperiodical</InformationRegisterPeriodicity>
+			<WriteMode>Independent</WriteMode>
+			<MainFilterOnPeriod>false</MainFilterOnPeriod>
+			<IncludeHelpInContents>false</IncludeHelpInContents>
+			<DataLockControlMode>Managed</DataLockControlMode>
+			<FullTextSearch>DontUse</FullTextSearch>
+			<EnableTotalsSliceFirst>false</EnableTotalsSliceFirst>
+			<EnableTotalsSliceLast>false</EnableTotalsSliceLast>
+			<RecordPresentation/>
+			<ExtendedRecordPresentation/>
+			<ListPresentation/>
+			<ExtendedListPresentation/>
+			<Explanation/>
+			<DataHistory>DontUse</DataHistory>
+			<UpdateDataHistoryImmediatelyAfterWrite>false</UpdateDataHistoryImmediatelyAfterWrite>
+			<ExecuteAfterWriteDataHistoryVersionProcessing>false</ExecuteAfterWriteDataHistoryVersionProcessing>
+		</Properties>
+		<ChildObjects/>
+	</InformationRegister>
+</MetaDataObject>

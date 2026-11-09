@@ -5,6 +5,15 @@
 ## [Unreleased]
 
 ### Added
+- `1c-meta object add | adopt | delete` — объект метаданных целиком, **оба формата** (EDT `.mdo` + `Configuration.mdo`,
+  Конфигуратор `.xml` + `<ChildObjects>`): CommonModule (`--context`, `--privileged`), InformationRegister
+  (`--periodicity`, `--write-mode`), AccumulationRegister (`--register-type`), Catalog, Document, Enum, Constant,
+  DataProcessor, Report. Новый объект — по эталону, снятому у EDT 2025.2.6.4 (`scripts/learn_object_templates.py`,
+  `onec_metadata/templates/objects`): тот же файл, что даёт IDE, кроме uuid; строка манифеста — в конец блока вида
+  или на его канонное место. В расширении имя — с `namePrefix`. `adopt` — ссылка на объект типовой (`--base`) и
+  контролируемые свойства из неё (EDT MCP 2.6.1 ссылку не пишет). `delete` — отказ, пока на объект есть ссылки;
+  заимствованный — только без своих реквизитов, форм, модулей. Проверено в EDT (замечаний сверх тех, что EDT даёт
+  своему новому объекту, нет); загрузка в базу Конфигуратором — не проверена.
 - `1c-meta form add-attribute-column` / `remove-attribute-column` / `remove-attribute` — колонка реквизита формы
   «таблица значений» и удаление колонки или реквизита, **оба формата**: Конфигуратор `Form.xml` и EDT `Form.form`
   (формат по расширению; EDT MCP колонку во вложенном реквизите не создаёт). Тип — `String | Boolean | Date |

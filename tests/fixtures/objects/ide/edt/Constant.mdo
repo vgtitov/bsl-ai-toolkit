@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:Constant xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:core="http://g5.1c.ru/v8/dt/mcore" xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" uuid="3c11236c-ad4d-4ab5-820c-ab6646ef721c">
+  <producedTypes>
+    <managerType typeId="0b8a6306-7445-47a9-8c1a-706be5dc84fc" valueTypeId="6e2d339a-81cc-4ceb-aefa-798aa07ab24d"/>
+    <valueManagerType typeId="021c93b5-7a2a-4f66-b2f0-ace8506d5e77" valueTypeId="b303d422-73b6-4b81-a711-1cb572e9fdd9"/>
+    <valueKeyType typeId="8c73ccc8-8747-48b8-a5a9-41ed52b8fc8c" valueTypeId="7bd42119-3782-4857-80f6-4d587b8162b8"/>
+  </producedTypes>
+  <name>МаркерЭталона</name>
+  <synonym>
+    <key>ru</key>
+    <value>Маркер синоним</value>
+  </synonym>
+  <type>
+    <types>String</types>
+    <stringQualifiers>
+      <length>10</length>
+    </stringQualifiers>
+  </type>
+  <useStandardCommands>true</useStandardCommands>
+  <minValue xsi:type="core:UndefinedValue"/>
+  <maxValue xsi:type="core:UndefinedValue"/>
+  <dataLockControlMode>Managed</dataLockControlMode>
+</mdclass:Constant>

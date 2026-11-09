@@ -1,0 +1,346 @@
+{
+ "kinds": {
+  "CommonModule": {
+   "dir": "CommonModules",
+   "manifest": "commonModules",
+   "variants": [
+    "ServerCall",
+    "ClientManaged",
+    "ClientServer",
+    "Global",
+    "ServerPrivileged"
+   ],
+   "adopt": true,
+   "edt_order": [
+    "name",
+    "synonym",
+    "global",
+    "clientManagedApplication",
+    "server",
+    "privileged",
+    "serverCall",
+    "externalConnection",
+    "clientOrdinaryApplication"
+   ]
+  },
+  "Constant": {
+   "dir": "Constants",
+   "manifest": "constants",
+   "variants": [],
+   "adopt": true,
+   "edt_order": [
+    "producedTypes",
+    "name",
+    "synonym",
+    "type",
+    "useStandardCommands",
+    "minValue",
+    "maxValue",
+    "dataLockControlMode"
+   ]
+  },
+  "Catalog": {
+   "dir": "Catalogs",
+   "manifest": "catalogs",
+   "variants": [],
+   "adopt": true,
+   "edt_order": [
+    "producedTypes",
+    "name",
+    "synonym",
+    "useStandardCommands",
+    "inputByString",
+    "fullTextSearchOnInputByString",
+    "createOnInput",
+    "fullTextSearch",
+    "levelCount",
+    "foldersOnTop",
+    "codeLength",
+    "descriptionLength",
+    "codeType",
+    "codeAllowedLength",
+    "checkUnique",
+    "autonumbering",
+    "defaultPresentation",
+    "editType",
+    "choiceMode"
+   ]
+  },
+  "Document": {
+   "dir": "Documents",
+   "manifest": "documents",
+   "variants": [],
+   "adopt": true,
+   "edt_order": [
+    "producedTypes",
+    "name",
+    "synonym",
+    "useStandardCommands",
+    "inputByString",
+    "fullTextSearchOnInputByString",
+    "createOnInput",
+    "fullTextSearch",
+    "numberType",
+    "numberLength",
+    "numberAllowedLength",
+    "checkUnique",
+    "autonumbering",
+    "postInPrivilegedMode",
+    "unpostInPrivilegedMode"
+   ]
+  },
+  "Enum": {
+   "dir": "Enums",
+   "manifest": "enums",
+   "variants": [],
+   "adopt": true,
+   "edt_order": [
+    "producedTypes",
+    "name",
+    "synonym",
+    "quickChoice",
+    "choiceMode"
+   ]
+  },
+  "Report": {
+   "dir": "Reports",
+   "manifest": "reports",
+   "variants": [],
+   "adopt": true,
+   "edt_order": [
+    "producedTypes",
+    "name",
+    "synonym",
+    "useStandardCommands"
+   ]
+  },
+  "DataProcessor": {
+   "dir": "DataProcessors",
+   "manifest": "dataProcessors",
+   "variants": [],
+   "adopt": true,
+   "edt_order": [
+    "producedTypes",
+    "name",
+    "synonym",
+    "useStandardCommands"
+   ]
+  },
+  "InformationRegister": {
+   "dir": "InformationRegisters",
+   "manifest": "informationRegisters",
+   "variants": [
+    "Periodic"
+   ],
+   "adopt": true,
+   "edt_order": [
+    "producedTypes",
+    "name",
+    "synonym",
+    "useStandardCommands",
+    "editType",
+    "informationRegisterPeriodicity",
+    "writeMode",
+    "dataLockControlMode"
+   ]
+  },
+  "AccumulationRegister": {
+   "dir": "AccumulationRegisters",
+   "manifest": "accumulationRegisters",
+   "variants": [
+    "Turnover"
+   ],
+   "adopt": true,
+   "edt_order": [
+    "producedTypes",
+    "name",
+    "synonym",
+    "useStandardCommands",
+    "registerType",
+    "dataLockControlMode",
+    "enableTotalsSplitting"
+   ]
+  }
+ },
+ "order": [
+  [
+   "Subsystem",
+   "subsystems"
+  ],
+  [
+   "StyleItem",
+   "styleItems"
+  ],
+  [
+   "Style",
+   "styles"
+  ],
+  [
+   "CommonPicture",
+   "commonPictures"
+  ],
+  [
+   "SessionParameter",
+   "sessionParameters"
+  ],
+  [
+   "Role",
+   "roles"
+  ],
+  [
+   "CommonTemplate",
+   "commonTemplates"
+  ],
+  [
+   "FilterCriterion",
+   "filterCriteria"
+  ],
+  [
+   "CommonModule",
+   "commonModules"
+  ],
+  [
+   "CommonAttribute",
+   "commonAttributes"
+  ],
+  [
+   "ExchangePlan",
+   "exchangePlans"
+  ],
+  [
+   "XDTOPackage",
+   "xDTOPackages"
+  ],
+  [
+   "WebService",
+   "webServices"
+  ],
+  [
+   "HTTPService",
+   "httpServices"
+  ],
+  [
+   "WSReference",
+   "wsReferences"
+  ],
+  [
+   "EventSubscription",
+   "eventSubscriptions"
+  ],
+  [
+   "ScheduledJob",
+   "scheduledJobs"
+  ],
+  [
+   "SettingsStorage",
+   "settingsStorages"
+  ],
+  [
+   "FunctionalOption",
+   "functionalOptions"
+  ],
+  [
+   "FunctionalOptionsParameter",
+   "functionalOptionsParameters"
+  ],
+  [
+   "DefinedType",
+   "definedTypes"
+  ],
+  [
+   "CommonCommand",
+   "commonCommands"
+  ],
+  [
+   "CommandGroup",
+   "commandGroups"
+  ],
+  [
+   "Constant",
+   "constants"
+  ],
+  [
+   "CommonForm",
+   "commonForms"
+  ],
+  [
+   "Catalog",
+   "catalogs"
+  ],
+  [
+   "Document",
+   "documents"
+  ],
+  [
+   "DocumentNumerator",
+   "documentNumerators"
+  ],
+  [
+   "Sequence",
+   "sequences"
+  ],
+  [
+   "DocumentJournal",
+   "documentJournals"
+  ],
+  [
+   "Enum",
+   "enums"
+  ],
+  [
+   "Report",
+   "reports"
+  ],
+  [
+   "DataProcessor",
+   "dataProcessors"
+  ],
+  [
+   "InformationRegister",
+   "informationRegisters"
+  ],
+  [
+   "AccumulationRegister",
+   "accumulationRegisters"
+  ],
+  [
+   "ChartOfCharacteristicTypes",
+   "chartsOfCharacteristicTypes"
+  ],
+  [
+   "ChartOfAccounts",
+   "chartsOfAccounts"
+  ],
+  [
+   "AccountingRegister",
+   "accountingRegisters"
+  ],
+  [
+   "ChartOfCalculationTypes",
+   "chartsOfCalculationTypes"
+  ],
+  [
+   "CalculationRegister",
+   "calculationRegisters"
+  ],
+  [
+   "BusinessProcess",
+   "businessProcesses"
+  ],
+  [
+   "Task",
+   "tasks"
+  ],
+  [
+   "ExternalDataSource",
+   "externalDataSources"
+  ],
+  [
+   "IntegrationService",
+   "integrationServices"
+  ]
+ ],
+ "edt_version": "2025.2.6.4",
+ "platform": "8.3.27",
+ "cfg_format": "2.20"
+}
