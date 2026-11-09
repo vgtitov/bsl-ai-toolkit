@@ -449,6 +449,23 @@ def test_variable_or_tabular_section_named_like_module_not_flagged(tmp_path):
     assert [line for line, _ in _unknown(_mod().scan_file(obj / "ManagerModule.bsl"))] == [3]
 
 
+# DISCIPLINE_ALLOW_TEST_EDIT: ревью - затенение по области видимости процедуры
+def test_shadowing_is_scoped_to_procedure(tmp_path):
+    root = _edt_root(tmp_path)
+    _edt_module(root, "ОбщийМодуль1", _LIB)
+    _edt_module(root, "ОбщийМодуль3", _LIB)
+    caller = _edt_module(root, "ОбщийМодуль2", (
+        "Перем ОбщийМодуль3;\n"                        # переменная модуля - глушит везде
+        "Процедура А(ОбщийМодуль1)\n"
+        "    ОбщийМодуль1.Что();\n"                    # параметр - не общий модуль
+        "КонецПроцедуры\n"
+        "Процедура Б()\n"
+        "    ОбщийМодуль1.НетМетода();\n"              # здесь параметра А нет
+        "    ОбщийМодуль3.Что();\n"
+        "КонецПроцедуры\n"))
+    assert [line for line, _ in _unknown(_mod().scan_file(caller))] == [6]
+
+
 def test_module_outside_project_is_silent(tmp_path):
     f = tmp_path / "Module.bsl"
     f.write_text(_CALLS, encoding="utf-8")

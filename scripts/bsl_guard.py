@@ -471,12 +471,19 @@ def _module_method_findings(lines, filename):
         return []
     index = _modules_index(root)
     me = _current_module(path)
-    local = _local_names("\n".join(lines))
+    # затенение по области видимости: имена процедуры (параметры, Перем, присваивания) —
+    # только в ней; переменные модуля (вне процедур) — во всём модуле
+    spans = sorted(_module_procs(lines).values())
+    in_proc = {ln for a, b in spans for ln in range(a, b + 1)}
+    module_names = _local_names("\n".join(l for i, l in enumerate(lines, 1) if i not in in_proc))
+    proc_names = {(a, b): _local_names("\n".join(lines[a - 1:b])) for a, b in spans}
     shadowed = {}
     out = []
     for lineno, line in enumerate(lines, start=1):
         if _PROC_OPEN.match(line):
             continue
+        span = next(((a, b) for a, b in spans if a <= lineno <= b), None)
+        local = module_names | proc_names.get(span, set())
         for m in _MODULE_CALL.finditer(line):
             mod, meth = m.group(1).lower(), m.group(2)
             entry = index.get(mod)

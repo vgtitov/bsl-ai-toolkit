@@ -209,9 +209,6 @@ def _query_blocks(lines):
 
 _PROC_START = re.compile(r"^\s*(?:(?:Асинх|Async)\s+)?(?:Процедура|Функция|Procedure|Function)\b",
                          re.IGNORECASE)
-_PRIVILEGED_ON = re.compile(
-    r"^[^/\"]*\b(?:УстановитьПривилегированныйРежим|SetPrivilegedMode)\s*\(\s*(?:Истина|True)\s*\)",
-    re.IGNORECASE)
 
 
 def is_privileged_module(bsl_path: Path):
@@ -231,14 +228,39 @@ def is_privileged_module(bsl_path: Path):
     return "<privileged>true</privileged>" in text
 
 
+_PRIVILEGED_CALL = re.compile(
+    r"\b(?:УстановитьПривилегированныйРежим|SetPrivilegedMode)\s*\(\s*(\w+)\s*\)", re.IGNORECASE)
+_BLOCK_OPEN = re.compile(r"\b(?:Если|If|Цикл|Do|Попытка|Try)\b", re.IGNORECASE)
+_BLOCK_CLOSE = re.compile(r"\b(?:КонецЕсли|EndIf|КонецЦикла|EndDo|КонецПопытки|EndTry)\b", re.IGNORECASE)
+
+
 def _privileged_before(lines, start):
-    """В процедуре запроса до его текста включён привилегированный режим."""
+    """До запроса в его процедуре включён привилегированный режим — безусловно.
+
+    Решает ПОСЛЕДНИЙ вызов УстановитьПривилегированныйРежим(...) перед запросом: `Истина` на
+    уровне тела процедуры (не внутри Если/Цикл/Попытка) — подавляем; `Ложь` или включение
+    в блоке (может не выполниться) — предупреждение остаётся.
+    """
+    first = 0
     for i in range(start, -1, -1):
-        if _PRIVILEGED_ON.search(lines[i]):
-            return True
         if _PROC_START.match(lines[i]):
-            return False
-    return False
+            first = i + 1
+            break
+    depth, last = 0, None
+    for line in lines[first:start]:
+        if line.lstrip().startswith("|"):          # продолжение текста запроса
+            continue
+        code = re.sub(r'"[^"]*"?', '""', line).split("//", 1)[0]
+        events = sorted([(m.start(), 1) for m in _BLOCK_OPEN.finditer(code)]
+                        + [(m.start(), -1) for m in _BLOCK_CLOSE.finditer(code)]
+                        + [(m.start(), m.group(1).lower()) for m in _PRIVILEGED_CALL.finditer(code)],
+                        key=lambda e: e[0])
+        for _, ev in events:
+            if isinstance(ev, int):
+                depth = max(0, depth + ev)
+            else:
+                last = (ev in ("истина", "true"), depth == 0)
+    return bool(last and last[0] and last[1])
 
 
 def check_query_without_allowed(bsl_path: Path, findings):
