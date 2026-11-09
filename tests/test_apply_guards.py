@@ -4,6 +4,8 @@
 Запуск:  python -m pytest -q tests/test_apply_guards.py
 """
 import importlib
+import json
+import subprocess
 import sys
 import threading
 import zipfile
@@ -151,7 +153,11 @@ def test_form_lost_events_since_previous_dump(tmp_path):
     _touch(tmp_path, FORM, "<Form><Events><Event name='OnOpen'/></Events></Form>")
     _touch(tmp_path, MODULE)
     before = dumpload.form_snapshot(tmp_path)
-    _touch(tmp_path, FORM, "<Form></Form>")                 # пришла урезанная
+    _touch(tmp_path, FORM, "<Form></Form>")                 # события удалили, модуль на месте
+    soft = []
+    assert dumpload.partial_dump_form_problems(tmp_path, before, warnings=soft) == []
+    assert soft and "<Events>" in soft[0]
+    (tmp_path / MODULE).unlink()                            # урезанная выгрузка: ни событий, ни модуля
     problems = dumpload.partial_dump_form_problems(tmp_path, before)
     assert problems and "<Events>" in problems[0]
 
@@ -169,6 +175,9 @@ def test_complete_form_passes_with_warning(tmp_path, capsys):
     m.check_partial_dump_forms(tmp_path, dumpload.form_snapshot(tmp_path))
     assert "полной выгрузке" in capsys.readouterr().out
     _touch(tmp_path, FORM, "<Form/>")
+    m.check_partial_dump_forms(tmp_path, {FORM: True})      # события убрали, модуль есть — предупреждение
+    assert "<Events>" in capsys.readouterr().out
+    (tmp_path / MODULE).unlink()
     with pytest.raises(SystemExit):
         m.check_partial_dump_forms(tmp_path, {FORM: True})
 
@@ -247,8 +256,11 @@ def test_nested_request_does_not_check_owner_forms(tmp_path):
     _touch(old_dir, FORM, "<Form/>")
     _touch(new_dir, "Catalogs/Товары/Commands/Открыть/Ext/CommandModule.bsl")
     before = dumpload.form_snapshot(old_dir)
-    assert dumpload.partial_dump_form_problems(new_dir, before, ["Справочник.Товары.Команда.Открыть"]) == []
-    assert dumpload.partial_dump_form_problems(new_dir, before, ["Справочник.Товары"])  # целиком — проверяем
+    soft = []
+    assert dumpload.partial_dump_form_problems(new_dir, before, ["Справочник.Товары.Команда.Открыть"], soft) == []
+    assert soft == []
+    assert dumpload.partial_dump_form_problems(new_dir, before, ["Справочник.Товары"], soft) == []
+    assert soft                                                  # целиком — проверяем, но предупреждением
 
 
 # ── лог прошлого запуска и подсказки по ответам платформы ─────────────────────
@@ -275,6 +287,81 @@ def test_stale_log_removed_before_designer_runs():
     r = _Runner()
     dumpload._run_designer(r, r"srv\b", "u", "p", "/X", [], r"C:\w\x.log")
     assert r.events[0] == ("remove", r"C:\w\x.log") and r.events[1][0] == "run"
+
+
+def test_designer_sync_run_removes_stale_log(monkeypatch, tmp_path):
+    """Лог прошлого запуска не выдаётся за ответ этого: платформа упала, не написав лог."""
+    m = _ds()
+    log = tmp_path / "x.log"
+    log.write_text("старый успешный лог", encoding="utf-8")
+
+    class R:
+        returncode = 1
+    monkeypatch.setattr(m.subprocess, "run", lambda *a, **kw: R())
+    with pytest.raises(SystemExit) as e:
+        m._run(["1cv8"], str(log))
+    assert "старый" not in str(e.value) and "лог пуст" in str(e.value)
+
+
+def test_remote_dump_clears_leftovers_before_dump(monkeypatch, tmp_path):
+    m = _ds()
+    r = _Runner()
+    r.makedirs = lambda path: None
+    calls = []
+    monkeypatch.setattr(dumpload, "dump_extension", lambda *a, **kw: calls.append("dump"))
+    monkeypatch.setattr(dumpload, "fetch_tree", lambda *a, **kw: calls.append("fetch"))
+    m.remote_dump(r, r"srv\b", "u", "p", None, ["Справочник.Т"], tmp_path / "o", workdir=r"D:\w")
+    assert r.events == [("run", r"if exist D:\w\dump rmdir /s /q D:\w\dump")]
+    assert calls == ["dump", "fetch"]
+
+
+def test_changed_files_cyrillic_and_rename(tmp_path):
+    import shutil as _sh
+    if not _sh.which("git"):
+        pytest.skip("нет git")
+    m = _ds()
+    run = lambda *a: subprocess.run(["git", "-C", str(tmp_path), *a], check=True, capture_output=True)
+    run("init", "-q")
+    run("config", "user.email", "t@t")
+    run("config", "user.name", "t")
+    _touch(tmp_path, "Catalogs/Старое.xml")
+    run("add", "-A")
+    run("commit", "-qm", "x")
+    run("mv", "Catalogs/Старое.xml", "Catalogs/Новое.xml")
+    _touch(tmp_path, "Catalogs/Товары/Ext/ObjectModule.bsl")
+    assert m.changed_files(str(tmp_path)) == ["Catalogs/Новое.xml", "Catalogs/Товары/Ext/ObjectModule.bsl"]
+
+
+def test_dump_log_next_to_out_keeps_dotted_name(monkeypatch, tmp_path):
+    out = tmp_path / "src.v2"
+    (tmp_path / "src.log").write_text("чужой лог", encoding="utf-8")
+    m, base, seen = _dump_main(monkeypatch, tmp_path, {})
+    logs = []
+    monkeypatch.setattr(m, "_run", lambda cmd, log: logs.append(log))
+    m.main(["dump", "--base", str(base), "--out", str(out)])
+    assert logs == [str(out.resolve()) + ".log"]
+    assert (tmp_path / "src.log").read_text(encoding="utf-8") == "чужой лог"
+
+
+def test_failed_partial_dump_removes_temp_dir(monkeypatch, tmp_path):
+    out = tmp_path / "out"
+    m, base, seen = _dump_main(monkeypatch, tmp_path, {})
+
+    def fail(cmd, log):
+        seen["target"] = Path(cmd[cmd.index("/DumpConfigToFiles") + 1])
+        raise SystemExit("Конфигуратор exit=1")
+    monkeypatch.setattr(m, "_run", fail)
+    with pytest.raises(SystemExit):
+        m.main(["dump", "--base", str(base), "--out", str(out), "--objects", "Справочник.Т"])
+    assert seen["target"].parent == out.resolve().parent and not seen["target"].exists()
+
+
+def test_server_base_without_creds_warns_partial_refuses(capsys):
+    m = _ds()
+    assert m.ib_creds(r"srv\ERP_Test", None, {}) == (None, None)
+    assert "аутентификацией ОС" in capsys.readouterr().out
+    with pytest.raises(SystemExit):
+        m.ib_creds(r"srv\ERP_Test", None, {"ONEC_IB_USER": "u"})
 
 
 def test_designer_error_gets_hint():
@@ -414,10 +501,45 @@ def test_deploy_extension_warns_about_safe_mode(monkeypatch, tmp_path, capsys):
 
 def test_stuck_git_shells():
     doctor = importlib.import_module("doctor")
-    procs = [{"Id": 1, "Path": r"C:\Program Files\Git\usr\bin\bash.exe", "Age": 5.04},
-             {"Id": 2, "Path": r"C:\Program Files\Git\bin\bash.exe", "Age": 0.5},
-             {"Id": 3, "Path": r"C:\tools\wsl\bash.exe", "Age": 9}]
-    assert doctor.stuck_git_shells(procs) == [(1, 5.0)]
+    git = r"C:\Program Files\Git"
+    idle = {"Children": 0, "CpuDelta": 0.0}
+    procs = [{"Id": 1, "Path": git + r"\usr\bin\bash.exe", "Age": 5.04, **idle},
+             {"Id": 2, "Path": git + r"\bin\bash.exe", "Age": 0.5, **idle},
+             {"Id": 3, "Path": r"C:\tools\wsl\bash.exe", "Age": 9, **idle},
+             {"Id": 4, "Path": r"D:\src\git\tools\bash.exe", "Age": 9, **idle},        # папка «git», не Git
+             {"Id": 5, "Path": git + r"\usr\bin\bash.exe", "Age": 9, **idle},           # своя сессия
+             {"Id": 6, "Path": git + r"\usr\bin\bash.exe", "Age": 9, "Children": 1, "CpuDelta": 0},
+             {"Id": 7, "Path": git + r"\usr\bin\sh.exe", "Age": 9, "Children": 0, "CpuDelta": 0.3}]
+    assert doctor.stuck_git_shells(procs, git, ancestors={5, 100}) == [(1, 5.0)]
+    assert doctor.stuck_git_shells(procs, None) == []
+
+
+def test_check_stuck_git_shells_wrapper(monkeypatch):
+    """Обёртка: разбор JSON PowerShell, исключение предков, без команды Stop-Process."""
+    doctor = importlib.import_module("doctor")
+    git = r"C:\Program Files\Git"
+    payload = {"procs": [{"Id": 11, "Path": git + r"\usr\bin\bash.exe", "Age": 5, "Children": 0, "CpuDelta": 0},
+                         {"Id": 12, "Path": git + r"\usr\bin\bash.exe", "Age": 5, "Children": 0, "CpuDelta": 0}],
+               "parents": [[999, 12], [12, 1]]}
+
+    class R:
+        stdout = json.dumps(payload)
+    monkeypatch.setattr(doctor.os, "name", "nt")
+    monkeypatch.setattr(doctor.os, "getpid", lambda: 999)            # 12 — предок текущего процесса
+    monkeypatch.setattr(doctor, "_git_root", lambda: Path(git))
+    monkeypatch.setattr(doctor.subprocess, "run", lambda *a, **kw: R())
+    [(level, _, text)] = doctor.check_stuck_git_shells()
+    assert level == doctor.WARN and "11 (5 ч)" in text and "12 (" not in text
+    assert "Stop-Process" not in text
+
+    payload["procs"] = payload["procs"][1:]
+    R.stdout = json.dumps(payload)
+    assert doctor.check_stuck_git_shells()[0][0] == doctor.OK
+
+    def boom(*a, **kw):
+        raise subprocess.TimeoutExpired("powershell", 30)
+    monkeypatch.setattr(doctor.subprocess, "run", boom)
+    assert doctor.check_stuck_git_shells()[0][0] == doctor.WARN
 
 
 # ── ConfigDumpInfo.xml при переносе точечной выгрузки ─────────────────────────
@@ -512,8 +634,9 @@ def test_form_missing_from_new_dump_of_same_object(tmp_path):
     _touch(old_dir, "Catalogs/Прочее/Forms/Ф/Ext/Form.xml", "<Form/>")
     before = dumpload.form_snapshot(old_dir)
     _touch(new_dir, "Catalogs/Товары.xml", "<x/>")                   # выгружен только «Товары», без формы
-    problems = dumpload.partial_dump_form_problems(new_dir, before)
-    assert problems == [f"{FORM}: форма была в прошлой выгрузке, в новой её нет"]   # «Прочее» не выгружали
+    soft = []
+    assert dumpload.partial_dump_form_problems(new_dir, before, warnings=soft) == []   # могли удалить сознательно
+    assert soft == [f"{FORM}: форма была в прошлой выгрузке, в новой её нет (в --out остаётся старая)"]
 
 
 def test_nested_command_xml_requires_its_module(tmp_path):
@@ -539,11 +662,11 @@ def test_nested_recalculation_module_required_with_register(tmp_path):
                for g in gaps)
 
 
-def test_stall_defaults_by_transport_and_rejects_negative():
+def test_stall_off_by_default_and_rejects_negative():
     class Local:
         host = ""
-    assert smoke.resolve_stall(Local(), None) == smoke.DEFAULT_STALL
-    assert smoke.resolve_stall(_HangingRunner(), None) == 0           # удалённо — выключен
+    assert smoke.resolve_stall(Local(), None) == 0                    # долгий сценарий не убиваем
+    assert smoke.resolve_stall(_HangingRunner(), None) == 0
     assert smoke.resolve_stall(_HangingRunner(), 120) == 120
     with pytest.raises(ApplyError):
         smoke.resolve_stall(Local(), -1)

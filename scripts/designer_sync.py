@@ -89,13 +89,18 @@ def base_key(base: str):
 def ib_creds(base: str, contour, env=None):
     """(логин, пароль) ИБ. Без --contour ключ — имя базы (`сервер\\база` → БАЗА): раньше без
     него перебор ключей не шёл вовсе, уходил на общий ONEC_IB_PASS, и платформа отвечала
-    «Пользователь ИБ не идентифицирован». Серверной базе без учётки — отказ до запуска."""
+    «Пользователь ИБ не идентифицирован». Неполная учётка серверной базы (логин без пароля или
+    наоборот) — отказ до запуска; учётки нет совсем — предупреждение: база может пускать по
+    аутентификации ОС."""
     key = contour or base_key(base)
     user, password = resolve_cred("IB", key, env)
-    if key and (not user or password is None):
-        k = key.upper()
-        raise SystemExit(f"нет учётки ИБ для {base}: ONEC_IB_USER[_{k}] и ONEC_IB_PASS[_{k}] в .env "
-                         "(ключ — --contour, по умолчанию имя базы)")
+    hint = (f"ONEC_IB_USER[_{key.upper()}] и ONEC_IB_PASS[_{key.upper()}] в .env "
+            "(ключ — --contour, по умолчанию имя базы)") if key else ""
+    if key and not user and password is None:
+        print(f"[!] нет учётки ИБ для {base}: запуск с аутентификацией ОС. Если платформа ответит "
+              f"«Пользователь ИБ не идентифицирован» — задай {hint}")
+    elif key and (not user or password is None):
+        raise SystemExit(f"неполная учётка ИБ для {base}: {hint}")
     return user, password
 
 
@@ -179,15 +184,21 @@ def changed_files(dump_dir: str):
     Каталог не под git → None (вызывающий требует явный --files)."""
     if not (Path(dump_dir) / ".git").is_dir():
         return None
-    r = subprocess.run(["git", "-C", dump_dir, "status", "--porcelain"],
+    # -z: пути как есть (без "\\320\\242…" от core.quotepath), переименование — два поля
+    r = subprocess.run(["git", "-C", dump_dir, "status", "--porcelain", "-z", "--untracked-files=all"],
                        capture_output=True, text=True, encoding="utf-8")
     if r.returncode != 0:
         return None
-    out = []
-    for line in r.stdout.splitlines():
-        path = line[3:].strip().strip('"')
-        if path:
-            out.append(path.replace("\\", "/"))
+    out, items = [], r.stdout.split("\0")
+    i = 0
+    while i < len(items):
+        entry = items[i]
+        i += 1
+        if len(entry) < 4:
+            continue
+        if entry[0] in "RC":
+            i += 1                                     # следом — старый путь переименования
+        out.append(entry[3:].replace("\\", "/"))
     return sorted(out)
 
 
@@ -238,7 +249,11 @@ def merge_partial_dump(src: Path, dst: Path) -> None:
             raise SystemExit(f"ConfigDumpInfo.xml выгрузки не разобран ({e}); {dst} не изменён, "
                              f"выгрузка оставлена для разбора: {src}") from None
         final = (bom if old_info.startswith(bom) else b"") + merged.encode("utf-8")
-    shutil.copytree(src, dst, dirs_exist_ok=True, ignore=shutil.ignore_patterns("ConfigDumpInfo.xml"))
+    try:
+        shutil.copytree(src, dst, dirs_exist_ok=True, ignore=shutil.ignore_patterns("ConfigDumpInfo.xml"))
+    except (OSError, shutil.Error) as e:
+        raise SystemExit(f"перенос выгрузки в {dst} прерван ({e}): каталог перенесён ЧАСТИЧНО. "
+                         f"Выгрузка оставлена в {src} — повтори перенос оттуда или сделай выгрузку заново") from None
     if final is not None:
         tmp = info_dst.with_name(info_dst.name + ".tmp")
         tmp.write_bytes(final)
@@ -248,7 +263,10 @@ def merge_partial_dump(src: Path, dst: Path) -> None:
 def check_partial_dump_forms(dump_dir: Path, before: dict, requested=None) -> None:
     """После точечной выгрузки: формы без событий/модуля — ошибка; любые формы — предупреждение."""
     from onec_metadata.apply import dumpload
-    problems = dumpload.partial_dump_form_problems(dump_dir, before, requested)
+    soft = []
+    problems = dumpload.partial_dump_form_problems(dump_dir, before, requested, soft)
+    for s in soft:
+        print(f"[!] {s} — если не удаляли в базе сознательно, сверь полной выгрузкой")
     if problems:
         raise SystemExit("выгрузка формы неполная (точечная выгрузка теряет события и модуль формы) — "
                          "делай полную выгрузку конфигурации/расширения:\n  " + "\n  ".join(problems))
@@ -478,7 +496,7 @@ def main(argv=None):
     p = sub.add_parser("updatedb", parents=[common], help="UpdateDBCfg (основная или --ext)")
     a = ap.parse_args(argv)
 
-    if getattr(a, "host", None):                  # у status нет --host
+    if getattr(a, "host", None) and a.host.strip().lower() != "local":   # у status нет --host
         require_remote_bin()
 
     if a.cmd in ("repo", "updatedb"):
@@ -529,7 +547,8 @@ def main(argv=None):
 
     v8 = None if a.host else _find_v8()   # --host: платформа НА СЕРВЕРЕ, локальная не нужна
     user, password = ib_creds(a.base, a.contour)
-    log = str(Path(a.out).resolve().with_suffix(".log")) if a.out else "designer_sync.log"
+    out_abs = Path(a.out).resolve() if a.out else None
+    log = str(out_abs.with_name(out_abs.name + ".log")) if out_abs else "designer_sync.log"
     Path(a.out).mkdir(parents=True, exist_ok=True)
 
     if a.cmd == "dump":
@@ -538,18 +557,25 @@ def main(argv=None):
         forms_before = dumpload.form_snapshot(Path(a.out))
         # точечная — во временный ПУСТОЙ каталог: старые файлы a.out (Form/Module.bsl) иначе
         # маскируют то, чего выгрузка не отдала; в a.out переносим только проверенное
-        target = tempfile.mkdtemp(prefix="ds_dump_") if objects else str(Path(a.out).resolve())
-        if a.host:
-            from onec_metadata.apply.runner import make_runner
-            r = make_runner(a.host)
-            remote_dump(r, a.base, user, password, a.ext, objects, target)
-        else:
-            cmd, listfile = build_dump_cmd(v8, a.base, target, objects, user, password, a.ext, log)
-            try:
-                _run(cmd, log)
-            finally:
-                if listfile:
-                    os.unlink(listfile)
+        # рядом с --out, а не в %TEMP%: префикс пути короче (MAX_PATH на глубоких путях ERP)
+        target = (tempfile.mkdtemp(prefix=".ds_dump_", dir=out_abs.parent) if objects
+                  else str(out_abs))
+        try:
+            if a.host:
+                from onec_metadata.apply.runner import make_runner
+                r = make_runner(a.host)
+                remote_dump(r, a.base, user, password, a.ext, objects, target)
+            else:
+                cmd, listfile = build_dump_cmd(v8, a.base, target, objects, user, password, a.ext, log)
+                try:
+                    _run(cmd, log)
+                finally:
+                    if listfile:
+                        os.unlink(listfile)
+        except BaseException:
+            if objects:                                   # выгрузка не дошла до проверки — разбирать нечего
+                shutil.rmtree(target, ignore_errors=True)
+            raise
         if objects:
             try:
                 check_partial_dump_forms(Path(target), forms_before, objects)

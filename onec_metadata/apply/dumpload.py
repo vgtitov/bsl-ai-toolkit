@@ -199,21 +199,30 @@ def upload_tree(r: Runner, local_dir: Path, remote_dir: str,
 
 def fetch_tree(r: Runner, remote_dir: str, local_dir: Path,
                tmp_tar: str | None = None) -> None:
-    """Сервер → Mac: tar с chcp 65001 → scp → распаковка."""
-    tmp_tar = tmp_tar or _wpath("_fetch.tar")
+    """Сервер → Mac: tar с chcp 65001 → scp → распаковка. Имена архивов уникальны:
+    две параллельные выгрузки не должны забирать архив друг друга."""
+    import uuid
+    tag = f"{os.getpid()}_{uuid.uuid4().hex[:8]}"
+    tmp_tar = tmp_tar or _wpath(f"_fetch_{tag}.tar")
     code, out = r.run(
         f"chcp 65001 >nul & del {tmp_tar} 2>nul & "
         f"tar -cf {tmp_tar} -C {remote_dir} . & echo EXIT=%errorlevel%")
     if "EXIT=0" not in out:
         raise ApplyError(f"fetch_tree tar failed: {out.strip()[:500]}")
-    local_tar = local_dir.parent / "_fetch.tar"
+    local_tar = local_dir.parent / f"_fetch_{tag}.tar"
     local_dir.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["scp", "-o", "BatchMode=yes",
-                    f"{r.host}:{tmp_tar.replace(chr(92), '/')}",
-                    str(local_tar)], check=True)
-    subprocess.run(["tar", "-xf", str(local_tar), "-C", str(local_dir)],
-                   check=True)
-    local_tar.unlink()
+    try:
+        subprocess.run(["scp", "-o", "BatchMode=yes",
+                        f"{r.host}:{tmp_tar.replace(chr(92), '/')}",
+                        str(local_tar)], check=True)
+        subprocess.run(["tar", "-xf", str(local_tar), "-C", str(local_dir)],
+                       check=True)
+    finally:
+        local_tar.unlink(missing_ok=True)
+        try:
+            r.run(f"del {tmp_tar} 2>nul")
+        except Exception:                          # noqa: BLE001 — уборка не должна прятать ошибку
+            pass
 
 
 # служебные файлы выгрузки: платформа меняет их при каждом дампе,
@@ -395,11 +404,13 @@ def partial_load_gaps(src_dir: Path, files: list[str], allow_missing_ext: bool =
 def form_snapshot(dump_dir: Path) -> dict:
     """{путь Form.xml: есть ли в нём <Events>} — до точечной выгрузки, чтобы заметить потерю."""
     dump_dir = Path(dump_dir)
-    return {p.relative_to(dump_dir).as_posix(): "<Events>" in p.read_text("utf-8-sig", errors="replace")
+    return {unicodedata.normalize("NFC", p.relative_to(dump_dir).as_posix()):
+            "<Events>" in p.read_text("utf-8-sig", errors="replace")
             for p in dump_dir.rglob("Form.xml") if p.parent.name == "Ext"}
 
 
-def partial_dump_form_problems(dump_dir: Path, before: dict, requested=None) -> list[str]:
+def partial_dump_form_problems(dump_dir: Path, before: dict, requested=None,
+                               warnings: list | None = None) -> list[str]:
     """Формы, которые точечная выгрузка (-listFile) отдала неполными.
 
     Боевой случай: форма пришла без `<Events>` в Form.xml и без `Form/Module.bsl`, хотя в базе
@@ -407,6 +418,10 @@ def partial_dump_form_problems(dump_dir: Path, before: dict, requested=None) -> 
     этого каталога и пропали, или события есть, а модуля нет. «Форма пропала» проверяется только
     у объектов, запрошенных ЦЕЛИКОМ (`Тип.Имя`): выгрузка вложенного (`Тип.Имя.Command.X`) формы
     владельца и не должна отдавать. requested=None — все выгруженные считаются целыми.
+
+    Форму или все её события могли удалить в базе сознательно, а перенос в --out ничего не
+    удаляет — поэтому «форма пропала» и «события пропали, модуль на месте» уходят в `warnings`
+    (если передан). Ошибка — только когда без модуля: так выглядит урезанная выгрузка.
     """
     dump_dir = Path(dump_dir)
     now = form_snapshot(dump_dir)
@@ -414,13 +429,22 @@ def partial_dump_form_problems(dump_dir: Path, before: dict, requested=None) -> 
     dumped |= {(a, b[:-4]) for a, b in dumped if b.endswith(".xml")}
     # форма выгруженного объекта была и пропала: перенос заменит объект целиком и удалит её
     whole = None if requested is None else {o.split(".", 1)[1] for o in requested if o.count(".") == 1}
-    problems = [f"{rel}: форма была в прошлой выгрузке, в новой её нет"
-                for rel in sorted(before) if rel not in now and tuple(rel.split("/")[:2]) in dumped
-                and (whole is None or rel.split("/")[1] in whole)]
+    dumped = {tuple(unicodedata.normalize("NFC", x) for x in key) for key in dumped}
+    before = {unicodedata.normalize("NFC", k): v for k, v in before.items()}
+    soft = [f"{rel}: форма была в прошлой выгрузке, в новой её нет (в --out остаётся старая)"
+            for rel in sorted(before) if rel not in now and tuple(rel.split("/")[:2]) in dumped
+            and (whole is None or rel.split("/")[1] in whole)]
+    problems = []
     for rel, had_events in sorted(now.items()):
         module = dump_dir / Path(rel).parent / "Form" / "Module.bsl"
         if had_events and not module.is_file():
             problems.append(f"{rel}: события есть, модуля Form/Module.bsl нет")
         elif before.get(rel) and not had_events:
-            problems.append(f"{rel}: в прошлой выгрузке были <Events>, теперь нет")
+            if module.is_file():
+                soft.append(f"{rel}: в прошлой выгрузке были <Events>, теперь нет")
+            else:
+                problems.append(f"{rel}: в прошлой выгрузке были <Events>, теперь нет ни событий, "
+                                "ни Form/Module.bsl")
+    if warnings is not None:
+        warnings.extend(soft)
     return problems

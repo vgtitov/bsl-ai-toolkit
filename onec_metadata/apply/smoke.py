@@ -139,11 +139,9 @@ def _code_only(text: str) -> str:
         i += 1
     return "".join(out)
 
-# Сколько секунд сеанс может жить при неизменном /Out (и неизменном локальном кэше), прежде
-# чем сторож его остановит. 0 — сторож выключен. Только для локального транспорта: на удалённом
-# хосте кэш клиента отсюда не виден, а одного /Out мало — ложно убить рабочий сеанс хуже, чем
-# поздно заметить зависание, поэтому удалённо сторож по умолчанию выключен (включается явным stall).
-DEFAULT_STALL = 600
+# Сторож по умолчанию выключен: /Out пишется в конце сеанса, и честная долгая обработка без
+# роста кэша неотличима от зависания — ложно убить рабочий сеанс хуже, чем поздно заметить
+# зависание. Включается явным stall (секунды без изменений /Out и локального кэша).
 
 
 def _is_remote(r: RunnerLike) -> bool:
@@ -151,9 +149,9 @@ def _is_remote(r: RunnerLike) -> bool:
 
 
 def resolve_stall(r: RunnerLike, stall: int | None) -> int:
-    """None — умолчание по транспорту (локально DEFAULT_STALL, удалённо выкл.); < 0 — отказ."""
+    """None или 0 — сторож выключен; < 0 — отказ."""
     if stall is None:
-        return 0 if _is_remote(r) else DEFAULT_STALL
+        return 0
     if stall < 0:
         raise ApplyError(f"smoke: stall не может быть отрицательным ({stall}); 0 — сторож выключен")
     return stall
@@ -194,8 +192,12 @@ def _run_watched(r: RunnerLike, cmd: str, *, timeout: int, log: str, stall: int,
         if not stall:
             continue
         # удалённо прогресс — только /Out: локальный кэш к удалённому сеансу отношения не имеет
-        sig = (r.read_text(log, timeout=60), None if _is_remote(r) else client_cache_bytes())
         now = time.monotonic()
+        try:
+            sig = (r.read_text(log, timeout=60), None if _is_remote(r) else client_cache_bytes())
+        except Exception:                              # noqa: BLE001 — не прочитали /Out (ssh-таймаут):
+            since = now                                # о сеансе ничего не знаем, не копим «тишину»
+            continue
         if sig != last:
             last, since = sig, now
         elif now - since >= stall:
@@ -204,7 +206,7 @@ def _run_watched(r: RunnerLike, cmd: str, *, timeout: int, log: str, stall: int,
             raise ApplyError(
                 f"smoke: сеанс жив, но /Out и кэш конфигурации не менялись {stall} с — остановлен "
                 "сторожем. Вероятно, модуль не компилируется: запусти `onec_verify.py check` "
-                "(CheckConfig) для этой базы. Если сеанс должен идти дольше молча — `--stall 0`.\n"
+                "(CheckConfig) для этой базы. Если сеанс должен идти дольше молча — запусти без `--stall` или с большим значением.\n"
                 f"{_HANG_HINT}\ncmd: {mask_password(cmd)}")
     if "err" in box:
         raise box["err"]

@@ -228,41 +228,83 @@ def check_com_connector():
 STUCK_SHELL_HOURS = 2
 
 
-def stuck_git_shells(procs, hours=STUCK_SHELL_HOURS):
-    """[(pid, часов)] — bash.exe/sh.exe из каталога Git, живущие дольше `hours`.
-    procs: [{"Id", "Path", "Age"}] — Age в часах (считает PowerShell)."""
+def stuck_git_shells(procs, git_root, ancestors=(), hours=STUCK_SHELL_HOURS):
+    """[(pid, часов)] — bash.exe/sh.exe из каталога установки Git, живущие дольше `hours`,
+    без дочерних процессов и без CPU за время замера. Предки текущего процесса (своя сессия
+    Claude Code, терминал) не считаются. procs: [{"Id", "Path", "Age", "Children", "CpuDelta"}]."""
+    root = str(git_root or "").replace("/", "\\").rstrip("\\").lower()
+    if not root:
+        return []
     out = []
     for p in procs or []:
         path = (p.get("Path") or "").replace("/", "\\").lower()
-        if "\\git\\" in path and (p.get("Age") or 0) >= hours:
+        if (path.startswith(root + "\\") and (p.get("Age") or 0) >= hours
+                and p.get("Id") not in ancestors and not p.get("Children")
+                and (p.get("CpuDelta") or 0) < 0.05):
             out.append((p.get("Id"), round(p["Age"], 1)))
     return out
+
+
+def _ancestors(parents: dict, pid: int) -> set:
+    seen = set()
+    while pid and pid not in seen:
+        seen.add(pid)
+        pid = parents.get(pid)
+    return seen
+
+
+def _git_root():
+    """Каталог установки Git: ближайший предок git.exe из PATH, где есть usr/bin/sh.exe
+    (git.exe лежит и в Git/cmd, и в Git/mingw64/bin)."""
+    git = shutil.which("git")
+    if not git:
+        return None
+    for d in Path(git).resolve().parents:
+        if (d / "usr" / "bin" / "sh.exe").is_file():
+            return d
+    return None
+
+
+_STUCK_PS = (
+    "$all = @(Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId);"
+    "$sh = @(Get-Process bash,sh -ErrorAction SilentlyContinue | Where-Object { $_.Path });"
+    "$c1 = @{}; foreach ($p in $sh) { $c1[$p.Id] = $p.TotalProcessorTime.TotalSeconds };"
+    "Start-Sleep -Seconds 2;"
+    "$procs = @(foreach ($p in $sh) { $q = Get-Process -Id $p.Id -ErrorAction SilentlyContinue;"
+    " if (-not $q) { continue };"
+    " [pscustomobject]@{ Id = $p.Id; Path = $p.Path; Age = ((Get-Date) - $p.StartTime).TotalHours;"
+    " CpuDelta = $q.TotalProcessorTime.TotalSeconds - $c1[$p.Id];"
+    " Children = @($all | Where-Object { $_.ParentProcessId -eq $p.Id }).Count } });"
+    "[pscustomobject]@{ procs = $procs;"
+    " parents = @($all | ForEach-Object { ,@($_.ProcessId, $_.ParentProcessId) }) }"
+    " | ConvertTo-Json -Compress -Depth 4")
 
 
 def check_stuck_git_shells():
     """Зависшие bash.exe Git держат общую память MSYS: любой sh/bash Git падает
     «add_item (...) failed, errno 1», git-хуки не запускаются. Только Windows; командные строки
-    не читаем и не печатаем (в них бывают пароли), процессы не завершаем — только PID и команда."""
+    не читаем и не печатаем (в них бывают пароли), процессы не завершаем и команду завершения
+    не подсказываем: долгоживущий bash бывает и открытым терминалом."""
     if os.name != "nt":
         return []
-    ps = ("Get-Process bash,sh -ErrorAction SilentlyContinue | Where-Object { $_.Path } | "
-          "ForEach-Object { [pscustomobject]@{ Id = $_.Id; Path = $_.Path; "
-          "Age = ((Get-Date) - $_.StartTime).TotalHours } } | ConvertTo-Json -Compress")
-    try:
-        out = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
-                             capture_output=True, text=True, timeout=20).stdout.strip()
-        procs = json.loads(out) if out else []
-    except Exception as e:
-        return [(WARN, "Git: зависшие bash.exe", f"не смог проверить ({type(e).__name__})")]
-    stuck = stuck_git_shells([procs] if isinstance(procs, dict) else procs)
     name = "Git: зависшие bash.exe"
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", _STUCK_PS],
+                             capture_output=True, text=True, timeout=30).stdout.strip()
+        data = json.loads(out) if out else {}
+        procs = data.get("procs") or []
+        procs = [procs] if isinstance(procs, dict) else procs
+        parents = {int(a): int(b) for a, b in (data.get("parents") or []) if a is not None}
+    except Exception as e:
+        return [(WARN, name, f"не смог проверить ({type(e).__name__})")]
+    stuck = stuck_git_shells(procs, _git_root(), _ancestors(parents, os.getpid()))
     if not stuck:
-        return [(OK, name, f"нет процессов bash/sh Git старше {STUCK_SHELL_HOURS} ч")]
+        return [(OK, name, f"нет простаивающих bash/sh Git старше {STUCK_SHELL_HOURS} ч")]
     pids = ", ".join(f"{pid} ({age} ч)" for pid, age in stuck)
-    ids = ",".join(str(pid) for pid, _ in stuck)
-    return [(WARN, name, f"живут дольше {STUCK_SHELL_HOURS} ч: {pids}. Такие процессы ломают все "
-                         "MSYS-команды и git-хуки («add_item ... errno 1»). Если это не открытое окно "
-                         f"Git Bash — завершить: Stop-Process -Id {ids}; проверка: "
+    return [(WARN, name, f"простаивают дольше {STUCK_SHELL_HOURS} ч (без дочерних, без CPU): {pids}. "
+                         "Если MSYS-команды и git-хуки падают «add_item ... errno 1» — закрой окна Git Bash "
+                         "и терминалы, которым эти PID принадлежат, или заверши процессы в диспетчере "
+                         "задач, сверив, что это не рабочий терминал. Проверка: "
                          "& 'C:\\Program Files\\Git\\usr\\bin\\sh.exe' -c 'echo ok'")]
 
 
