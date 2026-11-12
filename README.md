@@ -206,6 +206,7 @@ Toolkit — не только про код: смежные системы SDLC/
 - [docs/AI_INSTALL_GUIDE.md](docs/AI_INSTALL_GUIDE.md) · [docs/AI_UPDATE.md](docs/AI_UPDATE.md) — установка и обновление.
 - [docs/example.md](docs/example.md) — пример: как ИИ ведёт задачу от тех-проекта до передачи кода.
 - [docs/data-access-architecture.md](docs/data-access-architecture.md) — доступ к данным живой базы (лестница уровней).
+- [config/depersonalize.default.json](config/depersonalize.default.json) — маска ПДн и секретов `onec-data` по умолчанию (токены имён полей и шаблоны значений).
 - [docs/data-access-verification-runbook.md](docs/data-access-verification-runbook.md) — воспроизводимая проверка OData/HTTP-сервиса расширения на новой машине: автономный сервер, деплой через SSH, диагностика по коду ответа.
 - [docs/testing-ladder.md](docs/testing-ladder.md) — как доказываем поведение (лестница тестирования).
 - [docs/ops-tools-catalog.md](docs/ops-tools-catalog.md) · [docs/zabbix-1c-monitoring-guide.md](docs/zabbix-1c-monitoring-guide.md) — эксплуатация и мониторинг.
