@@ -47,6 +47,8 @@ def test_add_column_edt(tmp_path):
     assert new.xpath("valueType/types/text()") == ["String"]
     assert new.xpath("valueType/numberQualifiers") == []   # квалификаторы образца сняты
     assert new.xpath("title") == []                        # заголовок образца не наследуется
+    # неограниченная строка - пустой <stringQualifiers/>: без него EDT «StringQualifiers не установлено»
+    assert "<types>String</types>\n        <stringQualifiers/>\n      </valueType>" in work.read_text(encoding="utf-8")
     # id: общее пространство реквизитов и колонок: max(1,4,3,7,5) + 1
     assert new.xpath("id/text()") == ["8"]
     assert doc.xpath("/form:Form/attributes[name='Цена']", namespaces=NSF) == []
@@ -146,6 +148,16 @@ def test_add_attribute_titles_configurator_refused(tmp_path):
     work.write_text("<Form/>", encoding="utf-8")
     with pytest.raises(OpPreconditionError):
         add_attribute(work, "Поле", "String", {"ru": "Поле"})
+
+
+def test_add_attribute_edt_number_syntax(tmp_path):
+    """Реквизит принимает тот же синтаксис типа, что колонка: Number:N.M -> precision/scale."""
+    work = _copy(tmp_path)
+    add_attribute(work, "Аванс", "Number:15.2", {"ru": "Аванс"})
+    a = cfg.load(work).xpath("/form:Form/attributes[name='Аванс']", namespaces=NSF)[0]
+    assert a.xpath("valueType/types/text()") == ["Number"]
+    assert a.xpath("valueType/numberQualifiers/precision/text()") == ["15"]
+    assert a.xpath("valueType/numberQualifiers/scale/text()") == ["2"]
 
 
 def test_add_attribute_edt_id_skips_column_ids(tmp_path):

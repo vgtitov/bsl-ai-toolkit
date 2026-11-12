@@ -118,6 +118,8 @@ def test_add_attribute_edt_sample_not_last(tmp_path):
     assert names == ["КодЯзыка", "Список", "Комментарий"]
     a = _attr(doc, "Комментарий")
     assert a.xpath("id/text()") == ["6"]                # max(3,5)+1
-    assert a.xpath("valueType/stringQualifiers") == []  # квалификаторы образца сняты
+    # квалификаторы образца сняты; неограниченная строка - пустой <stringQualifiers/>, как пишет EDT
+    quals = a.xpath("valueType/stringQualifiers")
+    assert len(quals) == 1 and len(quals[0]) == 0 and not (quals[0].text or "").strip()
     raw = work.read_bytes()
     assert b"\r\n" not in raw

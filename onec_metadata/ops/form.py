@@ -45,10 +45,12 @@ def _reid(element, next_id: int) -> int:
 
 def add_attribute(form_path: Path, name: str, type_ref: str, titles: dict | None = None) -> None:
     validate_name(name)
-    validate_type_ref(type_ref)
     if str(form_path).endswith(".form"):
+        # тот же синтаксис типа, что у колонок (Number:N.M, cfg:XRef.Имя) - проверяется нотация EDT
+        validate_type_ref(edt_type(type_ref)[0])
         _add_attribute_edt(form_path, name, type_ref, titles)
     else:
+        validate_type_ref(type_ref)
         if titles:
             raise OpPreconditionError("Заголовки реквизита в Конфигураторе - через form add-form-attribute --title")
         _add_attribute_configurator(form_path, name, type_ref)
@@ -97,7 +99,7 @@ _FIELD_SEMANTIC = ("Events", "ChoiceList", "TypeRestriction")
 
 
 def add_field(form_path: Path, name: str, data_path: str, title: str | None = None,
-              parent: str | None = None, position: str | None = None) -> None:
+              parent: str | None = None, position: str | None = None, checkbox: bool = False) -> None:
     """Добавить InputField в ChildItems с привязкой DataPath (P4.2).
 
     id поля и вложенных ContextMenu/ExtendedTooltip — свежие ПОСЛЕДОВАТЕЛЬНЫЕ из
@@ -109,12 +111,15 @@ def add_field(form_path: Path, name: str, data_path: str, title: str | None = No
     validate_name(name)
     if str(form_path).endswith(".form"):
         if parent:
-            _add_field_into_edt(form_path, name, data_path, parent, position)
+            _add_field_into_edt(form_path, name, data_path, parent, position, checkbox)
+        elif checkbox:
+            raise OpPreconditionError("add-field --checkbox - только с --parent (EDT)")
         else:
             _add_field_edt(form_path, name, data_path, title)
         return
-    if parent:
-        raise OpPreconditionError("add-field --parent пока только для EDT (Form.form)")
+    if parent or checkbox:
+        raise OpPreconditionError("add-field --parent / --checkbox пока только для EDT (Form.form); "
+                                  "флажок в Конфигураторе - form add-checkbox")
     doc = cfg.load(form_path)
     root = doc.getroot()
 
@@ -208,7 +213,7 @@ def _add_attribute_edt(form_path: Path, name: str, type_ref: str, titles: dict |
     new = copy.deepcopy(sample)
     new.find("name").text = name
     new.find("id").text = str(_next_attribute_id_edt(root))
-    _set_type_edt(new, type_ref)
+    _set_type_edt(new, *edt_type(type_ref))
 
     cfg.remove_children(
         new, [el for tag in _EDT_ATTR_SEMANTIC for el in new.findall(tag)])
@@ -391,7 +396,7 @@ def _set_type_edt(node, type_ref: str, qualifiers=None) -> None:
         q = etree.Element(tag)
         ws = vt.text or "\n"           # отступ детей valueType (хвост types может быть отступом </valueType>)
         inner = ws + "  "
-        q.text = inner
+        q.text = inner if children else None    # без детей - пустой элемент (<stringQualifiers/>)
         for i, (child, text) in enumerate(children):
             el = etree.SubElement(q, child)
             el.text = text
@@ -410,6 +415,10 @@ def edt_type(type_ref: str):
         if m.group(2) and int(m.group(2)) > 0:
             children.append(("scale", m.group(2)))
         return "Number", ("numberQualifiers", children)
+    if type_ref == "String":
+        # неограниченная строка: EDT пишет пустой <stringQualifiers/>, без него проверка формы
+        # даёт «Свойство StringQualifiers не установлено»
+        return "String", ("stringQualifiers", [])
     if type_ref.startswith("cfg:"):
         return type_ref[len("cfg:"):], None
     return type_ref, None
@@ -518,10 +527,12 @@ _EDT_FIELD_SEMANTIC = ("title", "toolTip", "handlers")
 
 
 def _add_field_into_edt(form_path: Path, name: str, data_path: str, parent: str,
-                        position: str | None) -> None:
+                        position: str | None, checkbox: bool = False) -> None:
     """Поле внутри контейнера (таблица - колонка, группа): клон последнего поля контейнера,
     свежие id в пространстве элементов, место - среди <items> контейнера (до его свойств).
-    position: first | last (умолч.) | before:Имя | after:Имя - среди прямых <items> контейнера."""
+    position: first | last (умолч.) | before:Имя | after:Имя - среди прямых <items> контейнера.
+    checkbox: поле-флажок - вид CheckBoxField и пустое расширение CheckBoxFieldExtInfo, как в выгрузке EDT
+    (смена одного вида поля у поля ввода оставляет InputFieldExtInfo - EDT: «Illegal extension type»)."""
     doc = cfg.load(form_path)
     root = doc.getroot()
     xt = cfg.q("xsi", "type")
@@ -558,6 +569,8 @@ def _add_field_into_edt(form_path: Path, name: str, data_path: str, parent: str,
         tip.text = f"{name}РасширеннаяПодсказка"
     for menu in new.xpath("contextMenu/name"):
         menu.text = f"{name}КонтекстноеМеню"
+    if checkbox:
+        _make_checkbox_edt(new)
 
     if after:
         cfg.place_after(anchor, new)
@@ -568,6 +581,23 @@ def _add_field_into_edt(form_path: Path, name: str, data_path: str, parent: str,
         anchor.addprevious(new)
         new.tail = indent
     cfg.save(doc, form_path)
+
+
+def _make_checkbox_edt(field) -> None:
+    """Клон поля ввода -> флажок: <type>CheckBoxField</type> и <extInfo xsi:type="form:CheckBoxFieldExtInfo"/>
+    (свойства поля ввода из extInfo флажку не принадлежат)."""
+    kind = field.find("type")
+    if kind is None:
+        raise OpPreconditionError("У поля-образца нет <type>")
+    kind.text = "CheckBoxField"
+    ext = field.find("extInfo")
+    new_ext = etree.Element("extInfo")
+    new_ext.set(cfg.q("xsi", "type"), "form:CheckBoxFieldExtInfo")
+    if ext is None:
+        cfg.place_after(field.findall("*")[-1], new_ext)
+    else:
+        new_ext.tail = ext.tail
+        field.replace(ext, new_ext)
 
 
 def _edt_insert_anchor(children, position: str, parent: str):
