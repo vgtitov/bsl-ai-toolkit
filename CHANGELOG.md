@@ -8,7 +8,10 @@
 - `1c-meta form add-attribute-column` (EDT): первая колонка в новый реквизит «таблица значений» / «дерево значений» без
   колонок — по каркасу выгрузки EDT; раньше отказ «нет колонок-образцов», и реквизит-таблицу с нуля собрать было нельзя
   (EDT MCP колонки не создаёт). Для реквизита другого типа — отказ.
-- `1c-meta form add-attribute --title ru=… --title en=…` (EDT): заголовки нового реквизита на языках.
+- `1c-meta form add-attribute --title ru=… --title en=…` (EDT): заголовки нового реквизита на языках; тип — тот же
+  синтаксис, что у колонки (`Number:N[.M]`, `cfg:XRef.Имя`).
+- `1c-meta form add-field --parent … --checkbox` (EDT): поле-флажок (`CheckBoxField` с `CheckBoxFieldExtInfo`, как в
+  выгрузке EDT). Смена вида поля через EDT MCP оставляет расширение поля ввода, и EDT пишет «Illegal extension type».
 - `1c-meta form add-attribute-column` / `remove-attribute-column` / `remove-attribute` — колонка реквизита формы
   «таблица значений» и удаление колонки или реквизита, **оба формата**: Конфигуратор `Form.xml` и EDT `Form.form`
   (формат по расширению; EDT MCP колонку во вложенном реквизите не создаёт). Тип — `String | Boolean | Date |
@@ -23,6 +26,8 @@
 ### Fixed
 - `form add-attribute` (EDT): новый реквизит больше не наследует заголовок реквизита-образца (клон получал чужой
   заголовок).
+- `form add-attribute` / `add-attribute-column` (EDT): строковый тип пишется с пустым `<stringQualifiers/>`, как в
+  выгрузке EDT; без него проверка формы давала «Свойство StringQualifiers не установлено».
 - `form add-attribute` (EDT): id нового реквизита учитывает id колонок реквизитов-таблиц (одно пространство id);
   раньше мог совпасть с id существующей колонки.
 - `form set-style` (EDT): свойства `…DataPath` (например `footerDataPath`) пишутся как `form:DataPath` с `segments`,
