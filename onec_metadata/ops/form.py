@@ -43,12 +43,14 @@ def _reid(element, next_id: int) -> int:
     return next_id
 
 
-def add_attribute(form_path: Path, name: str, type_ref: str) -> None:
+def add_attribute(form_path: Path, name: str, type_ref: str, titles: dict | None = None) -> None:
     validate_name(name)
     validate_type_ref(type_ref)
     if str(form_path).endswith(".form"):
-        _add_attribute_edt(form_path, name, type_ref)
+        _add_attribute_edt(form_path, name, type_ref, titles)
     else:
+        if titles:
+            raise OpPreconditionError("Заголовки реквизита в Конфигураторе - через form add-form-attribute --title")
         _add_attribute_configurator(form_path, name, type_ref)
 
 
@@ -167,7 +169,7 @@ def add_field(form_path: Path, name: str, data_path: str, title: str | None = No
 # name/id/valueType/view/edit + семантические main/extInfo/
 # notDefaultUseAlwaysAttributes/columns; ничего не выдумываем сверх наблюдаемого.
 _EDT_ATTR_SEMANTIC = (
-    "main", "extInfo", "notDefaultUseAlwaysAttributes", "columns",
+    "main", "extInfo", "notDefaultUseAlwaysAttributes", "columns", "title",
 )
 # квалификаторы типа образца — с новым типом не совместимы
 _EDT_QUALIFIERS = (
@@ -176,7 +178,7 @@ _EDT_QUALIFIERS = (
 )
 
 
-def _add_attribute_edt(form_path: Path, name: str, type_ref: str) -> None:
+def _add_attribute_edt(form_path: Path, name: str, type_ref: str, titles: dict | None = None) -> None:
     doc = cfg.load(form_path)
     root = doc.getroot()
 
@@ -210,9 +212,34 @@ def _add_attribute_edt(form_path: Path, name: str, type_ref: str) -> None:
 
     cfg.remove_children(
         new, [el for tag in _EDT_ATTR_SEMANTIC for el in new.findall(tag)])
+    _insert_titles_edt(new, titles)
 
     cfg.place_after(existing[-1], new)
     cfg.save(doc, form_path)
+
+
+def _insert_titles_edt(node, titles: dict | None) -> None:
+    """Заголовки реквизита или колонки EDT - сразу после <name>, по блоку <title> на язык (как пишет EDT)."""
+    anchor = node.find("name")
+    ws = anchor.tail
+    for lang, text in (titles or {}).items():
+        t = etree.Element("title")
+        t.text = ws + "  "
+        k = etree.SubElement(t, "key")
+        k.text, k.tail = lang, ws + "  "
+        v = etree.SubElement(t, "value")
+        v.text, v.tail = text, ws
+        cfg.place_after(anchor, t)
+        anchor = t
+
+
+# Первая колонка пустой таблицы - каркас как в выгрузке EDT (реквизит ValueTable формы ERP);
+# тип и заголовки ставит add_column_edt. {ws} - отступ детей колонки, {end} - отступ закрывающего тега.
+_EDT_BLANK_COLUMN = (
+    "<columns>{ws}<name>_</name>{ws}<id>0</id>{ws}<valueType>{ws}  <types>String</types>{ws}</valueType>"
+    "{ws}<view>{ws}  <common>true</common>{ws}</view>{ws}<edit>{ws}  <common>true</common>{ws}</edit>{end}</columns>"
+)
+_EDT_TABLE_TYPES = ("ValueTable", "ValueTree")
 
 
 # ---------- тип СУЩЕСТВУЮЩЕГО реквизита формы (оба формата) ----------
@@ -405,33 +432,29 @@ def add_column_edt(form_path: Path, parent: str, name: str, type_ref: str, title
     owners = [a for a in root.xpath("attributes") if a.findtext("name") == parent]
     if not owners:
         raise OpPreconditionError(f"Реквизит формы '{parent}' не найден")
-    columns = owners[0].findall("columns")
-    if not columns:
-        raise OpPreconditionError(
-            f"У реквизита '{parent}' нет колонок-образцов (не таблица или пустая таблица)")
+    owner = owners[0]
+    columns = owner.findall("columns")
     if name in [c.findtext("name") for c in columns]:
         raise OpPreconditionError(f"Колонка '{name}' у реквизита '{parent}' уже существует")
+    if columns:
+        sample, after = columns[-1], columns[-1]
+    else:
+        # первая колонка: реквизит должен быть таблицей; каркас вместо образца
+        if owner.xpath("valueType/types/text()") not in [[t] for t in _EDT_TABLE_TYPES]:
+            raise OpPreconditionError(f"Реквизит '{parent}' - не таблица значений и не дерево значений")
+        after = [c for c in owner if isinstance(c.tag, str)][-1]
+        ws_attr = owner.text or "\n    "         # отступ детей реквизита
+        sample = etree.fromstring(_EDT_BLANK_COLUMN.format(ws=ws_attr + "  ", end=ws_attr))
 
-    new = copy.deepcopy(columns[-1])
+    new = copy.deepcopy(sample)
     new.find("name").text = name
     new.find("id").text = str(_next_attribute_id_edt(root))
     _set_type_edt(new, types_text, qualifiers)
     cfg.remove_children(
         new, [el for tag in _EDT_COLUMN_SEMANTIC for el in new.findall(tag)])
-    # заголовки - сразу после <name>, по блоку на язык (как пишет EDT)
-    anchor = new.find("name")
-    ws = anchor.tail
-    for lang, text in (titles or {}).items():
-        t = etree.Element("title")
-        t.text = ws + "  "
-        k = etree.SubElement(t, "key")
-        k.text, k.tail = lang, ws + "  "
-        v = etree.SubElement(t, "value")
-        v.text, v.tail = text, ws
-        cfg.place_after(anchor, t)
-        anchor = t
+    _insert_titles_edt(new, titles)
 
-    cfg.place_after(columns[-1], new)
+    cfg.place_after(after, new)
     cfg.save(doc, form_path)
 
 
