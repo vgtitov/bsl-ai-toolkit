@@ -77,8 +77,22 @@ def load_dotenv_defaults(*dirs):
 # ── конфигурация ──────────────────────────────────────────────────────────────
 
 # Поля с ПДн, маскируемые по умолчанию (подстрока в имени поля, регистронезависимо).
-DEFAULT_MASK = ("фио,фамилия,имя,отчество,телефон,инн,кпп,снилс,паспорт,email,"
-                "почта,адресэп,датарождения,оклад,зарплат,заработн")
+# Токены имён полей и дополнительные шаблоны значений: config/depersonalize.default.json (прежние шаблоны ИНН, СНИЛС, email, карт, паспортов и ФИО остаются в _VALUE_PII ниже).
+# Fail-closed: нет файла или он битый, значит MCP не стартует (запасного короткого списка нет, он молча пропускал бы секреты).
+def _load_defaults():
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config", "depersonalize.default.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            cfg = json.load(f)
+        fields = cfg["mask_fields"]
+        if not (isinstance(fields, list) and fields and all(isinstance(t, str) and t.strip() for t in fields)):
+            raise ValueError("mask_fields должен быть непустым списком строк")
+        return fields, [re.compile(p["regex"]) for p in cfg["value_patterns"]]
+    except (OSError, ValueError, KeyError, TypeError, re.error) as e:
+        raise RuntimeError("onec-data: маска по умолчанию не загружена из %s (%s); без неё сервер не запускается" % (path, e))
+
+
+DEFAULT_MASK_TOKENS, _EXTRA_VALUE_PII = _load_defaults()
 MASK_VALUE = "***"
 
 
@@ -180,7 +194,7 @@ def _err(status, data, where):
 _VALUE_PII = [
     re.compile(r"\b\d{10}\b|\b\d{12}\b"),                       # ИНН юр./физ.
     re.compile(r"\b\d{3}-\d{3}-\d{3}[ -]?\d{2}\b"),             # СНИЛС
-    re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+"),                    # email
+    re.compile(r"[\w.+-]{1,64}@[\w-]{1,63}\.[\w.-]{1,255}"),       # email (границы: без квадратичного отката)
     re.compile(r"(?<!\d)(?:\+7|8)[\s(-]?\d{3}[\s)-]?\d{3}[\s-]?\d{2}[\s-]?\d{2}(?!\d)"),  # телефон РФ
     re.compile(r"\b(?:\d[ -]?){16}\b"),                          # карта 16 цифр
     re.compile(r"(?<!\d)\d{4}[ ]\d{6}(?!\d)|(?<!\d)\d{2}[ ]\d{2}[ ]\d{6}(?!\d)"),  # паспорт РФ «4512 345678»
@@ -205,15 +219,15 @@ _GUID_RX = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]
 def _mask_tokens():
     if os.environ.get("ONEC_DATA_MASK_OFF", "") == "1":
         return []
-    raw = os.environ.get("ONEC_DATA_MASK_FIELDS", DEFAULT_MASK)
-    return [t.strip().lower() for t in raw.split(",") if t.strip()]
+    extra = os.environ.get("ONEC_DATA_MASK_FIELDS", "")   # добавляет к списку по умолчанию, не заменяет его
+    return [t.strip().lower() for t in list(DEFAULT_MASK_TOKENS) + extra.split(",") if t.strip()]
 
 
 def _mask_scalar(value):
     """Маскирование по значению для строк (ПДн-паттерны). Не-строки — как есть."""
     if not isinstance(value, str):
         return value
-    for rx in _VALUE_PII:
+    for rx in _VALUE_PII + _EXTRA_VALUE_PII:
         value = rx.sub(MASK_VALUE, value)
     return value
 
