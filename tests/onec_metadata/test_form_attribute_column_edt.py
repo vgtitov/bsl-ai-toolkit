@@ -47,6 +47,8 @@ def test_add_column_edt(tmp_path):
     assert new.xpath("valueType/types/text()") == ["String"]
     assert new.xpath("valueType/numberQualifiers") == []   # квалификаторы образца сняты
     assert new.xpath("title") == []                        # заголовок образца не наследуется
+    # неограниченная строка - пустой <stringQualifiers/>: без него EDT «StringQualifiers не установлено»
+    assert "<types>String</types>\n        <stringQualifiers/>\n      </valueType>" in work.read_text(encoding="utf-8")
     # id: общее пространство реквизитов и колонок: max(1,4,3,7,5) + 1
     assert new.xpath("id/text()") == ["8"]
     assert doc.xpath("/form:Form/attributes[name='Цена']", namespaces=NSF) == []
@@ -98,6 +100,64 @@ def test_add_column_edt_parent_missing_or_not_table(tmp_path):
         add_attribute_column(work, "НетТакого", "Цена", "String", {})
     with pytest.raises(OpPreconditionError):
         add_attribute_column(work, "Поиск", "Цена", "String", {})       # не таблица: колонок нет
+
+
+def test_add_first_column_to_new_table_edt(tmp_path):
+    """Новый реквизит-таблица без колонок: первая колонка - по каркасу EDT, а не отказ «нет образца»."""
+    work = _copy(tmp_path)
+    add_attribute(work, "Единицы", "ValueTable", {"ru": "Единицы", "en": "Units"})
+    add_attribute_column(work, "Единицы", "Выдать", "Boolean", {"ru": "Выдать", "en": "Issue"})
+    add_attribute_column(work, "Единицы", "Сумма", "Number:15.2", {"ru": "Сумма"})   # дальше - клоном
+    doc = cfg.load(work)
+    cols = _columns(doc, "Единицы")
+    assert [c.findtext("name") for c in cols] == ["Выдать", "Сумма"]
+    first = cols[0]
+    assert [el.tag for el in first] == ["name", "title", "title", "id", "valueType", "view", "edit"]
+    assert first.xpath("valueType/types/text()") == ["Boolean"]
+    assert first.xpath("view/common/text()") == ["true"] and first.xpath("edit/common/text()") == ["true"]
+    assert first.xpath("id/text()") == ["9"]                      # реквизит получил 8
+    assert cols[1].xpath("valueType/numberQualifiers/scale/text()") == ["2"]
+    # отступы как у EDT: колонка на уровне детей реквизита, закрытие реквизита на своём уровне
+    text = work.read_text(encoding="utf-8")
+    assert "\n    </edit>\n    <columns>\n      <name>Выдать</name>\n" in text
+    assert "      </edit>\n    </columns>\n  </attributes>" in text
+
+
+def test_add_first_column_not_table_edt(tmp_path):
+    work = _copy(tmp_path)
+    add_attribute(work, "Флаг", "Boolean")
+    with pytest.raises(OpPreconditionError):
+        add_attribute_column(work, "Флаг", "Колонка", "String", {})
+
+
+def test_add_attribute_edt_titles_not_inherited(tmp_path):
+    """Клон реквизита-образца не тянет его заголовок; заданные заголовки - сразу после name."""
+    work = _copy(tmp_path)
+    add_attribute(work, "Без", "String")
+    add_attribute(work, "С", "String", {"ru": "Свой", "en": "Own"})
+    doc = cfg.load(work)
+    plain = doc.xpath("/form:Form/attributes[name='Без']", namespaces=NSF)[0]
+    titled = doc.xpath("/form:Form/attributes[name='С']", namespaces=NSF)[0]
+    assert plain.xpath("title") == []
+    assert [el.tag for el in titled][:3] == ["name", "title", "title"]
+    assert titled.xpath("title/value/text()") == ["Свой", "Own"]
+
+
+def test_add_attribute_titles_configurator_refused(tmp_path):
+    work = tmp_path / "Form.xml"
+    work.write_text("<Form/>", encoding="utf-8")
+    with pytest.raises(OpPreconditionError):
+        add_attribute(work, "Поле", "String", {"ru": "Поле"})
+
+
+def test_add_attribute_edt_number_syntax(tmp_path):
+    """Реквизит принимает тот же синтаксис типа, что колонка: Number:N.M -> precision/scale."""
+    work = _copy(tmp_path)
+    add_attribute(work, "Аванс", "Number:15.2", {"ru": "Аванс"})
+    a = cfg.load(work).xpath("/form:Form/attributes[name='Аванс']", namespaces=NSF)[0]
+    assert a.xpath("valueType/types/text()") == ["Number"]
+    assert a.xpath("valueType/numberQualifiers/precision/text()") == ["15"]
+    assert a.xpath("valueType/numberQualifiers/scale/text()") == ["2"]
 
 
 def test_add_attribute_edt_id_skips_column_ids(tmp_path):

@@ -48,6 +48,28 @@ def test_add_field_into_table_last(tmp_path):
     assert tags.index("visible") > tags.index("items") + 2
 
 
+def test_add_field_checkbox_into_table(tmp_path):
+    """Флажок-колонка: вид CheckBoxField и пустое расширение флажка, свойств поля ввода нет."""
+    work = _copy(tmp_path)
+    add_field(work, "ТоварыВыдать", "Товары.Выдать", parent="Товары", checkbox=True)
+    new = _table(cfg.load(work)).findall("items")[-1]
+    assert new.findtext("type") == "CheckBoxField"
+    ext = new.findall("extInfo")
+    xt = "{http://www.w3.org/2001/XMLSchema-instance}type"
+    assert len(ext) == 1 and ext[0].get(xt) == "form:CheckBoxFieldExtInfo" and len(ext[0]) == 0
+    assert new.xpath("dataPath/segments/text()") == ["Товары.Выдать"]
+
+
+def test_add_field_checkbox_needs_parent_and_edt(tmp_path):
+    work = _copy(tmp_path)
+    with pytest.raises(OpPreconditionError):
+        add_field(work, "Флажок", "Флажок", checkbox=True)            # без --parent
+    xml = tmp_path / "Form.xml"
+    xml.write_text("<Form/>", encoding="utf-8")
+    with pytest.raises(OpPreconditionError):
+        add_field(xml, "Флажок", "Флажок", parent="Группа", checkbox=True)   # Конфигуратор - add-checkbox
+
+
 def test_add_field_position_after(tmp_path):
     work = _copy(tmp_path)
     add_field(work, "ТоварыЦена", "Товары.Цена", parent="Товары", position="after:ТоварыНоменклатура")

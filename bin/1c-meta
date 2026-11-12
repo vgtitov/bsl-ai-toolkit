@@ -138,6 +138,8 @@ def build_parser() -> argparse.ArgumentParser:
     fma.add_argument("file", help="путь к Forms/<Имя>/Ext/Form.xml (или Form.form EDT)")
     fma.add_argument("--name", required=True, help="имя реквизита формы")
     fma.add_argument("--type", dest="type_ref", required=True, help="тип реквизита")
+    fma.add_argument("--title", action="append", default=[],
+                     help="ru=Текст (повторяемый; только EDT, Конфигуратор - add-form-attribute)")
     fmt = fmsub.add_parser("set-attribute-type",
                            help="тип СУЩЕСТВУЮЩЕГО реквизита формы, в т.ч. основного (EDT и Конфигуратор)")
     fmt.add_argument("file", help="Forms/<Имя>/Form.form (EDT) или Forms/<Имя>/Ext/Form.xml (Конфигуратор)")
@@ -151,6 +153,8 @@ def build_parser() -> argparse.ArgumentParser:
     fmf.add_argument("--data-path", required=True, help="привязка данных, напр. Объект.Артикул")
     fmf.add_argument("--parent", help="контейнер (таблица/группа): поле встаёт внутрь (только EDT Form.form)")
     fmf.add_argument("--position", help="first | last | before:Имя | after:Имя (с --parent)")
+    fmf.add_argument("--checkbox", action="store_true",
+                     help="поле-флажок (CheckBoxField), с --parent (только EDT Form.form)")
     fms = fmsub.add_parser("set-style",
                            help="оформление элемента в свойствах формы (EDT и Конфигуратор)")
     fms.add_argument("file", help="Forms/<Имя>/Form.form (EDT) или Forms/<Имя>/Ext/Form.xml (Конфигуратор)")
@@ -323,7 +327,7 @@ def main() -> None:
                     fa.set_command_title(Path(ns.file), ns.name, tt)
             elif ns.fmcmd == "add-attribute":
                 from onec_metadata.ops.form import add_attribute as form_add_attr
-                form_add_attr(Path(ns.file), ns.name, ns.type_ref)
+                form_add_attr(Path(ns.file), ns.name, ns.type_ref, dict(x.split("=", 1) for x in ns.title))
             elif ns.fmcmd == "set-attribute-type":
                 from onec_metadata.ops.form import set_attribute_type
                 set_attribute_type(Path(ns.file), ns.name, ns.type_refs)
@@ -391,7 +395,7 @@ def main() -> None:
             else:
                 from onec_metadata.ops.form import add_field as form_add_field
                 form_add_field(Path(ns.file), ns.name, ns.data_path,
-                               parent=ns.parent, position=ns.position)
+                               parent=ns.parent, position=ns.position, checkbox=ns.checkbox)
     except (OpPreconditionError, UnknownFormatError) as e:
         print(f"Ошибка предусловия: {e}", file=sys.stderr)
         sys.exit(2)
