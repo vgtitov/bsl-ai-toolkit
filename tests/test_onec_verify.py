@@ -85,6 +85,50 @@ def test_check_with_host_uses_ssh_runner(monkeypatch, tmp_path):
     assert isinstance(seen["runner"], Runner) and seen["runner"].host == "onec-srv"
 
 
+# DISCIPLINE_ALLOW_TEST_EDIT: -ExtendedModulesCheck по умолчанию только для расширения
+def test_check_adds_extended_modules_check_by_default(monkeypatch, tmp_path):
+    """Без ключа /CheckConfig пропускает `Модуль.НетТакогоМетода()` (сверено на 8.3.27:
+    «Ошибок не обнаружено», с ключом — «Возможно ошибочный метод», код 101)."""
+    m = _load(monkeypatch)
+    seen = []
+
+    import onec_metadata.apply.external as ext
+    monkeypatch.setattr(ext, "check_config", lambda r, *a, modes=None, **kw: seen.append(modes))
+    wd = str(tmp_path / "wd")
+    m.main(["check", "--base", SERVER_BASE, "--ext", "x", "--workdir", wd])
+    m.main(["check", "--base", SERVER_BASE, "--ext", "x", "--workdir", wd,
+            "--no-extended-modules-check"])
+    # основная конфигурация: шум типовой не мерили — только по явному флагу
+    m.main(["check", "--base", SERVER_BASE, "--workdir", wd])
+    m.main(["check", "--base", SERVER_BASE, "--workdir", wd, "--extended-modules-check"])
+    flags = ["-ExtendedModulesCheck" in s for s in seen]
+    assert flags == [True, False, False, True]
+    assert all(set(ext.CHECK_MODES) <= set(s) for s in seen)
+    with pytest.raises(SystemExit):        # взаимоисключающие флаги
+        m.main(["check", "--base", SERVER_BASE, "--workdir", wd,
+                "--extended-modules-check", "--no-extended-modules-check"])
+
+
+def test_check_extended_flag_reaches_designer_command():
+    from onec_metadata.apply.external import CHECK_MODES, EXTENDED_MODULES_CHECK, check_config
+
+    class R:
+        shell = True
+        calls = []
+
+        def run(self, cmd, timeout=600):
+            self.calls.append(cmd)
+            return 0, "__DSGN_OK__"
+
+        def read_text(self, path, timeout=60):
+            return ""
+
+    r = R()
+    check_config(r, SERVER_BASE, "u", "p", ext="x", modes=CHECK_MODES + (EXTENDED_MODULES_CHECK,))
+    assert "/CheckConfig" in r.calls[0] and "-ExtendedModulesCheck" in r.calls[0]
+    assert "-Extension x" in r.calls[0]
+
+
 def test_smoke_passes_scenario_text_and_credentials(monkeypatch, tmp_path):
     m = _load(monkeypatch)
     seen = {}

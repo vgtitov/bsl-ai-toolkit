@@ -144,6 +144,70 @@ def test_pragma_suppresses_query_finding(tmp_path):
     assert findings == []
 
 
+# DISCIPLINE_ALLOW_TEST_EDIT: привилегированный режим и модуль снимают предупреждение
+_QUERY = ('    Запрос.Текст = "ВЫБРАТЬ\n'
+          '    |\tТ.Ссылка\n'
+          '    |ИЗ\n'
+          '    |\tСправочник.Склады КАК Т";\n')
+
+
+def test_privileged_mode_in_procedure_suppresses_query_finding(tmp_path):
+    f = tmp_path / "Module.bsl"
+    f.write_text("Процедура Настройка()\n"
+                 "    УстановитьПривилегированныйРежим(Истина);\n" + _QUERY +
+                 "КонецПроцедуры\n\n"
+                 "Процедура Данные()\n" + _QUERY +              # другой процедуре режим не передаётся
+                 "КонецПроцедуры\n", encoding="utf-8")
+    findings, _ = run(f)
+    assert [x["line"] for x in findings] == [10]
+
+
+# DISCIPLINE_ALLOW_TEST_EDIT: ревью - решает последний вызов и только безусловный
+def test_conditional_or_switched_off_privileged_mode_keeps_warning(tmp_path):
+    f = tmp_path / "Module.bsl"
+    f.write_text("Процедура Условно(Флаг)\n"
+                 "    Если Флаг Тогда\n"
+                 "        УстановитьПривилегированныйРежим(Истина);\n"
+                 "    КонецЕсли;\n" + _QUERY +                      # строка 5
+                 "КонецПроцедуры\n"
+                 "Процедура Выключено()\n"
+                 "    УстановитьПривилегированныйРежим(Истина);\n"
+                 "    УстановитьПривилегированныйРежим(Ложь);\n" + _QUERY +   # строка 13
+                 "КонецПроцедуры\n"
+                 "Процедура Безусловно()\n"
+                 "    Попытка\n"
+                 "        А = 1;\n"
+                 "    Исключение\n"
+                 "    КонецПопытки;\n"
+                 "    УстановитьПривилегированныйРежим(Истина);\n" + _QUERY +
+                 "КонецПроцедуры\n", encoding="utf-8")
+    findings, _ = run(f)
+    assert [x["line"] for x in findings] == [5, 13]
+
+
+# DISCIPLINE_ALLOW_TEST_EDIT: ревью №3 - Ложь в любом месте процедуры, даже после текста запроса
+def test_privileged_off_after_query_text_keeps_warning(tmp_path):
+    f = tmp_path / "Module.bsl"
+    f.write_text("Процедура П()\n"
+                 "    УстановитьПривилегированныйРежим(Истина);\n" + _QUERY +   # строка 3
+                 "    УстановитьПривилегированныйРежим(Ложь);\n"
+                 "    Результат = Запрос.Выполнить();\n"
+                 "КонецПроцедуры\n", encoding="utf-8")
+    findings, _ = run(f)
+    assert [x["line"] for x in findings] == [3]
+
+
+def test_privileged_common_module_is_not_flagged(tmp_path):
+    d = tmp_path / "src" / "CommonModules" / "МодульПривилегированный"
+    d.mkdir(parents=True)
+    (d / "МодульПривилегированный.mdo").write_text(
+        "<mdclass:CommonModule>\n  <server>true</server>\n  <privileged>true</privileged>\n"
+        "</mdclass:CommonModule>\n", encoding="utf-8")
+    (d / "Module.bsl").write_text("Процедура П()\n" + _QUERY + "КонецПроцедуры\n", encoding="utf-8")
+    findings, _ = run(d / "Module.bsl")
+    assert findings == []
+
+
 def test_temp_table_query_is_not_flagged(tmp_path):
     """Запрос к временной таблице к правам отношения не имеет."""
     f = tmp_path / "Module.bsl"

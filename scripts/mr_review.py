@@ -10,7 +10,8 @@
 Что делает (всё бесплатное и локальное, кроме необязательного второго мнения):
   1. размер по объектам метаданных и ручным строкам BSL (`mr_size.py`);
   2. описание MR: есть ли части «что», «зачем», «как проверить», «риск»;
-  3. по изменённым .bsl: `bsl_guard` (обращение к базе в цикле, P1), `rights_guard` (права и RLS, P1 или P2),
+  3. по изменённым .bsl: `bsl_guard` (обращение к базе в цикле, несуществующий метод общего модуля и др.:
+     блокирующие P1, предупреждения P2), `rights_guard` (права и RLS, P1 или P2),
      `bsl_ls_top` (частые замечания BSL LS, P2; нужны BSL_JAR и java, иначе молча пропускается);
   4. с `--second-opinion`: запрос второй модели с диффом, постановкой и чек-листом (`second_opinion.py ask`).
 Код выхода 1, если есть P1; иначе 0. Вывод короткий: только находки и их место.
@@ -62,6 +63,26 @@ def _run(script: str, *args: str) -> tuple[int, str]:
         return 0, ""
 
 
+def bsl_guard_findings(f: Path, rel: str) -> list[tuple[str, str, str]]:
+    """Находки bsl_guard по файлу. Упавший guard — видимая находка P2, не молчание:
+    иначе сломанная проверка выглядит как «чисто»."""
+    stderr = ""
+    try:
+        r = subprocess.run([sys.executable, str(HERE / "bsl_guard.py"), "--json", str(f)], capture_output=True,
+                           text=True, encoding="utf-8", errors="replace", timeout=180)
+        stderr = (r.stderr or "").strip()
+        items = json.loads(r.stdout or "")
+        if not isinstance(items, list):
+            raise ValueError("вывод не массив находок")
+    except Exception as e:                       # таймаут, traceback, не-JSON
+        # у traceback суть — в последней строке («ИмяОшибки: текст»), первая — заголовок
+        err = stderr.splitlines()[-1] if stderr else (str(e) or type(e).__name__)
+        # P2, не P1: ошибка самого guard не должна блокировать MR, но и не выглядит как «чисто»
+        return [("P2", rel, "bsl_guard не выполнен, проверь файл вручную: " + err[:200])]
+    return [("P1" if it.get("severity", "error") == "error" else "P2",
+             f'{rel}:{it.get("line")}', f'[{it.get("code")}] {it.get("message", "")[:160]}') for it in items]
+
+
 def findings(repo: Path, base: str, description: str | None, max_objects: int, max_bsl: int) -> tuple[list, dict]:
     out: list[tuple[str, str, str]] = []                # (P1|P2, место, суть)
     res = mr_size.measure(repo, base)
@@ -74,9 +95,7 @@ def findings(repo: Path, base: str, description: str | None, max_objects: int, m
             out.append(("P2", "описание MR", "не хватает частей: " + ", ".join(gaps)))
     for f in changed_bsl(repo, base):
         rel = os.path.relpath(f, repo)
-        rc, o = _run("bsl_guard.py", str(f))
-        if rc != 0 and o:
-            out.append(("P1", rel, "обращение к базе в цикле: " + o.splitlines()[0][:160]))
+        out.extend(bsl_guard_findings(f, rel))
         rc, o = _run("rights_guard.py", "--json", str(f))
         try:
             for it in json.loads(o) if o else []:

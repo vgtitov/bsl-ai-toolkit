@@ -7,7 +7,10 @@
 прогнать проверку на базе можно было лишь своим драйвером. Этот CLI закрывает
 разрыв: одна команда от исходников до вердикта.
 
-  check  — ступень 1: синтакс-контроль платформой (/CheckConfig во всех контекстах)
+  check  — ступень 1: синтакс-контроль платформой (/CheckConfig во всех контекстах
+           + -ExtendedModulesCheck для расширения по умолчанию: несуществующий метод общего
+           модуля; основная конфигурация — --extended-modules-check, отключить —
+           --no-extended-modules-check)
   smoke  — ступень 2: серверный BSL-сценарий на реальных данных, вердикт по файлу
 
 Транспорт выбирается сам: без `--host` платформа берётся на ЭТОЙ машине
@@ -78,6 +81,12 @@ def build_parser():
 
     c = sub.add_parser("check", parents=[common], help="ступень 1: синтакс-контроль платформой")
     c.add_argument("--ext", help="имя расширения; без него — основная конфигурация")
+    xg = c.add_mutually_exclusive_group()
+    xg.add_argument("--extended-modules-check", action="store_true",
+                    help="добавить -ExtendedModulesCheck (несуществующий метод общего модуля); "
+                         "с --ext включён по умолчанию, для основной конфигурации — только этим флагом")
+    xg.add_argument("--no-extended-modules-check", action="store_true",
+                    help="без -ExtendedModulesCheck и при --ext (несуществующий метод тогда пройдёт)")
 
     s = sub.add_parser("smoke", parents=[common], help="ступень 2: серверный сценарий на данных")
     s.add_argument("--scenario", required=True,
@@ -226,7 +235,7 @@ def main(argv=None):
     os.environ["ONEC_1CV8_BIN"] = resolve_bin(a.bin)
     from designer_sync import resolve_cred
     from onec_metadata.apply import smoke as smoke_mod
-    from onec_metadata.apply.external import check_config
+    from onec_metadata.apply.external import CHECK_MODES, EXTENDED_MODULES_CHECK, check_config
     from onec_metadata.apply.runner import make_runner
 
     user, pwd = resolve_cred("IB", a.contour)
@@ -235,8 +244,19 @@ def main(argv=None):
     r.makedirs(workdir)
 
     if a.cmd == "check":
-        check_config(r, a.base, user, pwd, ext=a.ext,
-                     log=f"{workdir}\\check_config.log")
+        # По умолчанию только для расширения: с -Extension платформа отчитывается лишь по его
+        # модулям (сверено на 8.3.27); для основной конфигурации шум типовой не мерили.
+        extended = a.extended_modules_check or (bool(a.ext) and not a.no_extended_modules_check)
+        modes = CHECK_MODES + (EXTENDED_MODULES_CHECK,) if extended else CHECK_MODES
+        from onec_metadata.apply.dumpload import ApplyError
+        try:
+            check_config(r, a.base, user, pwd, ext=a.ext, modes=modes,
+                         log=f"{workdir}\\check_config.log")
+        except ApplyError as e:
+            hint = ("\n«Возможно ошибочный метод» — вызов несуществующего или неэкспортного метода "
+                    "(ключ -ExtendedModulesCheck); отключить — --no-extended-modules-check"
+                    if "Возможно ошибочн" in str(e) else "")
+            raise SystemExit(f"{e}{hint}") from None
         print("[ok] синтакс-контроль платформой пройден: "
               + (f"расширение {a.ext}" if a.ext else "основная конфигурация"))
         return

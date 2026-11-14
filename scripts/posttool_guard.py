@@ -45,8 +45,8 @@ def findings_for(path: str) -> list[str]:
     notes = []
     if low.endswith(".bsl"):
         rc, out = _run("bsl_guard.py", path)
-        if rc != 0 and out:
-            notes.append("bsl_guard — возможен запрос/обращение к БД в цикле:\n" + out)
+        if out:   # предупреждения приходят с кодом 0, но агенту их тоже надо видеть
+            notes.append("bsl_guard — грабли BSL (запрос в цикле, несуществующий метод, ...):\n" + out)
     if low.endswith(".bsl"):
         rc, out = _run("bsl_ls_top.py", path)
         if out:

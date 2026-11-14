@@ -207,17 +207,82 @@ def _query_blocks(lines):
             i += 1
 
 
+_PROC_START = re.compile(r"^\s*(?:(?:Асинх|Async)\s+)?(?:Процедура|Функция|Procedure|Function)\b",
+                         re.IGNORECASE)
+
+
+def is_privileged_module(bsl_path: Path):
+    """Модуль привилегированного общего модуля (флаг «Привилегированный»): RLS там не действует."""
+    parts = bsl_path.parts
+    if bsl_path.name.lower() != "module.bsl" or len(parts) < 4:
+        return False
+    if parts[-2].lower() == "ext":                                   # Конфигуратор
+        name, kind_dir = parts[-3], bsl_path.parents[2]
+        md = kind_dir / f"{name}.xml"
+    else:                                                            # EDT
+        name, kind_dir = parts[-2], bsl_path.parents[1]
+        md = bsl_path.parent / f"{name}.mdo"
+    if kind_dir.name != "CommonModules" or not md.is_file():
+        return False
+    text = md.read_text(encoding="utf-8-sig", errors="replace").lower().replace(" ", "")
+    return "<privileged>true</privileged>" in text
+
+
+_PRIVILEGED_CALL = re.compile(
+    r"\b(?:УстановитьПривилегированныйРежим|SetPrivilegedMode)\s*\(\s*(\w+)\s*\)", re.IGNORECASE)
+_PROC_END = re.compile(r"^\s*(?:КонецПроцедуры|КонецФункции|EndProcedure|EndFunction)\b", re.IGNORECASE)
+_BLOCK_OPEN = re.compile(r"\b(?:Если|If|Цикл|Do|Попытка|Try)\b", re.IGNORECASE)
+_BLOCK_CLOSE = re.compile(r"\b(?:КонецЕсли|EndIf|КонецЦикла|EndDo|КонецПопытки|EndTry)\b", re.IGNORECASE)
+
+
+def _privileged_before(lines, start):
+    """До запроса в его процедуре включён привилегированный режим — безусловно.
+
+    Консервативно: подавляем, только если перед запросом есть `Истина` на уровне тела
+    процедуры (не внутри Если/Цикл/Попытка) и во ВСЕЙ процедуре нет ни одного `Ложь`
+    (выключение до выполнения запроса по тексту не отследить).
+    """
+    first = 0
+    for i in range(start, -1, -1):
+        if _PROC_START.match(lines[i]):
+            first = i + 1
+            break
+    for line in lines[first:]:
+        if _PROC_END.match(line):
+            break
+        code = re.sub(r'"[^"]*"?', '""', line).split("//", 1)[0]
+        if any(m.group(1).lower() in ("ложь", "false") for m in _PRIVILEGED_CALL.finditer(code)):
+            return False
+    depth, last = 0, None
+    for line in lines[first:start]:
+        if line.lstrip().startswith("|"):          # продолжение текста запроса
+            continue
+        code = re.sub(r'"[^"]*"?', '""', line).split("//", 1)[0]
+        events = sorted([(m.start(), 1) for m in _BLOCK_OPEN.finditer(code)]
+                        + [(m.start(), -1) for m in _BLOCK_CLOSE.finditer(code)]
+                        + [(m.start(), m.group(1).lower()) for m in _PRIVILEGED_CALL.finditer(code)],
+                        key=lambda e: e[0])
+        for _, ev in events:
+            if isinstance(ev, int):
+                depth = max(0, depth + ev)
+            else:
+                last = (ev in ("истина", "true"), depth == 0)
+    return bool(last and last[0] and last[1])
+
+
 def check_query_without_allowed(bsl_path: Path, findings):
     try:
         text = bsl_path.read_text(encoding="utf-8-sig", errors="replace")
     except OSError:
+        return
+    if is_privileged_module(bsl_path):
         return
     lines = text.splitlines()
     for start, block in _query_blocks(lines):
         if not _DATA_TABLE.search(block) or _ALLOWED.search(block):
             continue
         context = "\n".join(lines[max(0, start - 3):start + 1])
-        if _PRAGMA.search(context) or _PRAGMA.search(block):
+        if _PRAGMA.search(context) or _PRAGMA.search(block) or _privileged_before(lines, start):
             continue
         findings.append(Finding(
             str(bsl_path), start + 1, "query-without-allowed", "warning",

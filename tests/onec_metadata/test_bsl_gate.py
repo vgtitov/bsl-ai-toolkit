@@ -92,3 +92,34 @@ def test_baseline_file_is_valid_json(tmp_path):
     write_baseline(tree)
     data = json.loads((tree / BASELINE_NAME).read_text(encoding="utf-8"))
     assert isinstance(data, dict) and data
+
+
+DASH_BSL = "// Комментарий — с тире\nПроцедура П()\nКонецПроцедуры\n"
+ALIAS_BSL = ('Процедура П()\n    Запрос = Новый Запрос("ВЫБРАТЬ Т.Ссылка КАК Где ИЗ Справочник.Т КАК Т");\n'
+             "КонецПроцедуры\n")
+
+
+def test_warning_does_not_block_upload(tmp_path):
+    tree = _tree(tmp_path, {"A/Ext/Module.bsl": DASH_BSL})
+    assert scan_tree(tree) == []
+    enforce(tree)
+
+
+def test_new_rule_not_blocking_without_baseline_or_with_v1(tmp_path, capsys):
+    tree = _tree(tmp_path, {"A/Ext/Module.bsl": ALIAS_BSL})
+    assert [f["code"] for f in scan_tree(tree)] == ["query-alias-keyword"]
+    enforce(tree)                                      # baseline нет — новое правило только печатается
+    (tree / BASELINE_NAME).write_text("{}", encoding="utf-8")   # baseline версии 1
+    enforce(tree)
+    assert "query-alias-keyword" in capsys.readouterr().err
+
+
+def test_v2_baseline_blocks_new_rules(tmp_path):
+    tree = _tree(tmp_path, {"A/Ext/Module.bsl": CLEAN_BSL})
+    write_baseline(tree)
+    data = json.loads((tree / BASELINE_NAME).read_text(encoding="utf-8"))
+    assert data["version"] == 2 and "query-alias-keyword" in data["codes"]
+    _tree(tmp_path, {"B/Ext/Module.bsl": ALIAS_BSL})
+    with pytest.raises(ApplyError) as e:
+        enforce(tree)
+    assert "query-alias-keyword" in str(e.value)
