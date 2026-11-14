@@ -91,8 +91,9 @@ def test_smoke_passes_scenario_text_and_credentials(monkeypatch, tmp_path):
 
     import onec_metadata.apply.smoke as smoke_mod
 
-    def fake_run(r, ib, user, pwd, *, scenario_text, epf, workdir, timeout=900):
-        seen.update(user=user, pwd=pwd, text=scenario_text, epf=epf, timeout=timeout)
+    # DISCIPLINE_ALLOW_TEST_EDIT: run_smoke получил параметр stall (сторож зависшего сеанса)
+    def fake_run(r, ib, user, pwd, *, scenario_text, epf, workdir, timeout=900, stall=None):
+        seen.update(user=user, pwd=pwd, text=scenario_text, epf=epf, timeout=timeout, stall=stall)
         return "строк: 3"
 
     monkeypatch.setattr(smoke_mod, "run_smoke", fake_run)
@@ -109,7 +110,17 @@ def test_smoke_passes_scenario_text_and_credentials(monkeypatch, tmp_path):
     assert seen["user"] == "ivanov" and seen["pwd"] == "common"
     assert seen["text"] == 'Отчет = "привет";'      # BOM снят при чтении сценария
     assert seen["timeout"] == 60
+    # DISCIPLINE_ALLOW_TEST_EDIT: умолчание сторожа решает run_smoke по транспорту (ревью P1)
+    assert seen["stall"] is None
     assert seen["epf"].endswith("СмоукРаннер.epf")
+
+
+def test_smoke_negative_stall_refused(monkeypatch, tmp_path):
+    m = _load(monkeypatch)
+    scen = tmp_path / "s.bsl"
+    scen.write_text('Отчет = "x";', encoding="utf-8")
+    with pytest.raises(SystemExit):
+        m.main(["smoke", "--base", str(tmp_path), "--scenario", str(scen), "--stall", "-1"])
 
 
 def test_smoke_deploy_builds_runner_first(monkeypatch, tmp_path):

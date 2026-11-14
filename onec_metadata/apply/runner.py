@@ -170,6 +170,15 @@ def make_runner(host: str | None = None):
     return Runner(host)
 
 
+def ps_encoded(script: str) -> str:
+    """Сценарий PowerShell одной командой без кавычек: -EncodedCommand (UTF-16LE base64).
+    Ни cmd.exe на том конце ssh, ни CreateProcess локально ничего в нём не разберут —
+    кириллица в путях, `|`, `&` и кавычки доезжают как есть."""
+    import base64
+    return ("powershell -NoProfile -NonInteractive -EncodedCommand "
+            + base64.b64encode(script.encode("utf-16-le")).decode("ascii"))
+
+
 def mask_password(cmd: str) -> str:
     """Скрыть пароли ИБ и хранилища во всех формах записи: `/Pxxx`, `/P"x y"`, `/P xxx`,
     `/ConfigurationRepositoryP xxx`. Пароль отдельным аргументом уже уходил в чат."""

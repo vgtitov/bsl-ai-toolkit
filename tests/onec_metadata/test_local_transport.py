@@ -197,7 +197,8 @@ def test_run_smoke_reads_result_via_runner(monkeypatch):
     assert "строк в регистре: 17" in report
     joined = "\n".join(r.commands)
     assert "type " not in joined and "del " not in joined     # без оболочечных команд
-    assert r.removed == [WORKDIR + "\\smoke_result.txt"]           # результат чистится до прогона
+    # DISCIPLINE_ALLOW_TEST_EDIT: имена файлов прогона уникальны, уборка — после чтения результата
+    assert len(r.removed) == 2 and all(p.startswith(WORKDIR + "\\smoke_") for p in r.removed)
     assert "ENTERPRISE" in joined and "/Execute" in joined
 
 

@@ -8,6 +8,7 @@ zip/Compress-Archive ломают кодировку имён (боевой ур
 """
 import filecmp
 import os
+import re
 import subprocess
 import sys
 import unicodedata
@@ -50,10 +51,32 @@ def _read_log(r: Runner, log: str) -> str:
 _OK = "__DSGN_OK__"
 _FAIL = "__DSGN_FAIL__"
 
+# Частые ответы платформы, по которым причина не очевидна: фрагмент лога → что делать.
+_LOG_HINTS = (
+    ("помещена в хранилище",
+     "конфигурация подключена к хранилищу: полная загрузка запрещена платформой — грузить "
+     "точечно (-files / designer_sync load --files) только захваченные объекты"),
+    ("связывания с хранилищем",
+     "учётка хранилища бывает привязана к одной ИБ: из другой базы пакетный режим даёт эту "
+     "ошибку без слова про учётку — работать из базы, к которой привязана учётка"),
+    ("не идентифицирован",
+     "проверь учётку ИБ (--contour = ключ ONEC_IB_USER_/PASS_<КЛЮЧ>) и порядок ключей: "
+     "действие последним перед /Out"),
+)
+
+
+def _log_hints(text: str) -> str:
+    low = text.lower()
+    return "".join(f"\nподсказка: {h}" for frag, h in _LOG_HINTS if frag in low)
+
 
 def _run_designer(r: Runner, ib: str, user: str, pwd: str, action: str,
                   args: list, log: str, timeout: int = 900) -> None:
     cmd = designer_cmd(ib, user, pwd, action, args, log)
+    # лог прошлого запуска с тем же путём иначе читается как результат этого (ложная
+    # ошибка или ложный успех, если платформа не стартовала и свой лог не записала)
+    if hasattr(r, "remove"):
+        r.remove(log)
     if getattr(r, "shell", True):
         # SSH: на том конце cmd.exe. `if errorlevel 1` вычисляется В МОМЕНТ
         # исполнения (это команда, а не переменная), поэтому корректно ловит код
@@ -74,7 +97,8 @@ def _run_designer(r: Runner, ib: str, user: str, pwd: str, action: str,
     if not ok:
         raise ApplyError(
             f"designer {action} failed\ncmd: {mask_password(cmd)}\n"
-            f"out: {out.strip()[:500]}\nlog: {logtxt.strip()[:2000]}")
+            f"out: {out.strip()[:500]}\nlog: {logtxt.strip()[:2000]}"
+            + _log_hints(out + "\n" + logtxt))
 
 
 def _put_text(r: Runner, remote_path: str, text: str) -> None:
@@ -175,21 +199,30 @@ def upload_tree(r: Runner, local_dir: Path, remote_dir: str,
 
 def fetch_tree(r: Runner, remote_dir: str, local_dir: Path,
                tmp_tar: str | None = None) -> None:
-    """Сервер → Mac: tar с chcp 65001 → scp → распаковка."""
-    tmp_tar = tmp_tar or _wpath("_fetch.tar")
+    """Сервер → Mac: tar с chcp 65001 → scp → распаковка. Имена архивов уникальны:
+    две параллельные выгрузки не должны забирать архив друг друга."""
+    import uuid
+    tag = f"{os.getpid()}_{uuid.uuid4().hex[:8]}"
+    tmp_tar = tmp_tar or _wpath(f"_fetch_{tag}.tar")
     code, out = r.run(
         f"chcp 65001 >nul & del {tmp_tar} 2>nul & "
         f"tar -cf {tmp_tar} -C {remote_dir} . & echo EXIT=%errorlevel%")
     if "EXIT=0" not in out:
         raise ApplyError(f"fetch_tree tar failed: {out.strip()[:500]}")
-    local_tar = local_dir.parent / "_fetch.tar"
+    local_tar = local_dir.parent / f"_fetch_{tag}.tar"
     local_dir.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["scp", "-o", "BatchMode=yes",
-                    f"{r.host}:{tmp_tar.replace(chr(92), '/')}",
-                    str(local_tar)], check=True)
-    subprocess.run(["tar", "-xf", str(local_tar), "-C", str(local_dir)],
-                   check=True)
-    local_tar.unlink()
+    try:
+        subprocess.run(["scp", "-o", "BatchMode=yes",
+                        f"{r.host}:{tmp_tar.replace(chr(92), '/')}",
+                        str(local_tar)], check=True)
+        subprocess.run(["tar", "-xf", str(local_tar), "-C", str(local_dir)],
+                       check=True)
+    finally:
+        local_tar.unlink(missing_ok=True)
+        try:
+            r.run(f"del {tmp_tar} 2>nul")
+        except Exception:                          # noqa: BLE001 — уборка не должна прятать ошибку
+            pass
 
 
 # служебные файлы выгрузки: платформа меняет их при каждом дампе,
@@ -227,3 +260,191 @@ def roundtrip_verify(before: Path, after: Path, expect_changed: set,
         raise ApplyError(
             f"round-trip diff неожиданный. Лишние изменения: {unexpected}; "
             f"обещанные, но не изменившиеся: {missing}")
+
+
+# Каталог выгрузки → тип в ConfigDumpInfo.xml: обычно множественное число через «s», кроме этих.
+_DIR_TYPE = {"ChartsOfAccounts": "ChartOfAccounts", "ChartsOfCharacteristicTypes": "ChartOfCharacteristicTypes",
+             "ChartsOfCalculationTypes": "ChartOfCalculationTypes", "BusinessProcesses": "BusinessProcess",
+             "FilterCriteria": "FilterCriterion"}
+
+
+def dump_info_names(src_dir: Path) -> set | None:
+    """Имена `<Metadata name=…>` из ConfigDumpInfo.xml каталога выгрузки; None — файла нет."""
+    p = Path(src_dir) / "ConfigDumpInfo.xml"
+    if not p.is_file():
+        return None
+    return {unicodedata.normalize("NFC", n) for n in
+            re.findall(r'<Metadata\s+name="([^"]+)"', p.read_text("utf-8-sig", errors="replace"))}
+
+
+def _full_name(rel: str, names: set) -> str | None:
+    """Полное имя объекта в ConfigDumpInfo по пути его xml: Catalogs/X.xml → Catalog.X,
+    Catalogs/X/Forms/F.xml → Catalog.X.Form.F, Catalogs/X/Commands/C.xml → Catalog.X.Command.C,
+    Subsystems/A/Subsystems/B.xml → Subsystem.A.Subsystem.B, Configuration.xml → Configuration.<Имя>."""
+    parts = rel[:-4].split("/")
+    if parts == ["Configuration"]:
+        return next((n for n in names if n.startswith("Configuration.") and n.count(".") == 1), None)
+    if len(parts) % 2:
+        return None
+    return ".".join(f"{dir_type(parts[i])}.{parts[i + 1]}" for i in range(0, len(parts), 2))
+
+
+def dir_type(kind_dir: str) -> str:
+    """Каталог выгрузки → тип в ConfigDumpInfo.xml: Catalogs → Catalog."""
+    return _DIR_TYPE.get(kind_dir, kind_dir[:-1] if kind_dir.endswith("s") else kind_dir)
+
+
+_NAME_RE = re.compile(r'<Metadata\s+name="([^"]+)"')
+
+
+def _dump_info_units(lines: list[str]):
+    """(голова, [(имя, [строки записи с вложенными])], хвост) — записи верхнего уровня ConfigVersions."""
+    starts = [i for i, ln in enumerate(lines) if "<ConfigVersions" in ln]
+    ends = [i for i, ln in enumerate(lines) if "</ConfigVersions>" in ln]
+    if not starts or not ends or ends[-1] <= starts[0]:
+        raise ValueError("нет блока <ConfigVersions>…</ConfigVersions>")
+    start, end = starts[0] + 1, ends[-1]
+    units, i = [], start
+    while i < end:
+        m = _NAME_RE.search(lines[i])
+        if not m:                                   # пустая/служебная строка — сама по себе
+            units.append((None, [lines[i]]))
+            i += 1
+            continue
+        j, depth = i, 0
+        while True:
+            if j >= end:
+                raise ValueError(f'незакрытая запись <Metadata name="{m.group(1)}">')
+            depth += lines[j].count("<Metadata") - lines[j].count("/>") - lines[j].count("</Metadata>")
+            j += 1
+            if depth <= 0:
+                break
+        units.append((m.group(1), lines[i:j]))
+        i = j
+    return lines[:start], units, lines[end:]
+
+
+def merge_dump_info(old_text: str, new_text: str) -> str:
+    """ConfigDumpInfo.xml рабочего каталога + точечной выгрузки: запись (с вложенными) с тем же
+    именем заменяется новой на своём месте, новые — в конец реестра, остальные и записи корня
+    (Configuration.*) — как были; ничего не удаляется. Порядок, формат и переводы строк старого
+    файла сохраняются. Иначе точечная выгрузка затирала полный реестр."""
+    eol = "\r\n" if "\r\n" in old_text else "\n"
+    head, old_units, tail = _dump_info_units(old_text.splitlines(keepends=True))
+    _, new_units, _ = _dump_info_units(new_text.splitlines(keepends=True))
+    fresh = {name: [ln.rstrip("\r\n") + eol for ln in block] for name, block in new_units
+             if name and not name.startswith("Configuration.")}
+    out, seen = list(head), set()
+    for name, block in old_units:
+        out += fresh[name] if name in fresh else block
+        seen.add(name)
+    for name, block in fresh.items():
+        if name not in seen:
+            out += block
+    return "".join(out + tail)
+
+
+def _required_by_dump_info(rel: str, full: str, names: set) -> list[str]:
+    """Файлы модулей объекта, которые ConfigDumpInfo числит за ним (без вложенных форм)."""
+    base = "" if rel == "Configuration.xml" else rel[:-4] + "/"
+    need = []
+    for n in names:
+        if not n.startswith(full + "."):
+            continue
+        tail = n[len(full) + 1:].split(".")
+        if len(tail) == 1 and tail[0].endswith("Module"):           # ObjectModule, Module, SessionModule…
+            need.append(f"{base}Ext/{tail[0]}.bsl")
+        elif len(tail) == 3 and tail[0] != "Form" and tail[2].endswith("Module"):
+            # модуль вложенного объекта: Command.C.CommandModule, Recalculation.R.RecordSetModule
+            need.append(f"{base}{tail[0]}s/{tail[1]}/Ext/{tail[2]}.bsl")
+        elif tail == ["Form"]:                                       # сама форма
+            need.append(f"{base}Ext/Form.xml")
+    return need
+
+
+def partial_load_gaps(src_dir: Path, files: list[str], allow_missing_ext: bool = False) -> list[str]:
+    """Файлы, без которых точечная загрузка СОТРЁТ части объекта в базе.
+
+    `<Объект>.xml` в `-files` без его `<Объект>/Ext/*` платформа понимает как «у объекта
+    модулей нет»: стирает модуль объекта/менеджера, а у корня (`Configuration.xml`) — модули
+    сеанса и приложения, командный интерфейс, рабочую область, поддержку. load при этом
+    exit=0, и обратная выгрузка пустой Ext просто не отдаёт.
+
+    Источник истины — ConfigDumpInfo.xml каталога выгрузки: все модули, которые он числит за
+    объектом, обязаны быть в списке (объекта там нет — он новый, Ext не нужен). Плюс всё, что
+    лежит в `<Объект>/Ext/` на диске. Без ConfigDumpInfo новый объект не отличить от неполной
+    выгрузки существующего: xml без Ext — отказ, если не `allow_missing_ext`.
+    """
+    src_dir = Path(src_dir)
+    listed = {unicodedata.normalize("NFC", f.replace("\\", "/").lstrip("./")) for f in files}
+    names = dump_info_names(src_dir)
+    gaps = []
+    for rel in sorted(listed):
+        if not rel.lower().endswith(".xml") or "Ext" in rel.split("/") or rel == "ConfigDumpInfo.xml":
+            continue
+        ext_dir = src_dir / ("Ext" if rel == "Configuration.xml" else rel[:-4] + "/Ext")
+        need = []
+        if names is not None:
+            full = _full_name(rel, names)
+            if full and (full in names or any(n.startswith(full + ".") for n in names)):
+                need += _required_by_dump_info(rel, full, names)
+        elif not ext_dir.is_dir() and not allow_missing_ext:
+            gaps.append(f"{rel} → нет ни {ext_dir.relative_to(src_dir).as_posix()}/, ни ConfigDumpInfo.xml: "
+                        "новый объект не отличить от неполной выгрузки существующего (модули сотрутся)")
+            continue
+        if ext_dir.is_dir():
+            need += [p.relative_to(src_dir).as_posix() for p in ext_dir.rglob("*") if p.is_file()]
+        for n in sorted({unicodedata.normalize("NFC", x) for x in need}):
+            if n not in listed:
+                missing = "" if (src_dir / n).is_file() else " (нет и в каталоге — выгрузка неполная, нужна полная)"
+                gaps.append(f"{rel} → нет {n}{missing}")
+    return gaps
+
+
+def form_snapshot(dump_dir: Path) -> dict:
+    """{путь Form.xml: есть ли в нём <Events>} — до точечной выгрузки, чтобы заметить потерю."""
+    dump_dir = Path(dump_dir)
+    return {unicodedata.normalize("NFC", p.relative_to(dump_dir).as_posix()):
+            "<Events>" in p.read_text("utf-8-sig", errors="replace")
+            for p in dump_dir.rglob("Form.xml") if p.parent.name == "Ext"}
+
+
+def partial_dump_form_problems(dump_dir: Path, before: dict, requested=None,
+                               warnings: list | None = None) -> list[str]:
+    """Формы, которые точечная выгрузка (-listFile) отдала неполными.
+
+    Боевой случай: форма пришла без `<Events>` в Form.xml и без `Form/Module.bsl`, хотя в базе
+    они были (полная выгрузка их показала). Ошибка — если события были в прошлой выгрузке
+    этого каталога и пропали, или события есть, а модуля нет. «Форма пропала» проверяется только
+    у объектов, запрошенных ЦЕЛИКОМ (`Тип.Имя`): выгрузка вложенного (`Тип.Имя.Command.X`) формы
+    владельца и не должна отдавать. requested=None — все выгруженные считаются целыми.
+
+    Форму или все её события могли удалить в базе сознательно, а перенос в --out ничего не
+    удаляет — поэтому «форма пропала» и «события пропали, модуль на месте» уходят в `warnings`
+    (если передан). Ошибка — только когда без модуля: так выглядит урезанная выгрузка.
+    """
+    dump_dir = Path(dump_dir)
+    now = form_snapshot(dump_dir)
+    dumped = {p.relative_to(dump_dir).parts[:2] for p in dump_dir.rglob("*") if p.is_file()}
+    dumped |= {(a, b[:-4]) for a, b in dumped if b.endswith(".xml")}
+    # форма выгруженного объекта была и пропала: перенос заменит объект целиком и удалит её
+    whole = None if requested is None else {o.split(".", 1)[1] for o in requested if o.count(".") == 1}
+    dumped = {tuple(unicodedata.normalize("NFC", x) for x in key) for key in dumped}
+    before = {unicodedata.normalize("NFC", k): v for k, v in before.items()}
+    soft = [f"{rel}: форма была в прошлой выгрузке, в новой её нет (в --out остаётся старая)"
+            for rel in sorted(before) if rel not in now and tuple(rel.split("/")[:2]) in dumped
+            and (whole is None or rel.split("/")[1] in whole)]
+    problems = []
+    for rel, had_events in sorted(now.items()):
+        module = dump_dir / Path(rel).parent / "Form" / "Module.bsl"
+        if had_events and not module.is_file():
+            problems.append(f"{rel}: события есть, модуля Form/Module.bsl нет")
+        elif before.get(rel) and not had_events:
+            if module.is_file():
+                soft.append(f"{rel}: в прошлой выгрузке были <Events>, теперь нет")
+            else:
+                problems.append(f"{rel}: в прошлой выгрузке были <Events>, теперь нет ни событий, "
+                                "ни Form/Module.bsl")
+    if warnings is not None:
+        warnings.extend(soft)
+    return problems
