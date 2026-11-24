@@ -390,3 +390,22 @@ def test_quoted_server_flag_and_file_case():
     assert conn_arg('/S"srv\\Main"') == '/S"srv\\Main"'
     assert conn_arg('FILE=C:\\Bases\\Main;') == '/F"C:\\Bases\\Main"'
     assert conn_arg('file="C:\\Bases\\Main";') == '/F"C:\\Bases\\Main"'
+
+
+def test_repo_failure_message_does_not_leak_repo_password(monkeypatch):
+    """Ошибка Дизайнера печатает action — в нём строка подключения к хранилищу с паролем."""
+    import pytest
+    from onec_metadata.apply.dumpload import ApplyError
+    m = _load()
+
+    class _FailRunner(_LogRunner):
+        def run(self, cmd, timeout=600):
+            self.run_calls.append(cmd)
+            return 1, "__DSGN_FAIL__"
+
+    monkeypatch.setattr("onec_metadata.apply.dumpload._put_text", lambda *a: None)
+    with pytest.raises(ApplyError) as e:
+        m.run_repo(_FailRunner(), r"srv\Base", "u", "ib-secret", (r"tcp://h/erp", "Иванов", "repo-secret"),
+                   "lock", objects=["CommonModule.askСервер"], workdir=r"C:\w")
+    assert "repo-secret" not in str(e.value) and "ib-secret" not in str(e.value)
+    assert "/ConfigurationRepositoryLock" in str(e.value)
