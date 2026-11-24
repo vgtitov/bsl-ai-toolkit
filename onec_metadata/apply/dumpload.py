@@ -73,7 +73,8 @@ def _run_designer(r: Runner, ib: str, user: str, pwd: str, action: str,
          ("недостаточно прав" not in logtxt.lower())
     if not ok:
         raise ApplyError(
-            f"designer {action} failed\ncmd: {mask_password(cmd)}\n"
+            # action несёт и /ConfigurationRepositoryP (run_repo) — маскировать, как cmd
+            f"designer {mask_password(action)} failed\ncmd: {mask_password(cmd)}\n"
             f"out: {out.strip()[:500]}\nlog: {logtxt.strip()[:2000]}")
 
 
